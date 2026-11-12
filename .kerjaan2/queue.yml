@@ -1,2 +1,5 @@
-goal: Menutup empat bug dari cek manual: server plugin yatim, laporan penyalaan hilang, menu master-bot, dan master-bot ganda
+goal: Tutup sisa temuan reviewer: batasi MASTER_BOT_API_ROOT ke lokal, status jelas saat master-bot berhenti di tengah penyalaan, dan rekam waktu pesan masuk untuk menyelidiki keterlambatan
 order:
+  - 261112223101   # Batasi variabel tes MASTER_BOT_API_ROOT ke localhost
+  - 261112223102   # Master-bot dihentikan saat bot sedang dinyalakan
+  - 261112230301   # Rekam waktu pesan masuk dan gangguan getUpdates di log tiap bot

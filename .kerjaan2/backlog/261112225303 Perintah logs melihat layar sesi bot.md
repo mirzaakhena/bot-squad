@@ -1,6 +1,6 @@
 ---
 type: feature
-priority: medium
+priority: low
 lane: standard
 labels: []
 blocked_by: []
