@@ -217,7 +217,7 @@ describe("gagal memperbarui menu", () => {
           const out = lines.join("\n");
           expect(code).toBe(1);
           expect(out).toContain(String(status));
-          expect(out).toContain(status === 401 ? "menolak token" : "sudah berjalan di tempat lain");
+          expect(out).toContain(status === 401 ? "menolak token" : "digantikan oleh master-bot lain");
           expect(out).not.toContain(TOKEN);
           expect(tg.calls.map((c) => c.method)).not.toContain("getUpdates");
           expect(menuCalls(tg.calls)).toHaveLength(method === "setMyCommands" ? 1 : 4);
