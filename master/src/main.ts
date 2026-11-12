@@ -69,7 +69,10 @@ async function serve(
   log: ReturnType<typeof createLogger>,
   write: (line: string) => void,
 ): Promise<number> {
-  const launchDeps = realLaunchDeps(dir, config.ownerId, log);
+  const launchDeps = realLaunchDeps(dir, config.ownerId, log, opts.signal);
+  // Penyalaan yang masih berjalan; ditunggu sebentar saat berhenti supaya
+  // status dan log-nya tertulis (tiket 261112223102).
+  const launches = new Set<Promise<void>>();
   const bot = createMasterBot({
     token: config.token,
     ownerId: config.ownerId,
@@ -78,6 +81,10 @@ async function serve(
     dataDir: dir,
     signal: opts.signal,
     launch: (name) => launchBot(name, launchDeps),
+    onLaunch: (done) => {
+      launches.add(done);
+      void done.finally(() => launches.delete(done));
+    },
   });
 
   const explain = (err: unknown): string => {
@@ -116,6 +123,7 @@ async function serve(
       onStart: (me) => log(`berjalan sebagai @${me.username}, hanya melayani pemilik ${config.ownerId}`),
     });
     await stopping;
+    await settleLaunches(launches, log);
     log("berhenti");
     return 0;
   } catch (err) {
@@ -123,6 +131,26 @@ async function serve(
     return 1;
   } finally {
     opts.signal?.removeEventListener("abort", stop);
+  }
+}
+
+/**
+ * Batas tunggu penyalaan yang sedang berjalan setelah berhenti. Penyalaan
+ * melihat signal yang sama, jadi biasanya selesai dalam hitungan milidetik;
+ * batas ini menjaga master-bot keluar dalam 5 detik (keputusan pemilik, Q3).
+ */
+export const LAUNCH_SETTLE_MS = 3_000;
+
+async function settleLaunches(launches: Set<Promise<void>>, log: (m: string) => void): Promise<void> {
+  if (launches.size === 0) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = await Promise.race([
+    Promise.allSettled([...launches]).then(() => false),
+    new Promise<boolean>((r) => (timer = setTimeout(() => r(true), LAUNCH_SETTLE_MS))),
+  ]);
+  clearTimeout(timer);
+  if (timedOut) {
+    log(`${launches.size} penyalaan bot belum selesai ${LAUNCH_SETTLE_MS / 1000} detik setelah berhenti; master-bot tetap keluar`);
   }
 }
 

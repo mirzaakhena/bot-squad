@@ -47,6 +47,7 @@ function fakeTmux(screens: (i: number) => string | null, preexisting: string[] =
   const sessions = new Set(preexisting);
   const created: NewSession[] = [];
   const enters: string[] = [];
+  const killed: string[] = [];
   let captures = 0;
   const tmux: Tmux = {
     async hasSession(name) {
@@ -66,8 +67,12 @@ function fakeTmux(screens: (i: number) => string | null, preexisting: string[] =
     async sendEnter(name) {
       enters.push(name);
     },
+    async killSession(name) {
+      killed.push(name);
+      sessions.delete(name);
+    },
   };
-  return { tmux, sessions, created, enters, captureCount: () => captures };
+  return { tmux, sessions, created, enters, killed, captureCount: () => captures };
 }
 
 const ALIVE = 4242;
@@ -546,4 +551,103 @@ describe("realLaunchDeps: pembersihan server sisa terpasang", () => {
       child.kill("SIGKILL");
     }
   }, 15_000);
+});
+
+describe("launchBot: master-bot berhenti di tengah penyalaan (261112223102)", () => {
+  test("belum siap: sesi dimatikan, failed dengan interrupted", async () => {
+    makeBotDir("bot-01");
+    const ac = new AbortController();
+    const f = fakeTmux((i) => (i === 2 && ac.abort(), "memuat..."));
+    const d = deps(f.tmux, { signal: ac.signal });
+    const res = await launchBot("bot-01", d);
+    expect(res).toMatchObject({ kind: "failed", interrupted: true, sessionAlive: false });
+    expect(f.killed).toEqual(["bot-01"]);
+    expect(f.sessions.has("bot-01")).toBe(false);
+    expect(d.logs.join("\n")).toContain("sesi tmux 'bot-01' dimatikan");
+  });
+
+  test("di dialog development channel: tidak dijawab lagi, sesi dimatikan", async () => {
+    makeBotDir("bot-01");
+    const ac = new AbortController();
+    const f = fakeTmux((i) => (i === 0 && ac.abort(), DEV));
+    const res = await launchBot("bot-01", deps(f.tmux, { signal: ac.signal }));
+    expect(res).toMatchObject({ kind: "failed", interrupted: true });
+    expect(f.enters).toEqual([]);
+    expect(f.killed).toEqual(["bot-01"]);
+  });
+
+  test("sudah siap saat berhenti: active, sesi tidak disentuh", async () => {
+    makeBotDir("bot-01");
+    const ac = new AbortController();
+    // Siap persis saat berhenti, sebelum loop sempat membaca layar berikutnya.
+    const sleep = async () => {
+      writePid("bot-01", ALIVE);
+      ac.abort();
+    };
+    const f = fakeTmux(() => READY);
+    const res = await launchBot("bot-01", deps(f.tmux, { signal: ac.signal, sleep }));
+    expect(res).toEqual({ kind: "active", pid: ALIVE });
+    expect(f.killed).toEqual([]);
+    expect(f.sessions.has("bot-01")).toBe(true);
+  });
+
+  test("berhenti saat memasang plugin: tidak ada sesi dibuat", async () => {
+    makeBotDir("bot-01");
+    const ac = new AbortController();
+    const f = fakeTmux(() => READY);
+    const installPlugin = async (signal?: AbortSignal) => {
+      ac.abort();
+      if (signal?.aborted) throw new Error("dibatalkan");
+    };
+    const res = await launchBot("bot-01", deps(f.tmux, { signal: ac.signal, installPlugin }));
+    expect(res).toMatchObject({ kind: "failed", interrupted: true, sessionAlive: false });
+    expect(f.created).toHaveLength(0);
+    expect(f.killed).toEqual([]);
+  });
+
+  test("sudah berhenti sebelum mulai: tidak ada yang dijalankan", async () => {
+    makeBotDir("bot-01");
+    const ac = new AbortController();
+    ac.abort();
+    const f = fakeTmux(() => READY);
+    const d = deps(f.tmux, { signal: ac.signal });
+    const res = await launchBot("bot-01", d);
+    expect(res).toMatchObject({ kind: "failed", interrupted: true });
+    expect(d.installs).toBe(0);
+    expect(d.strayCalls).toEqual([]);
+    expect(f.created).toHaveLength(0);
+  });
+
+  test("kill-session gagal: tetap failed, dicatat di log", async () => {
+    makeBotDir("bot-01");
+    const ac = new AbortController();
+    const f = fakeTmux((i) => (i === 0 && ac.abort(), "memuat..."));
+    f.tmux.killSession = async () => {
+      throw new Error("no server");
+    };
+    const d = deps(f.tmux, { signal: ac.signal });
+    const res = await launchBot("bot-01", d);
+    expect(res).toMatchObject({ kind: "failed", interrupted: true });
+    expect(d.logs.join("\n")).toContain("sesi tmux 'bot-01' gagal dimatikan: no server");
+  });
+});
+
+describe("installPluginLocked: dibatalkan", () => {
+  test("menunggu kunci lalu master-bot berhenti: melempar, kunci orang lain tidak diambil", async () => {
+    const locks = join(home, "locks", "plugin-install.lock");
+    mkdirSync(locks, { recursive: true });
+    writeFileSync(join(locks, "pid"), String(ALIVE));
+    const ac = new AbortController();
+    const p = installPluginLocked({
+      dataDir: home,
+      pluginDir: "/x",
+      isAlive: (pid) => pid === ALIVE,
+      sleep: async () => ac.abort(),
+      now: () => 0,
+      signal: ac.signal,
+      install: async () => {},
+    });
+    await expect(p).rejects.toThrow("dibatalkan");
+    expect(existsSync(locks)).toBe(true);
+  });
 });

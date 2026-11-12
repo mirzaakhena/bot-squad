@@ -21,3 +21,9 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Proses main.ts sungguhan bisa diarahkan ke Telegram tiruan dengan env MASTER_BOT_API_ROOT; run() in-process memegang kunci master.pid dengan pid proses tes (dianggap basi karena pid sendiri)
 - Plugin WhatsApp pemilik juga berjalan sebagai 'bun server.ts' dengan baris perintah identik; bedakan server plugin lewat CLAUDE_PLUGIN_ROOT di environment, jangan lewat ps args
 - Folder scratchpad lama (ws-probe1/home) berisi symlink ke data asli ~/.bot-squad; selalu buat rumah uji baru dan cek find -type l sebelum menulis ke dalamnya
+- Tes proses master sungguhan dengan tmux: TMUX_TMPDIR sementara di env proses, dan semua perintah tmux di tes memakai -S <TMUX_TMPDIR>/tmux-<uid>/default supaya kill-server hanya mengenai server uji (contoh: master/test/shutdown.test.ts)
+- Di plugin, onStart mengatur attempt=0, jadi percobaan ulang pertama setelah 409 di tengah jalan langsung (0s); plugin.log mencatatnya apa adanya sebagai polling-gagal ulang=0s
+- Uji server plugin tanpa Telegram: BOT_SQUAD_TELEGRAM_API_ROOT=http://127.0.0.1:<port> + MCP initialize di stdin (plugin/test/plugin-log.test.ts); /start tiruan butuh entities bot_command
+- Tes yang men-spawn main.ts sebaiknya memberi HTTPS_PROXY=http://127.0.0.1:9 dan NO_PROXY=localhost,127.0.0.1,::1,[::1] supaya bug yang lolos ke api.telegram.org gagal lokal; Bun mencocokkan NO_PROXY untuk IPv6 dengan bentuk [::1]
+- Scratchpad dipakai bersama semua agen: simpan berkas sementara di subfolder ber-ID tiket, jangan nama generik (bak.ts). 261112223102 sempat meng-commit tes milik 261112230301 karena itu.
+- Done when 'tanpa variabel perilaku tidak berubah' harus diuji di jalur jaringan (token sah + proxy mati, cek tujuan permintaan), bukan hanya di jalur gagal konfigurasi yang berhenti sebelum client dipakai.
