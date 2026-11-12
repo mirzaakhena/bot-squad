@@ -29,3 +29,7 @@
 {"t":"2026-11-12 22:15:42","event":"verdict","result":"pass","round":1,"commit":"d8ab920","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"reviewer:a49d82163b49909c1"}
 {"t":"2026-11-12 22:15:59","event":"test","by":"land","exit":0,"seconds":2,"fingerprint":"0c220ecf8a1ef011d2d07678e7840749a0c28426","command":"bun test --pass-with-no-tests","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
 {"t":"2026-11-12 22:16:00","event":"landed","branch":"k2/261112214001-laporan-penyalaan-bot-hilang","files":["CLAUDE.md","master/src/bot.ts","master/src/main.ts","master/src/retry.ts","master/test/report-retry.test.ts"],"session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 22:30:45","event":"manual-ok","key":"M1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 22:30:46","event":"assumption-confirmed","key":"A1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 22:30:46","event":"assumption-confirmed","key":"A2","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 22:30:46","event":"assumption-confirmed","key":"A3","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}

@@ -37,18 +37,22 @@ Menjalankan master-bot kedua kalinya di mesin yang sama harus langsung ditolak o
   → Setuju. (owner, 2026-11-12)
 
 ## Assumptions
-- A1 [unseen] Kunci diambil sebelum panggilan Telegram apa pun, setelah konfigurasi terbaca
+- A1 [confirmed] Kunci diambil sebelum panggilan Telegram apa pun, setelah konfigurasi terbaca
   Why: Done when: instance pertama tetap berjalan; getUpdates dari instance kedua akan mengusir yang pertama
   If wrong: -
-- A2 [unseen] Bukti otomatis memakai dua proses main.ts sungguhan dengan fake-telegram dan BOT_SQUAD_HOME sementara (seperti run.test.ts); kunci basi disimulasikan dengan file berisi pid yang sudah mati
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Bukti otomatis memakai dua proses main.ts sungguhan dengan fake-telegram dan BOT_SQUAD_HOME sementara (seperti run.test.ts); kunci basi disimulasikan dengan file berisi pid yang sudah mati
   Why: Pola tes yang ada di master/test/run.test.ts; agen tidak boleh mematikan proses di luar buatannya
   If wrong: -
-- A3 [unseen] Proses dianggap master-bot kalau salah satu argumennya master/src/main.ts (path apa pun di depannya) atau src/main.ts / ./src/main.ts, karena 'bun run --cwd master start' tampil di ps sebagai 'bun src/main.ts'
+  Confirmed by owner, 2026-11-12
+- A3 [confirmed] Proses dianggap master-bot kalau salah satu argumennya master/src/main.ts (path apa pun di depannya) atau src/main.ts / ./src/main.ts, karena 'bun run --cwd master start' tampil di ps sebagai 'bun src/main.ts'
   Why: Perintah start resmi di CLAUDE.md menghasilkan path relatif; tanpa itu kunci master yang berjalan normal dianggap basi
   If wrong: Ubah isMasterCommand di master/src/lock.ts
-- A4 [unseen] Kalau pid di kunci hidup tetapi perintahnya tidak bisa dibaca lewat ps, kunci dianggap masih dipegang (start ditolak)
+  Confirmed by owner, 2026-11-12
+- A4 [confirmed] Kalau pid di kunci hidup tetapi perintahnya tidak bisa dibaca lewat ps, kunci dianggap masih dipegang (start ditolak)
   Why: Lebih aman menolak start daripada mengusir master-bot yang sedang berjalan; ps tersedia di macOS dan Linux
   If wrong: Di acquireMasterLock, perlakukan cmd === null sebagai basi
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane strict: kunci instance tunggal panel kontrol; kunci yang salah bisa mengunci pemilik di luar atau menghilangkan master-bot diam-diam
@@ -72,4 +76,5 @@ Baru: master/src/lock.ts (acquireMasterLock, isMasterCommand, psCommand). run() 
   note: pengambilalihan kunci basi punya celah sempit bila tiga instance start bersamaan (rename lalu link balik); dinilai dengan membaca saja.
 
 ## Follow-ups
-- F1 [open] MASTER_BOT_API_ROOT di master/src/main.ts (entry produksi) menerima URL apa pun dari environment dan grammY mengirim token master-bot ke URL itu (path /bot<token>/...). Saat ini hanya dipakai tes. Kalau variabel ini ter-set di lingkungan produksi (shell profile, tmux global env), token bocor ke server lain tanpa peringatan. Penghuni mesin yang sama sudah bisa membaca master/.env, jadi ini pertahanan berlapis, bukan celah baru. Usul: hanya terima http(s)://127.0.0.1, ::1 atau localhost, tolak lainnya dengan kode 1, dan cetak peringatan di terminal saat aktif; tambahkan tes.
+- F1 [ticketed] MASTER_BOT_API_ROOT di master/src/main.ts (entry produksi) menerima URL apa pun dari environment dan grammY mengirim token master-bot ke URL itu (path /bot<token>/...). Saat ini hanya dipakai tes. Kalau variabel ini ter-set di lingkungan produksi (shell profile, tmux global env), token bocor ke server lain tanpa peringatan. Penghuni mesin yang sama sudah bisa membaca master/.env, jadi ini pertahanan berlapis, bukan celah baru. Usul: hanya terima http(s)://127.0.0.1, ::1 atau localhost, tolak lainnya dengan kode 1, dan cetak peringatan di terminal saat aktif; tambahkan tes.
+  → 261112223101

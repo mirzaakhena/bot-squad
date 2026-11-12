@@ -12,7 +12,7 @@ test_command: bun test --pass-with-no-tests
 # Run in each new worktree (install packages, copy .env), and before one is removed.
 # They, and the tests, get K2_MAIN_TREE, K2_WORKTREE, K2_TICKET and K2_SLOT (a small number
 # unique per worktree in flight): name ports and test data after them.
-worktree_setup:
+worktree_setup: bun install
 worktree_teardown:
 
 # Tickets somebody is working on at once (one that only waits for the owner uses no room);

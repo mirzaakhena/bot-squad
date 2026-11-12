@@ -30,7 +30,7 @@ Setiap kali master-bot menyala, menu perintah yang dilihat pemilik di chat priba
 - [x] Setelah master-bot menyala, menu di chat pribadi berisi tepat perintah master-bot (start, help, register) dengan deskripsi master-bot, walaupun token itu sebelumnya pernah dipakai bot lain.
 - [x] Setiap start, menu master-bot didaftarkan di cakupan default, all_private_chats, dan chat pribadi pemilik (tanpa kode bahasa), dan menu di cakupan all_group_chats dan all_chat_administrators dihapus. Menu sisa yang khusus bahasa tertentu tidak ditangani.
 - [x] Hal ini dibuktikan dengan tes otomatis yang mensimulasikan menu sisa dari bot lain.
-- [ ] (owner) Pemilik menyalakan ulang master-bot, mengetik "/" di chat pribadi, dan melihat start, help, dan register.
+- [x] (owner) Pemilik menyalakan ulang master-bot, mengetik "/" di chat pribadi, dan melihat start, help, dan register.
 - [x] Gagal mendaftarkan menu tetap hanya berupa peringatan dan tidak menghentikan master-bot (kecuali 401/409 seperti sekarang).
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
@@ -42,23 +42,26 @@ Setiap kali master-bot menyala, menu perintah yang dilihat pemilik di chat priba
   → Menu di cakupan grup dan admin grup dihapus. (owner, 2026-11-12)
 
 ## Assumptions
-- A1 [unseen] Kalau salah satu panggilan menu gagal (selain 401/409), panggilan lain tetap dicoba dan tiap kegagalan menjadi satu baris peringatan
+- A1 [confirmed] Kalau salah satu panggilan menu gagal (selain 401/409), panggilan lain tetap dicoba dan tiap kegagalan menjadi satu baris peringatan
   Why: Done when: gagal mendaftarkan menu hanya peringatan
   If wrong: Berhenti pada kegagalan pertama
-- A2 [unseen] Worker tidak menjalankan master-bot dengan token asli; bukti otomatis memakai fake-telegram, cek asli dilakukan pemilik lewat baris (owner)
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Worker tidak menjalankan master-bot dengan token asli; bukti otomatis memakai fake-telegram, cek asli dilakukan pemilik lewat baris (owner)
   Why: Arahan foreman: hanya token uji-01/uji-02 yang boleh dipakai agen; token master-bot tidak
   If wrong: -
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane standard: urutan start master-bot, aturan 401/409 harus tetap menghentikan
 - Tidak solo dan tidak menunggu: tidak ada tiket lain yang membaca hasilnya; berbagi file (main.ts, CLAUDE.md) diselesaikan merge queue
 
 ## Manual checks
-- M1 [waiting] (item 4) 1. Pastikan bot uji yang pernah memakai token master-bot sudah mati.
+- M1 [ok] (item 4) 1. Pastikan bot uji yang pernah memakai token master-bot sudah mati.
   2. Jalankan master-bot seperti biasa (bun master/src/main.ts).
   3. Tunggu log 'berjalan sebagai @...'.
   4. Di Telegram, buka chat pribadi dengan master-bot; kalau menu lama masih tampil, tutup lalu buka ulang chat itu (klien Telegram menyimpan menu sebentar).
   5. Ketik '/'. Yang terlihat: start, help, register dengan deskripsi berbahasa Indonesia, tanpa status.
+  Checked by owner, 2026-11-12
 
 ## Handoff
 Pendaftaran menu saat start pindah dari satu setMyCommands di main.ts ke syncCommandMenu di master/src/menu.ts. Setiap start menulis menu COMMANDS di cakupan default, all_private_chats, dan chat pemilik (tanpa kode bahasa), lalu menghapus menu di all_group_chats dan all_chat_administrators, supaya menu sisa bot lain yang pernah memakai token yang sama tertimpa. Tiap langkah dicoba walau langkah lain gagal; kegagalan hanya peringatan, tetapi 401/409 tetap menghentikan master-bot sebelum polling. Telegram tiruan kini menyimpan menu per cakupan dan bahasa, punya seedMenu/privateMenu/groupMenu, dan penangan khusus menerima next() untuk jatuh ke penangan bawaan. Perintah baru cukup ditambah ke COMMANDS.

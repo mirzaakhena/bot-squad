@@ -39,7 +39,7 @@ Laporan hasil penyalaan bot (aktif atau gagal) harus sampai ke pemilik walaupun 
 - [x] Kalau percobaan habis, atau master-bot dihentikan saat laporan masih menunggu dikirim ulang (percobaan dihentikan, berhenti tidak ditunda), log master menyebut laporan '<nama>' tidak terkirim beserta alasannya, tanpa mencetak token.
 - [x] Kalimat "Status tercatat 'failed'" hanya muncul kalau pencatatan status berhasil. Kalau pencatatan gagal, laporan (aktif maupun gagal) memuat "Status di registry gagal dicatat; lihat log master-bot." (catatan reviewer 4706).
 - [x] CLAUDE.md mencatat penyebab keterlambatan pesan pertama ke bot baru, atau menyatakan penyebabnya belum diketahui beserta apa yang sudah diperiksa.
-- [ ] (owner) Dengan panduan foreman, pemilik mematikan sesi uji-03 kalau masih hidup, menghapus entri uji-03 dari ~/.bot-squad/registry.json dan folder ~/.bot-squad/bots/uji-03, lalu mendaftarkan ulang '/register uji-03 <token mirza_003_bot>' dan menerima pesan "aktif" dari master-bot. Worker tidak menyentuh data asli ini.
+- [x] (owner) Dengan panduan foreman, pemilik mematikan sesi uji-03 kalau masih hidup, menghapus entri uji-03 dari ~/.bot-squad/registry.json dan folder ~/.bot-squad/bots/uji-03, lalu mendaftarkan ulang '/register uji-03 <token mirza_003_bot>' dan menerima pesan "aktif" dari master-bot. Worker tidak menyentuh data asli ini.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
@@ -58,15 +58,18 @@ Laporan hasil penyalaan bot (aktif atau gagal) harus sampai ke pemilik walaupun 
   → Boleh, dengan token uji-02 dan BOT_SQUAD_HOME sementara. (owner, 2026-11-12)
 
 ## Assumptions
-- A1 [unseen] Pengiriman ulang tetap berjalan di latar belakang dan tidak menghalangi perintah lain master-bot
+- A1 [confirmed] Pengiriman ulang tetap berjalan di latar belakang dan tidak menghalangi perintah lain master-bot
   Why: launchInBackground sudah dirancang begitu di 4706
   If wrong: Kirim ulang secara berurutan di handler
-- A2 [unseen] Tes memakai master/test/fake-telegram.ts dengan handler sendMessage yang gagal N kali; tidak ada token asli di tes
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Tes memakai master/test/fake-telegram.ts dengan handler sendMessage yang gagal N kali; tidak ada token asli di tes
   Why: Aturan pelajaran: tes master-bot memakai fake-telegram, jangan token asli
   If wrong: -
-- A3 [unseen] Uji asli dengan uji-02 tidak dijalankan untuk menyelidiki jeda 2 menit
+  Confirmed by owner, 2026-11-12
+- A3 [confirmed] Uji asli dengan uji-02 tidak dijalankan untuk menyelidiki jeda 2 menit
   Why: Pesan uji harus dikirim dari akun pemilik dan gangguan jaringan tidak boleh dibuat sengaja, jadi uji-02 tidak bisa mengulang kejadiannya; bukti diambil dari transkrip sesi uji-03 dan kode plugin/grammY
   If wrong: Nyalakan uji-02 dengan BOT_SQUAD_HOME sementara dan DEBUG=grammy:error, minta pemilik mengirim pesan saat jaringan terganggu
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane standard: logika kirim ulang di master-bot, mudah dibatalkan, tidak menyentuh data
@@ -74,12 +77,13 @@ Laporan hasil penyalaan bot (aktif atau gagal) harus sampai ke pemilik walaupun 
 - Jeda terakhir boleh melewati batas 10 menit paling banyak satu jeda maksimum (urutan 2..32 lalu 60 x9 = 602 detik), dan 429 dengan retry_after yang melewati sisa waktu langsung menyerah; supaya total sekitar 10 menit tanpa menunggu retry_after yang sangat panjang.
 
 ## Manual checks
-- M1 [waiting] (item 6) 1. Matikan master-bot kalau sedang berjalan (Ctrl+C).
+- M1 [ok] (item 6) 1. Matikan master-bot kalau sedang berjalan (Ctrl+C).
   2. Cek sesi uji-03: 'tmux ls'; kalau ada, 'tmux kill-session -t uji-03', lalu pastikan tidak ada proses 'bun server.ts' milik uji-03 (ps).
   3. Hapus entri "uji-03" dari ~/.bot-squad/registry.json (biarkan bot lain) dan hapus folder ~/.bot-squad/bots/uji-03.
   4. Jalankan master-bot dari root repo: bun run --cwd master start.
   5. Di chat master-bot kirim '/register uji-03 <token mirza_003_bot>'.
   6. Harus muncul 'Menyalakan uji-03...' lalu pesan 'Bot @mirza_003_bot (uji-03) aktif. Silakan ajak bicara.' Kalau jaringan sempat terganggu, log master menulis 'dicoba lagi dalam N detik' dan pesan aktif tetap datang setelah koneksi pulih.
+  Checked by owner, 2026-11-12
 
 ## Handoff
 Laporan hasil penyalaan (pesan kedua setelah /register) kini dikirim lewat sendWithRetry di master/src/retry.ts: HttpError dan 5xx dicoba ulang dengan jeda 2..60 detik (total sekitar 10 menit), 429 menunggu retry_after, 4xx lain tidak. createMasterBot menerima signal (dari run() di main.ts) yang menghentikan percobaan seketika saat master-bot berhenti, dan reportRetry untuk sleep tiruan di tes. launchReport punya argumen statusRecorded; kalimat 'Status tercatat failed' hanya kalau setBotStatus berhasil (mengembalikan true). Jangan sampai: pengiriman ulang memblokir handler, berhenti ditunda, atau error grammY yang memuat token dicetak tanpa logger tersensor. Perintah lain yang mengirim pesan latar belakang sebaiknya memakai sendWithRetry yang sama.
@@ -95,4 +99,5 @@ Laporan hasil penyalaan (pesan kedua setelah /register) kini dikirim lewat sendW
   note: selain bun test, repo tidak punya skrip atau CI pemeriksaan lain. Follow-up ditulis untuk master-bot yang dihentikan saat penyalaan masih berjalan.
 
 ## Follow-ups
-- F1 [open] Kalau master-bot dihentikan (Ctrl+C/SIGTERM) saat penyalaan bot masih berjalan (launchBot, sampai 90 detik), main.ts memanggil process.exit setelah run() selesai tanpa menunggu proses latar belakang, sehingga log tidak pernah mencatat laporan '<nama>' tidak terkirim dan status registry tetap 'registered'. Tes 'sudah berhenti sebelum laporan siap' hanya menguji createMasterBot dalam satu proses, bukan jalur process.exit di master/src/main.ts.
+- F1 [ticketed] Kalau master-bot dihentikan (Ctrl+C/SIGTERM) saat penyalaan bot masih berjalan (launchBot, sampai 90 detik), main.ts memanggil process.exit setelah run() selesai tanpa menunggu proses latar belakang, sehingga log tidak pernah mencatat laporan '<nama>' tidak terkirim dan status registry tetap 'registered'. Tes 'sudah berhenti sebelum laporan siap' hanya menguji createMasterBot dalam satu proses, bukan jalur process.exit di master/src/main.ts.
+  → 261112223102

@@ -58,18 +58,22 @@ Sesi bot yang crash tidak boleh meninggalkan server plugin yang terus hidup dan 
   → Foreman: penyebab dipastikan (symlink ws-probe1/home dari sesi agen sebelumnya menunjuk ke data asli). File sudah dipulihkan, symlink dihapus. Ditutup. (owner, 2026-11-12)
 
 ## Assumptions
-- A1 [unseen] Pembersihan diletakkan di launch.ts sehingga berlaku untuk master-bot dan scripts/start-bot.sh sekaligus
+- A1 [confirmed] Pembersihan diletakkan di launch.ts sehingga berlaku untuk master-bot dan scripts/start-bot.sh sekaligus
   Why: launch.ts adalah satu-satunya implementasi penyalaan (4706)
   If wrong: Pindahkan ke start-cli.ts atau bot.ts
-- A2 [unseen] Uji dengan bot asli memakai token uji-01 dan BOT_SQUAD_HOME sementara; data di ~/.bot-squad tidak diubah
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Uji dengan bot asli memakai token uji-01 dan BOT_SQUAD_HOME sementara; data di ~/.bot-squad tidak diubah
   Why: Arahan foreman: uji-01/uji-02 boleh polling asal tidak dua agen sekaligus; 261112214001 memakai uji-02
   If wrong: -
-- A3 [unseen] Pencarian proses tidak memakai perintah khusus satu OS saja: macOS lewat ps -E, Linux lewat /proc
+  Confirmed by owner, 2026-11-12
+- A3 [confirmed] Pencarian proses tidak memakai perintah khusus satu OS saja: macOS lewat ps -E, Linux lewat /proc
   Why: CLAUDE.md: jangan hardcode hal khusus macOS
   If wrong: -
-- A4 [unseen] Satu baris log ditulis per proses yang dimatikan, bukan satu baris per penyalaan
+  Confirmed by owner, 2026-11-12
+- A4 [confirmed] Satu baris log ditulis per proses yang dimatikan, bukan satu baris per penyalaan
   Why: Done when menyebut setiap pembersihan menulis satu baris berisi pid; satu baris per pid memuat sinyal yang dipakai
   If wrong: Gabungkan baris di launch.ts menjadi satu daftar pid
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane strict: mematikan proses di mesin pemilik; salah kenali bisa mematikan bot lain atau plugin WhatsApp pemilik
