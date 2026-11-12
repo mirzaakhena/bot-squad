@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -74,8 +74,33 @@ describe("resolveApiRoot", () => {
 // --- Proses main.ts sungguhan ---
 
 let home: string;
+
+/**
+ * Proxy tiruan di HTTPS_PROXY/HTTP_PROXY: mencatat baris pertama setiap
+ * permintaan (mis. "CONNECT api.telegram.org:443 HTTP/1.1") lalu memutusnya,
+ * sehingga tes tahu ke mana master-bot mencoba terhubung tanpa ada yang
+ * keluar dari mesin ini.
+ */
+const proxySeen: string[] = [];
+let proxy: ReturnType<typeof Bun.listen>;
+beforeAll(() => {
+  proxy = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      data(sock, data) {
+        proxySeen.push(new TextDecoder().decode(data).split("\r\n")[0]!);
+        // Ditutup tanpa jawaban: fetch gagal sebagai error jaringan. (Jawaban
+        // 403 dari proxy dianggap Bun sebagai jawaban server biasa.)
+        sock.end();
+      },
+    },
+  });
+});
+afterAll(() => proxy.stop(true));
 const procs: Array<{ kill: (sig?: number | NodeJS.Signals) => void }> = [];
 beforeEach(() => {
+  proxySeen.length = 0;
   home = mkdtempSync(join(tmpdir(), "bot-squad-apiroot-"));
   mkdirSync(join(home, "master"), { recursive: true });
   writeFileSync(join(home, "master", ".env"), `MASTER_BOT_TOKEN=${TOKEN}\nOWNER_TELEGRAM_ID=${OWNER}\n`, { mode: 0o600 });
@@ -90,14 +115,14 @@ afterEach(() => {
 });
 
 function spawnMain(apiRoot: string | undefined) {
-  // Proxy mati: kalau ada kode yang lolos ke Telegram sungguhan, permintaannya
-  // gagal di mesin ini dan tidak pernah sampai ke api.telegram.org.
+  // Proxy tiruan: kalau ada kode yang lolos ke Telegram sungguhan, permintaannya
+  // tercatat dan ditolak di mesin ini, tidak pernah sampai ke api.telegram.org.
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
     HOME: home,
     BOT_SQUAD_HOME: home,
-    HTTPS_PROXY: "http://127.0.0.1:9",
-    HTTP_PROXY: "http://127.0.0.1:9",
+    HTTPS_PROXY: `http://127.0.0.1:${proxy.port}`,
+    HTTP_PROXY: `http://127.0.0.1:${proxy.port}`,
     NO_PROXY: "localhost,127.0.0.1,::1,[::1]",
   };
   if (apiRoot !== undefined) env.MASTER_BOT_API_ROOT = apiRoot;
@@ -147,6 +172,7 @@ describe("main.ts dengan MASTER_BOT_API_ROOT bukan mesin lokal", () => {
         expect(out).not.toContain("PERINGATAN");
         expect(tg.calls).toEqual([]);
         expect(tg.stray.count).toBe(0);
+        expect(proxySeen).toEqual([]);
         expect(existsSync(masterLockPath(home))).toBe(false);
       } finally {
         tg.stop();
@@ -161,6 +187,7 @@ describe("main.ts dengan MASTER_BOT_API_ROOT bukan mesin lokal", () => {
     expect(m.out()).toStartWith(`master-bot: MASTER_BOT_API_ROOT="https://api.telegram.org.evil.example" ditolak`);
     expect(m.out().trimEnd().split("\n")).toHaveLength(2);
     expect(m.out()).not.toContain(TOKEN.split(":")[1]!);
+    expect(proxySeen).toEqual([]);
     expect(existsSync(masterLockPath(home))).toBe(false);
   }, 20000);
 });
@@ -184,6 +211,7 @@ describe("main.ts dengan MASTER_BOT_API_ROOT lokal", () => {
             `semua permintaan dikirim ke ${value}. Variabel ini hanya untuk tes.`,
         );
         expect(out).not.toContain(TOKEN.split(":")[1]!);
+        expect(proxySeen).toEqual([]);
       } finally {
         tg.stop();
       }
@@ -211,6 +239,7 @@ describe("main.ts dengan MASTER_BOT_API_ROOT lokal", () => {
       expect(out).toContain("401 Unauthorized");
       expect(out).not.toContain(TOKEN.split(":")[1]!);
       expect(hits).toBeGreaterThan(0);
+      expect(proxySeen).toEqual([]);
     } finally {
       srv.stop(true);
     }
@@ -218,23 +247,37 @@ describe("main.ts dengan MASTER_BOT_API_ROOT lokal", () => {
 });
 
 describe("main.ts tanpa MASTER_BOT_API_ROOT", () => {
-  // Tanpa variabel, proses akan ke Telegram sungguhan; supaya tidak ada
-  // token yang terkirim, .env dikosongkan dan proses berhenti di cek konfigurasi.
+  // Token palsu di .env dan proxy tiruan: master-bot mencoba ke Telegram
+  // sungguhan, proxy mencatat tujuannya lalu memutus koneksi. bot.init grammY
+  // terus mencoba ulang error jaringan (dan belum bisa dihentikan dengan
+  // SIGTERM selama itu), jadi proses dimatikan setelah tujuan terlihat.
   for (const [name, value] of [
     ["tidak di-set", undefined],
     ["kosong", ""],
     ["hanya spasi", "   "],
   ] as const) {
-    test(`perilaku sama dengan run() biasa: ${name}`, async () => {
-      rmSync(join(home, "master", ".env"));
-      const lines: string[] = [];
-      expect(await run({ env: { BOT_SQUAD_HOME: home }, write: (l) => lines.push(l) })).toBe(1);
+    test(`tetap ke api.telegram.org tanpa peringatan: ${name}`, async () => {
       const m = spawnMain(value);
-      expect(await m.proc.exited).toBe(1);
+      await waitFor(() => proxySeen.length >= 2, "permintaan lewat proxy");
+      m.proc.kill(9);
+      await m.proc.exited;
       await m.done;
-      expect(m.out()).toBe(lines.join("\n") + "\n");
-      expect(m.out()).not.toContain("PERINGATAN");
-      expect(m.out()).not.toContain("MASTER_BOT_API_ROOT");
+      const out = m.out();
+      expect(proxySeen.every((l) => l === "CONNECT api.telegram.org:443 HTTP/1.1")).toBe(true);
+      expect(out).not.toContain("PERINGATAN");
+      expect(out).not.toContain("MASTER_BOT_API_ROOT");
+      expect(out).not.toContain(TOKEN.split(":")[1]!);
     }, 20000);
   }
+
+  test("konfigurasi kurang: keluaran sama dengan run() biasa", async () => {
+    rmSync(join(home, "master", ".env"));
+    const lines: string[] = [];
+    expect(await run({ env: { BOT_SQUAD_HOME: home }, write: (l) => lines.push(l) })).toBe(1);
+    const m = spawnMain(undefined);
+    expect(await m.proc.exited).toBe(1);
+    await m.done;
+    expect(m.out()).toBe(lines.join("\n") + "\n");
+    expect(proxySeen).toEqual([]);
+  }, 20000);
 });
