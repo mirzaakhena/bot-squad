@@ -18,3 +18,6 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Di Telegram tiruan, penangan khusus menerima (params, next); panggil next() untuk tetap memakai perilaku bawaan, mis. agar state menu tercatat
 - Tes error jaringan grammY tanpa memutus jaringan: beri client.fetch pembungkus yang melempar TypeError untuk metode tertentu; grammY mengubahnya jadi HttpError
 - Waktu pesan masuk ke bot bisa diukur dari transkrip ~/.claude/projects/<workspace>/*.jsonl: atribut ts di tag <channel> (tanggal Telegram) dibanding timestamp catatan
+- Proses main.ts sungguhan bisa diarahkan ke Telegram tiruan dengan env MASTER_BOT_API_ROOT; run() in-process memegang kunci master.pid dengan pid proses tes (dianggap basi karena pid sendiri)
+- Plugin WhatsApp pemilik juga berjalan sebagai 'bun server.ts' dengan baris perintah identik; bedakan server plugin lewat CLAUDE_PLUGIN_ROOT di environment, jangan lewat ps args
+- Folder scratchpad lama (ws-probe1/home) berisi symlink ke data asli ~/.bot-squad; selalu buat rumah uji baru dan cek find -type l sebelum menulis ke dalamnya

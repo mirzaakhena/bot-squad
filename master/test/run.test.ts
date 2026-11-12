@@ -109,7 +109,8 @@ describe("Telegram menolak: berhenti dengan pesan jelas tanpa token", () => {
       const out = lines.join("\n");
       expect(code).toBe(1);
       expect(out).toContain("409");
-      expect(out).toContain("sudah berjalan di tempat lain");
+      expect(out).toContain("digantikan oleh master-bot lain");
+      expect(out).not.toContain("sudah berjalan di tempat lain");
       expect(out).not.toContain(TOKEN);
     } finally {
       tg.stop();
