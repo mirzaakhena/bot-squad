@@ -40,7 +40,7 @@ bot-squad/            # root project & root git
 ├── CLAUDE.md
 ├── master/           # aplikasi master-bot (belum dibuat)
 ├── scripts/          # start-bot.sh: hasil spike menyalakan satu bot
-└── plugin/           # fork plugin Telegram resmi, akan diganti nama jadi "bot-squad"
+└── plugin/           # fork plugin Telegram resmi, sudah diganti nama jadi "bot-squad"
 ```
 
 - `plugin/` disalin dari `anthropics/claude-plugins-official` → `external_plugins/telegram` (versi 0.0.7, commit upstream `e0ab6e5`). Sengaja disalin apa adanya supaya perubahan fork bisa dilihat lewat `git diff`.
@@ -61,12 +61,12 @@ Token dan state **tidak boleh** masuk repo.
 
 ## Fakta teknis dari plugin upstream (`plugin/server.ts`)
 
-- Semua state dibaca dari `TELEGRAM_STATE_DIR` (default `~/.claude/channels/telegram`). Cukup arahkan variabel ini ke direktori berbeda untuk tiap bot agar banyak bot bisa jalan di satu mesin.
+- Semua state dibaca dari `TELEGRAM_STATE_DIR` (default upstream `~/.claude/channels/telegram`; di fork kita `~/.claude/channels/bot-squad`). Cukup arahkan variabel ini ke direktori berbeda untuk tiap bot agar banyak bot bisa jalan di satu mesin.
 - Token dibaca dari `TELEGRAM_BOT_TOKEN`, baik dari environment maupun dari `<STATE_DIR>/.env`. Nilai dari environment yang dipakai lebih dulu.
 - `access.json` menyimpan allowlist dan policy. Master bisa menulisnya lebih dulu dengan ID pemilik sehingga **tidak perlu pairing**.
 - Telegram hanya mengizinkan **satu poller `getUpdates` per token**. Poller kedua akan mendapat error 409. Master tidak boleh melakukan polling dengan token bot (validasi cukup pakai `getMe`) dan harus mencegah satu bot dijalankan dua kali.
 - Plugin mendeklarasikan `claude/channel` dan `claude/channel/permission`, sehingga pesan masuk dan permintaan izin bisa diteruskan lewat Telegram.
-- `--channels` hanya menerima plugin dari allowlist Anthropic (`claude-plugins-official`) atau `allowedChannelPlugins` di managed settings. Plugin lokal kita **tidak** bisa lewat `--channels`: Claude tetap start, tetapi channel tidak terdaftar. Plugin kita harus dimuat dengan `--plugin-dir <repo>/plugin --dangerously-load-development-channels plugin:telegram@inline` (perintah lengkap di bagian "Menyalakan satu bot"). `--channels` dan `--dangerously-load-development-channels` sama-sama tidak muncul di `claude --help`.
+- `--channels` hanya menerima plugin dari allowlist Anthropic (`claude-plugins-official`) atau `allowedChannelPlugins` di managed settings. Plugin lokal kita **tidak** bisa lewat `--channels`: Claude tetap start, tetapi channel tidak terdaftar. Plugin kita harus dimuat dengan `--plugin-dir <repo>/plugin --dangerously-load-development-channels plugin:bot-squad@inline` (perintah lengkap di bagian "Menyalakan satu bot"). `--channels` dan `--dangerously-load-development-channels` sama-sama tidak muncul di `claude --help`.
 - Terdaftar sebagai server MCP saja tidak cukup untuk mengirim pesan masuk: server juga harus disebut di flag channel.
 
 ## Menyalakan satu bot (hasil spike, Claude Code 2.1.322)
@@ -92,19 +92,19 @@ tmux new-session -d -s <nama> -x 200 -y 50 -c ~/.bot-squad/bots/<nama>/workspace
     --settings '{"skipDangerousModePermissionPrompt":true}' \
     --dangerously-skip-permissions \
     --plugin-dir <repo>/plugin \
-    --dangerously-load-development-channels plugin:telegram@inline
+    --dangerously-load-development-channels plugin:bot-squad@inline
 ```
 
 5. Membaca layar tmux setiap detik. Begitu dialog development channel muncul, skrip mengirim `Enter` (pilihan 1 sudah terpilih). Bot dianggap siap kalau baris `bypass permissions on` tampil dan proses di `bot.pid` hidup. Kalau muncul dialog lain, skrip berhenti dengan error tanpa menekan apa pun, karena pilihan default dialog itu adalah "No, exit". Dalam uji, bot siap sekitar 3 detik.
 
 Cara memuat plugin lokal sebagai channel:
 
-- `--plugin-dir <repo>/plugin` memuat plugin untuk sesi ini saja, dengan id `telegram@inline` (`inline` adalah nama marketplace bawaan untuk `--plugin-dir`). Nama server MCP-nya `plugin:telegram:telegram`. Setelah rebrand, id ini menjadi `<nama-baru>@inline`.
-- `--dangerously-load-development-channels plugin:telegram@inline` menjadikan plugin itu channel. Ini yang dipakai.
+- `--plugin-dir <repo>/plugin` memuat plugin untuk sesi ini saja, dengan id `bot-squad@inline` (`inline` adalah nama marketplace bawaan untuk `--plugin-dir`). Nama server MCP-nya `plugin:bot-squad:bot-squad`, dan skill-nya `/bot-squad:access` dan `/bot-squad:configure`. Sebelum rebrand, namanya `telegram@inline` dan `plugin:telegram:telegram`.
+- `--dangerously-load-development-channels plugin:bot-squad@inline` menjadikan plugin itu channel. Ini yang dipakai.
 - Alternatif lain yang juga terbukti mendaftarkan channel tetapi **tidak dipilih**:
-  - `server:<name>`: daftarkan server lewat `--mcp-config <file.json>` (`{"mcpServers":{"telegram":{"command":"bun","args":["run","--cwd","<repo>/plugin","--shell=bun","--silent","start"],"env":{"TELEGRAM_STATE_DIR":"..."}}}}`), lalu `--dangerously-load-development-channels server:telegram`. Cara ini butuh file JSON per bot, dan skill plugin (`/telegram:access`) tidak ikut termuat. Jangan memakai `--plugin-dir` bersamaan dengan cara ini, karena akan ada dua poller.
-  - Marketplace lokal: `--settings` berisi `extraKnownMarketplaces` (sumber `directory`) dan `enabledPlugins`, lalu `plugin:telegram@<marketplace>`. Cara ini membuat Claude Code menulis marketplace ke `~/.claude/plugins/known_marketplaces.json`, yang berlaku global untuk semua sesi. Pada start pertama ada jeda saat Claude memasang plugin.
-- `--channels plugin:telegram@inline` tanpa flag development tidak berhasil, karena plugin tidak ada di allowlist.
+  - `server:<name>`: daftarkan server lewat `--mcp-config <file.json>` (`{"mcpServers":{"bot-squad":{"command":"bun","args":["run","--cwd","<repo>/plugin","--shell=bun","--silent","start"],"env":{"TELEGRAM_STATE_DIR":"..."}}}}`), lalu `--dangerously-load-development-channels server:bot-squad`. Cara ini butuh file JSON per bot, dan skill plugin (`/bot-squad:access`) tidak ikut termuat. Jangan memakai `--plugin-dir` bersamaan dengan cara ini, karena akan ada dua poller.
+  - Marketplace lokal: `--settings` berisi `extraKnownMarketplaces` (sumber `directory`) dan `enabledPlugins`, lalu `plugin:bot-squad@<marketplace>`. Cara ini membuat Claude Code menulis marketplace ke `~/.claude/plugins/known_marketplaces.json`, yang berlaku global untuk semua sesi. Pada start pertama ada jeda saat Claude memasang plugin.
+- `--channels plugin:bot-squad@inline` tanpa flag development tidak berhasil, karena plugin tidak ada di allowlist.
 
 Prompt yang muncul saat start dan cara menanganinya:
 
@@ -123,9 +123,9 @@ Prompt yang muncul saat start dan cara menanganinya:
    - Di server baru, login akun Claude dan onboarding pertama (tema, dll.) belum diuji. Kemungkinan ini langkah manual satu kali.
 3. **Ketahanan**: setelah reboot atau crash, master harus mencocokkan `registry.json` dengan sesi tmux yang benar-benar hidup, lalu menghidupkan ulang bot yang mati.
 4. **Kuota bersama**: semua bot memakai satu akun Claude.
-5. **Penamaan plugin**: ganti nama `telegram` menjadi `bot-squad` (manifest, nama MCP server, skill `/telegram:*`) agar tidak bentrok dengan plugin resmi.
+5. **Penamaan plugin** (selesai, tiket 261112184703): plugin, server MCP, skill, dan nama paket memakai `bot-squad`, dan folder state default menjadi `~/.claude/channels/bot-squad`, sehingga tidak bentrok dengan plugin Telegram resmi. Variabel lingkungan `TELEGRAM_*` sengaja tetap. Akibatnya, kalau kedua plugin dimuat di satu sesi, keduanya membaca token yang sama. Di bot hal itu tidak terjadi, karena `--setting-sources project,local` tidak memuat plugin user.
 6. **Plugin dan connector pemilik ikut termuat di bot**. `--setting-sources project,local` mencegah plugin dan hook dari `~/.claude/settings.json` (misalnya plugin WhatsApp) ikut masuk ke bot. Tetapi connector akun claude.ai (misalnya Claude Docs, Motion) dan MCP bawaan (claude-in-chrome) tetap termuat, dan bot berjalan bebas izin. Belum dicari cara mematikannya per bot.
-7. **Peringatan palsu di layar awal**: bot yang sehat tetap menampilkan `plugin:telegram@inline · plugin not installed`. Peringatan ini hanya dicek terhadap plugin yang terpasang permanen. Saat runtime, channel tetap terdaftar (log debug: `Channel notifications registered`). Jangan memakai baris ini sebagai tanda gagal.
+7. **Peringatan palsu di layar awal**: bot yang sehat tetap menampilkan peringatan kuning `plugin:<id>@inline · plugin not installed`, padahal channel berfungsi penuh. Peringatan ini hanya dicek terhadap plugin yang terpasang permanen. Saat runtime, channel tetap terdaftar (log debug: `Channel notifications registered`). Setelah rebrand peringatan ini **masih muncul**, sebagai `plugin:bot-squad@inline · plugin not installed` (diuji di Claude Code 2.1.322). Jangan memakai baris ini sebagai tanda gagal. Kalau `--debug-file` aktif, baris ini bisa tersembunyi di balik "1 more notice hidden".
 8. **Workspace di dalam repo git lain**: Claude memuat `CLAUDE.md` dan `.claude/` dari folder induk. Workspace bot jangan diletakkan di dalam proyek lain.
 9. **Pengaturan user tidak berlaku di bot**: karena `--setting-sources project,local`, model dan effort default dari `~/.claude/settings.json` tidak dipakai. Kalau perlu, berikan lewat `--settings` atau `--model`.
 
@@ -136,7 +136,7 @@ Prompt yang muncul saat start dan cara menanganinya:
 - [x] Plugin `kerjaan2` (papan tiket) terpasang dengan scope local untuk project ini
 - [ ] Commit baseline `plugin/` yang belum diubah
 - [ ] Rancang alur `/register <nama> <token>` dari awal sampai bot menyala, lalu didiskusikan dengan pemilik sebelum menulis kode
-- [ ] Rebrand `plugin/` menjadi `bot-squad`
+- [x] Rebrand `plugin/` menjadi `bot-squad`
 - [ ] Bangun `master/`
 
 ## Cara bekerja di proyek ini

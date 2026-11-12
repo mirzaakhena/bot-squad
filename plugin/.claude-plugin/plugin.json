@@ -1,8 +1,9 @@
 {
-  "name": "telegram",
-  "description": "Telegram channel for Claude Code \u2014 messaging bridge with built-in access control. Manage pairing, allowlists, and policy via /telegram:access.",
+  "name": "bot-squad",
+  "description": "bot-squad channel for Claude Code — Telegram messaging bridge with built-in access control, forked from the official Telegram plugin. Manage pairing, allowlists, and policy via /bot-squad:access.",
   "version": "0.0.7",
   "keywords": [
+    "bot-squad",
     "telegram",
     "messaging",
     "channel",

@@ -73,8 +73,8 @@ BOTS_DIR="$BOTS_DIR" CLAUDE_JSON="$CLAUDE_JSON" bun -e '
 #    --setting-sources project,local : abaikan ~/.claude/settings.json (plugin,
 #        hook, dan skipDangerousModePermissionPrompt milik pemilik tidak ikut).
 #    --settings ...                  : cegah dialog konfirmasi bypass permissions.
-#    --plugin-dir                    : muat plugin lokal; namanya jadi telegram@inline.
-#    --dangerously-load-development-channels plugin:telegram@inline : jadikan channel.
+#    --plugin-dir                    : muat plugin lokal; namanya jadi bot-squad@inline.
+#    --dangerously-load-development-channels plugin:bot-squad@inline : jadikan channel.
 #    bot.pid lama dihapus (sudah dipastikan mati di langkah 1) supaya tanda siap
 #    di langkah 5 hanya datang dari server plugin sesi ini.
 rm -f "$STATE/bot.pid"
@@ -85,7 +85,7 @@ tmux new-session -d -s "$NAME" -x 200 -y 50 -c "$WS" \
     --settings '{"skipDangerousModePermissionPrompt":true}' \
     --dangerously-skip-permissions \
     --plugin-dir "$PLUGIN_DIR" \
-    --dangerously-load-development-channels plugin:telegram@inline
+    --dangerously-load-development-channels plugin:bot-squad@inline
 
 # 5. Jawab dialog development channel secara otomatis, lalu tunggu siap.
 #    Dialog lain tidak dijawab: pilihan default-nya "No, exit", jadi lebih aman gagal.
