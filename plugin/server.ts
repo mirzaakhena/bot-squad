@@ -24,6 +24,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, statSync, 
 import { homedir } from 'os'
 import { execFileSync } from 'child_process'
 import { join, extname, sep } from 'path'
+import { createPluginLog, describeError, isoLocal, q, secs } from './log.ts'
 
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR
   ?? join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'channels', 'bot-squad')
@@ -81,12 +82,26 @@ try {
 } catch {}
 writeFileSync(PID_FILE, String(process.pid))
 
+// bot-squad: always-on log in the state dir (see plugin/log.ts and CLAUDE.md).
+// stderr of this server is not captured anywhere, so this is the only record
+// of inbound timing and getUpdates trouble. Best-effort; never throws.
+const plog = createPluginLog({
+  file: join(STATE_DIR, 'plugin.log'),
+  secrets: [TOKEN],
+  onFirstError: err => {
+    process.stderr.write(`bot-squad channel: cannot write plugin.log (continuing without it): ${err}\n`)
+  },
+})
+plog('mulai', { pid: process.pid })
+
 // Last-resort safety net — without these the process dies silently on any
 // unhandled promise rejection. With them it logs and keeps serving tools.
 process.on('unhandledRejection', err => {
+  plog('error', { jenis: 'unhandled-rejection', alasan: q(describeError(err)) })
   process.stderr.write(`bot-squad channel: unhandled rejection: ${err}\n`)
 })
 process.on('uncaughtException', err => {
+  plog('error', { jenis: 'uncaught-exception', alasan: q(describeError(err)) })
   process.stderr.write(`bot-squad channel: uncaught exception: ${err}\n`)
 })
 
@@ -96,8 +111,111 @@ process.on('uncaughtException', err => {
 // Strict: no bare yes/no (conversational), no prefix/suffix chatter.
 const PERMISSION_REPLY_RE = /^\s*(y|yes|n|no)\s+([a-km-z]{5})\s*$/i
 
-const bot = new Bot(TOKEN)
+// Test-only: point the server at a fake Telegram. Restricted to this machine
+// so a stray value can never send the token to another host.
+const API_ROOT = process.env.BOT_SQUAD_TELEGRAM_API_ROOT?.trim()
+if (API_ROOT) {
+  let local = false
+  try {
+    const u = new URL(API_ROOT)
+    local = (u.protocol === 'http:' || u.protocol === 'https:') &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)
+  } catch {}
+  if (!local) {
+    process.stderr.write(`bot-squad channel: BOT_SQUAD_TELEGRAM_API_ROOT must point to localhost, refusing: ${API_ROOT}\n`)
+    plog('berhenti', { alasan: q(`BOT_SQUAD_TELEGRAM_API_ROOT bukan alamat lokal: ${API_ROOT}`) })
+    process.exit(1)
+  }
+  process.stderr.write(`bot-squad channel: using test Telegram API at ${API_ROOT}\n`)
+  plog('api-tiruan', { alamat: API_ROOT })
+}
+
+const bot = new Bot(TOKEN, API_ROOT ? { client: { apiRoot: API_ROOT } } : undefined)
 let botUsername = ''
+
+// Inbound timing: when getUpdates returned each update (epoch ms).
+const receivedAtByUpdate = new Map<number, number>()
+// Consecutive getUpdates failures, for the recovery line.
+let pollFailures = 0
+let pollFailingSince = 0
+
+// grammY retries failed getUpdates calls internally (3s, or retry_after on
+// 429) and only reports them via DEBUG=grammy:error. Observe every call here
+// instead. 401/409 are rethrown by grammY to bot.start(), i.e. our retry loop.
+bot.api.config.use(async (prev, method, payload, signal) => {
+  if (method !== 'getUpdates') return prev(method, payload, signal)
+  const t0 = Date.now()
+  const failed = (reason: string, retry: string) => {
+    // Not running = bot.stop() aborted the long poll, or its final offset call.
+    if (!bot.isRunning()) return
+    if (pollFailures++ === 0) pollFailingSince = t0
+    plog('getUpdates-gagal', { ke: pollFailures, durasi: secs(t0, Date.now()), ulang: retry, alasan: q(reason) })
+  }
+  let res
+  try {
+    res = await prev(method, payload, signal)
+  } catch (err) {
+    failed(describeError(err), '3s')
+    throw err
+  }
+  const t = Date.now()
+  if (res.ok) {
+    for (const u of res.result as Array<{ update_id: number }>) receivedAtByUpdate.set(u.update_id, t)
+    if (pollFailures > 0) {
+      plog('getUpdates-pulih', { gagal: pollFailures, sejak: isoLocal(pollFailingSince), lama: secs(pollFailingSince, t) })
+      pollFailures = 0
+    }
+  } else {
+    const code = res.error_code
+    const retry = code === 401 || code === 409 ? 'oleh-plugin' : `${code === 429 ? res.parameters?.retry_after ?? 3 : 3}s`
+    failed(`${code}: ${res.description}`, retry)
+  }
+  return res
+})
+
+// One plugin.log line per inbound message: Telegram's date, when getUpdates
+// delivered it, when it was handed to Claude, and the gaps. Never the text.
+type InboundRecord = { receivedAt: number; logged: boolean }
+const inboundRecords = new WeakMap<Context, InboundRecord>()
+const MESSAGE_KINDS = ['text', 'photo', 'document', 'voice', 'audio', 'video', 'video_note', 'sticker'] as const
+
+function logInbound(ctx: Context, hasil: string, forwardedAt?: number, alasan?: string): void {
+  const rec = inboundRecords.get(ctx)
+  const m = ctx.message
+  if (!rec || !m) return
+  rec.logged = true
+  try {
+    const sent = m.date * 1000
+    plog('pesan', {
+      hasil,
+      chat: m.chat.id,
+      msg: m.message_id,
+      jenis: MESSAGE_KINDS.find(k => k in m) ?? 'lain',
+      tanggal: isoLocal(sent),
+      diterima: isoLocal(rec.receivedAt),
+      diteruskan: forwardedAt != null ? isoLocal(forwardedAt) : '-',
+      telat_terima: secs(sent, rec.receivedAt),
+      telat_teruskan: forwardedAt != null ? secs(rec.receivedAt, forwardedAt) : '-',
+      total: forwardedAt != null ? secs(sent, forwardedAt) : '-',
+      alasan: alasan != null ? q(alasan) : undefined,
+    })
+  } catch {}
+}
+
+bot.use(async (ctx, next) => {
+  const id = ctx.update.update_id
+  const receivedAt = receivedAtByUpdate.get(id) ?? Date.now()
+  receivedAtByUpdate.delete(id)
+  if (!ctx.message) return next()
+  const rec: InboundRecord = { receivedAt, logged: false }
+  inboundRecords.set(ctx, rec)
+  try {
+    await next()
+  } finally {
+    // Plugin commands (/start, /help, /status) and unsupported kinds.
+    if (!rec.logged) logInbound(ctx, 'tidak-diteruskan')
+  }
+})
 
 // When the Claude CLI dies hard (kill -9, crash) our stdout/stderr pipes have
 // no reader any more. The next write fails with EPIPE, emitted as an 'error'
@@ -109,7 +227,7 @@ let botUsername = ''
 // gone, so treat it like stdin EOF and shut down. A stdout EPIPE (MCP reply
 // in flight) ends up here too: uncaughtException writes to stderr, which fails
 // once and lands in this listener.
-process.stderr.on('error', () => shutdown())
+process.stderr.on('error', () => shutdown('stderr-putus'))
 
 type PendingEntry = {
   senderId: string
@@ -670,9 +788,10 @@ await mcp.connect(new StdioServerTransport())
 // When Claude Code closes the MCP connection, stdin gets EOF. Without this
 // the bot keeps polling forever as a zombie, holding the token and blocking
 // the next session with 409 Conflict.
-function shutdown(): void {
+function shutdown(reason = 'tidak-diketahui'): void {
   if (shuttingDown) return
   shuttingDown = true
+  plog('berhenti', { alasan: reason })
   process.stderr.write('bot-squad channel: shutting down\n')
   try {
     if (parseInt(readFileSync(PID_FILE, 'utf8'), 10) === process.pid) rmSync(PID_FILE)
@@ -682,11 +801,11 @@ function shutdown(): void {
   setTimeout(() => process.exit(0), 2000)
   void Promise.resolve(bot.stop()).finally(() => process.exit(0))
 }
-process.stdin.on('end', shutdown)
-process.stdin.on('close', shutdown)
-process.on('SIGTERM', shutdown)
-process.on('SIGINT', shutdown)
-process.on('SIGHUP', shutdown)
+process.stdin.on('end', () => shutdown('stdin-end'))
+process.stdin.on('close', () => shutdown('stdin-close'))
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('SIGHUP', () => shutdown('SIGHUP'))
 
 // Orphan watchdog: belt-and-suspenders for the stdin 'end'/'close' handlers
 // above. Stdin is the MCP transport pipe inherited straight from the CLI; the
@@ -695,7 +814,7 @@ process.on('SIGHUP', shutdown)
 // false-fires when the bun-run/shell wrapper exits or execs during normal
 // startup and we get reparented to init.
 setInterval(() => {
-  if (process.stdin.destroyed || process.stdin.readableEnded) shutdown()
+  if (process.stdin.destroyed || process.stdin.readableEnded) shutdown('stdin-tertutup')
 }, 5000).unref()
 
 // Commands are DM-only. Responding in groups would: (1) leak pairing codes via
@@ -927,9 +1046,13 @@ async function handleInbound(
 ): Promise<void> {
   const result = gate(ctx)
 
-  if (result.action === 'drop') return
+  if (result.action === 'drop') {
+    logInbound(ctx, 'dibuang')
+    return
+  }
 
   if (result.action === 'pair') {
+    logInbound(ctx, 'pairing')
     const lead = result.isResend ? 'Still pending' : 'Pairing required'
     await ctx.reply(
       `${lead} — run in Claude Code:\n\n/bot-squad:access pair ${result.code}`,
@@ -948,13 +1071,18 @@ async function handleInbound(
   // (non-allowlisted senders were dropped above), so we trust the reply.
   const permMatch = PERMISSION_REPLY_RE.exec(text)
   if (permMatch) {
+    const rec = inboundRecords.get(ctx)
+    if (rec) rec.logged = true
     void mcp.notification({
       method: 'notifications/claude/channel/permission',
       params: {
         request_id: permMatch[2]!.toLowerCase(),
         behavior: permMatch[1]!.toLowerCase().startsWith('y') ? 'allow' : 'deny',
       },
-    })
+    }).then(
+      () => logInbound(ctx, 'izin', Date.now()),
+      err => logInbound(ctx, 'gagal', undefined, describeError(err)),
+    )
     if (msgId != null) {
       const emoji = permMatch[1]!.toLowerCase().startsWith('y') ? '✅' : '❌'
       void bot.api.setMessageReaction(chat_id, msgId, [
@@ -963,6 +1091,10 @@ async function handleInbound(
     }
     return
   }
+
+  // Claimed now, written once the notification is out (below).
+  const rec = inboundRecords.get(ctx)
+  if (rec) rec.logged = true
 
   // Typing indicator — signals "processing" until we reply (or ~5s elapses).
   void bot.api.sendChatAction(chat_id, 'typing').catch(() => {})
@@ -1002,14 +1134,19 @@ async function handleInbound(
         } : {}),
       },
     },
-  }).catch(err => {
-    process.stderr.write(`bot-squad channel: failed to deliver inbound to Claude: ${err}\n`)
-  })
+  }).then(
+    () => logInbound(ctx, 'diteruskan', Date.now()),
+    err => {
+      logInbound(ctx, 'gagal', undefined, describeError(err))
+      process.stderr.write(`bot-squad channel: failed to deliver inbound to Claude: ${err}\n`)
+    },
+  )
 }
 
 // Without this, any throw in a message handler stops polling permanently
 // (grammy's default error handler calls bot.stop() and rethrows).
 bot.catch(err => {
+  plog('error', { jenis: 'handler', alasan: q(describeError(err.error)) })
   process.stderr.write(`bot-squad channel: handler error (polling continues): ${err.error}\n`)
 })
 
@@ -1025,6 +1162,7 @@ void (async () => {
         onStart: info => {
           attempt = 0
           botUsername = info.username
+          plog('polling-mulai', { bot: `@${info.username}` })
           process.stderr.write(`bot-squad channel: polling as @${info.username}\n`)
           void bot.api.setMyCommands(
             [
@@ -1036,17 +1174,25 @@ void (async () => {
           ).catch(() => {})
         },
       })
+      plog('polling-berhenti', { alasan: 'bot.stop' })
       return // bot.stop() was called — clean exit from the loop
     } catch (err) {
-      if (shuttingDown) return
+      if (shuttingDown) {
+        plog('polling-berhenti', { alasan: 'shutdown' })
+        return
+      }
       // bot.stop() mid-setup rejects with grammy's "Aborted delay" — expected, not an error.
-      if (err instanceof Error && err.message === 'Aborted delay') return
+      if (err instanceof Error && err.message === 'Aborted delay') {
+        plog('polling-berhenti', { alasan: 'bot.stop' })
+        return
+      }
       const is409 = err instanceof GrammyError && err.error_code === 409
       if (is409 && attempt >= 8) {
         process.stderr.write(
           `bot-squad channel: 409 Conflict persists after ${attempt} attempts — ` +
           `another poller is holding the bot token (stray 'bun server.ts' process or a second session). Exiting.\n`,
         )
+        plog('polling-berhenti', { alasan: q(`409 Conflict setelah ${attempt} percobaan`) })
         return
       }
       const delay = Math.min(1000 * attempt, 15000)
@@ -1054,6 +1200,7 @@ void (async () => {
         ? `409 Conflict${attempt === 1 ? ' — another instance is polling (zombie session, or a second Claude Code running?)' : ''}`
         : `polling error: ${err}`
       process.stderr.write(`bot-squad channel: ${detail}, retrying in ${delay / 1000}s\n`)
+      plog('polling-gagal', { ke: Math.max(attempt, 1), ulang: `${delay / 1000}s`, alasan: q(describeError(err)) })
       await new Promise(r => setTimeout(r, delay))
     }
   }
