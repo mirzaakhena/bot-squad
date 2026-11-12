@@ -73,3 +73,20 @@ Buat aplikasi master-bot paling dasar. Aplikasi ini membaca konfigurasinya dari 
 
 ## Handoff
 Menambah workspace Bun di root (package.json hanya berisi master) dan aplikasi master/: config.ts membaca $BOT_SQUAD_HOME/master/.env (MASTER_BOT_TOKEN, OWNER_TELEGRAM_ID) dan melempar ConfigError yang jelas; access.ts menentukan update milik pemilik (DM pemilik saja); bot.ts memasang penjaga akses sebagai middleware pertama lalu /start dan /help dari daftar COMMANDS; main.ts menjalankan init, setMyCommands, polling, dan menerjemahkan 401/409 menjadi pesan berhenti. Yang tidak boleh rusak: penjaga akses harus tetap middleware pertama sebelum perintah baru apa pun, semua log lewat createLogger yang menyensor token, dan perintah baru ditambahkan ke COMMANDS agar menu dan /help tetap sesuai.
+
+## Review
+- 2026-11-12 strict, round 1, at 1aa92a1: passed.
+  1: 'bun install' lalu 'bun run --cwd master start' dari root salinan (tercatat di CLAUDE.md bagian 'Menjalankan master-bot') menjalankan src/main.ts; dengan token asli tercetak 'berjalan sebagai @mirza_master_bot'.
+  2: dari root dengan BOT_SQUAD_HOME kosong: exit 1, menyebut file .env yang tidak ada dan isi MASTER_BOT_TOKEN/OWNER_TELEGRAM_ID; tes proses terpisah di run.test.ts mencakup token kosong, ID kosong, keduanya, ID bukan angka.
+  3: langsung ke Telegram: token palsu -> exit 1 'menolak token (401)' + path .env, token tidak tercetak (7 dari 8 run keluar <=2s; run pertama kena timeout 30s setelah pesan tercetak, tidak terulang). Dua instance dengan token asli -> satu keluar dengan pesan 409, grep token di kedua keluaran = 0.
+  4: (owner) M1 bisa diikuti dari awal dan berakhir pada hal yang terlihat; tidak memblokir.
+  5: access.test.ts 15 kasus update memeriksa nol panggilan API. Mutasi: penjaga hanya cek from.id -> 10 gagal; penjaga selalu next() -> 16 gagal. Ter-cover.
+  6: semua log lewat createLogger/redact; mutasi redact jadi 'return text' -> 3 tes gagal. Keluaran langsung 401/409 tidak memuat token.
+  7: grep darwin|/Users|pbcopy|osascript|launchctl|brew di master/ dan package.json kosong; hanya os.homedir/path.join/os.tmpdir. Dinilai dengan membaca dan grep, tidak dijalankan di Linux.
+  8: k2 test --dir salinan -- bun test: 46 lulus, 0 gagal; dipulihkan setelah mutasi, 46 lulus.
+  note: pada 409 Telegram menghentikan poller LAMA, jadi instance baru yang mengambil alih; dicatat sebagai follow-up F1. Repo tidak punya skrip/CI selain bun test.
+- 2026-11-12 conflict resolution, at efd06d9: passed.
+  Merge efd06d9 hanya menyelesaikan konflik CLAUDE.md: bagian master-bot dari tiket ini dan rebrand 4703 (plugin:bot-squad@inline, status Rebrand) sama-sama tetap. Tanpa penanda konflik; master/, package.json, bun.lock tidak berubah sejak 1aa92a1.
+
+## Follow-ups
+- F1 [open] 409 master-bot: saat instance kedua dijalankan, Telegram memberi 409 kepada poller LAMA, jadi instance yang sudah berjalan berhenti dengan pesan 'sudah berjalan di tempat lain' sementara instance baru mengambil alih diam-diam (teruji langsung dengan token asli 2026-11-12). Pertimbangkan kunci lokal (pid/lock file di $BOT_SQUAD_HOME/master/) agar instance kedua di mesin yang sama menolak start, dan/atau ubah teks pesan 409 agar menjelaskan bahwa proses ini digantikan oleh poller lain.

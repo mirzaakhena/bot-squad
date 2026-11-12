@@ -1,5 +1,4 @@
 goal: Dua bot berjalan bersamaan dengan aman, lalu /register yang mencatat dan menyalakan bot baru
 order:
-  - 261112184702   # Spike dua bot berjalan bersamaan dengan state terpisah
   - 261112184705   # Perintah register validasi dan pencatatan bot baru
   - 261112184706   # Perintah register menyalakan bot dan melaporkan hasilnya
