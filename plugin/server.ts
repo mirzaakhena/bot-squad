@@ -25,6 +25,7 @@ import { homedir } from 'os'
 import { execFileSync } from 'child_process'
 import { join, extname, sep } from 'path'
 import { createPluginLog, describeError, isoLocal, q, secs } from './log.ts'
+import { answerContext, contextAllowed } from './context.ts'
 
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR
   ?? join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'channels', 'bot-squad')
@@ -212,7 +213,7 @@ bot.use(async (ctx, next) => {
   try {
     await next()
   } finally {
-    // Plugin commands (/start, /help, /status) and unsupported kinds.
+    // Plugin commands (/start, /help, /status, /context) and unsupported kinds.
     if (!rec.logged) logInbound(ctx, 'tidak-diteruskan')
   }
 })
@@ -839,7 +840,8 @@ bot.command('help', async ctx => {
     `Messages you send here route to a paired Claude Code session. ` +
     `Text and photos are forwarded; replies and reactions come back.\n\n` +
     `/start — pairing instructions\n` +
-    `/status — check your pairing state`
+    `/status — check your pairing state\n` +
+    `/context — session context and usage limits`
   )
 })
 
@@ -864,6 +866,24 @@ bot.command('status', async ctx => {
   }
 
   await ctx.reply(`Not paired. Send me a message to get a pairing code.`)
+})
+
+// bot-squad (tiket 261112230304): /context dijawab dari <state>/status.json
+// bot ini sendiri (tangkapan statusline bridge), tidak pernah dikirim ke
+// Claude. Hanya pengirim di allowFrom, di chat pribadi (Q1); selain itu tidak
+// dibalas sama sekali. Dijalankan tanpa await supaya tunggu data (sampai ~18
+// detik) tidak menahan update lain.
+bot.command('context', ctx => {
+  if (!contextAllowed(ctx.chat?.type, ctx.from?.id, loadAccess())) return
+  const chatId = ctx.chat!.id
+  void answerContext({
+    stateDir: STATE_DIR,
+    now: () => Date.now(),
+    sleep: ms => new Promise(r => setTimeout(r, ms)),
+    send: async text => { await bot.api.sendMessage(chatId, text) },
+  }).catch(err => {
+    plog('error', { jenis: 'context', alasan: q(describeError(err)) })
+  })
 })
 
 // Inline-button handler for permission requests. Callback data is
@@ -1169,6 +1189,7 @@ void (async () => {
               { command: 'start', description: 'Welcome and setup guide' },
               { command: 'help', description: 'What this bot can do' },
               { command: 'status', description: 'Check your pairing status' },
+              { command: 'context', description: 'Session context and usage limits' },
             ],
             { scope: { type: 'all_private_chats' } },
           ).catch(() => {})

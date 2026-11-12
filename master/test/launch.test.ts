@@ -16,6 +16,7 @@ import {
   type NewSession,
   type Tmux,
 } from "../src/launch.ts";
+import { bridgeCommand } from "../src/statusline.ts";
 
 const FAKE_TOKEN = "5001:AAGoodFakeTokenForLaunchTests_aaaaaaaa";
 const OWNER = 111222333;
@@ -97,6 +98,7 @@ function deps(
     ownerId: OWNER,
     pluginDir: "/repo/plugin",
     claudeJson: join(home, "claude.json"),
+    userSettings: join(home, "user-claude", "settings.json"),
     tmux,
     isAlive: (pid: number) => pid === ALIVE,
     installs: 0,
@@ -171,7 +173,7 @@ describe("launchBot: siap", () => {
     expect(s.name).toBe("bot-01");
     expect(s.cwd).toBe(join(home, "bots", "bot-01", "workspace"));
     expect(s.env).toEqual({ TELEGRAM_STATE_DIR: join(home, "bots", "bot-01", "state") });
-    expect(s.argv).toEqual(claudeArgv("/repo/plugin"));
+    expect(s.argv).toEqual(claudeArgv("/repo/plugin", bridgeCommand("/repo/plugin", join(home, "bots", "bot-01", "state"))));
     expect(s.argv).toContain("--dangerously-skip-permissions");
     expect(d.installs).toBe(1);
     // bot.pid basi tidak dianggap tanda siap: siap baru setelah plugin menulis pid baru.
@@ -526,6 +528,37 @@ describe("installPluginLocked", () => {
   test("install gagal: kunci tetap dilepas", async () => {
     await expect(installPluginLocked(opts({ install: async () => { throw new Error("x"); } }))).rejects.toThrow("x");
     expect(existsSync(lock())).toBe(false);
+  });
+});
+
+describe("launchBot: statusline bridge /context (261112230304)", () => {
+  const ready = (name: string) =>
+    fakeTmux((i) => {
+      if (i === 1) writePid(name, ALIVE);
+      return READY;
+    });
+
+  test("pendahulu user diteruskan lewat rantai; bridge di --settings", async () => {
+    const p = makeBotDir("bot-01");
+    mkdirSync(join(home, "user-claude"));
+    writeFileSync(join(home, "user-claude", "settings.json"), JSON.stringify({ statusLine: { type: "command", command: "/u/sl.sh" } }));
+    const f = ready("bot-01");
+    expect((await launchBot("bot-01", deps(f.tmux))).kind).toBe("active");
+    const settings = JSON.parse(f.created[0]!.argv[4]!);
+    expect(settings.statusLine).toEqual({ type: "command", command: bridgeCommand("/repo/plugin", p.state) });
+    expect(readFileSync(join(p.state, "chained-statusline"), "utf8")).toBe("/u/sl.sh");
+  });
+
+  test("settings tak terbaca: bot tetap menyala tanpa statusline, alasan di log", async () => {
+    const p = makeBotDir("bot-01");
+    mkdirSync(join(p.workspace, ".claude"));
+    writeFileSync(join(p.workspace, ".claude", "settings.json"), "{rusak");
+    const f = ready("bot-01");
+    const d = deps(f.tmux);
+    expect((await launchBot("bot-01", d)).kind).toBe("active");
+    expect(f.created[0]!.argv).toEqual(claudeArgv("/repo/plugin"));
+    expect(d.logs.join("\n")).toContain("statusline 'bot-01' tidak dipasang");
+    expect(JSON.parse(readFileSync(join(p.state, "statusline.json"), "utf8")).kind).toBe("refused");
   });
 });
 

@@ -5,6 +5,7 @@ import { NAME_RULE } from "./register.ts";
 import { redact } from "./log.ts";
 import { killStrayServers, listServerProcesses, type Killed } from "./strays.ts";
 import { abortableSleep } from "./retry.ts";
+import { prepareStatusline } from "./statusline.ts";
 
 /**
  * Menyalakan satu bot sebagai sesi Claude Code di tmux, dengan cara yang
@@ -26,14 +27,19 @@ export const DEV_CHANNEL_PROMPT = "I am using this for local development";
 export const UNEXPECTED_DIALOG = /Yes, I trust this folder|Yes, I accept|Enter to confirm/;
 export const READY_MARK = "bypass permissions on";
 
-/** Perintah claude di dalam sesi tmux. */
-export function claudeArgv(pluginDir: string): string[] {
+/**
+ * Perintah claude di dalam sesi tmux. `statusLine` (perintah bridge /context,
+ * tiket 261112230304) hanya dipasang kalau pendahulunya sudah dipastikan.
+ */
+export function claudeArgv(pluginDir: string, statusLine: string | null = null): string[] {
+  const settings: Record<string, unknown> = { skipDangerousModePermissionPrompt: true };
+  if (statusLine !== null) settings.statusLine = { type: "command", command: statusLine };
   return [
     "claude",
     "--setting-sources",
     "project,local",
     "--settings",
-    '{"skipDangerousModePermissionPrompt":true}',
+    JSON.stringify(settings),
     "--dangerously-skip-permissions",
     "--plugin-dir",
     pluginDir,
@@ -62,6 +68,8 @@ export type LaunchDeps = {
   pluginDir: string;
   /** Lokasi ~/.claude.json (untuk trust folder). */
   claudeJson: string;
+  /** Lokasi ~/.claude/settings.json; hanya dibaca, untuk statusline pendahulu. */
+  userSettings: string;
   tmux: Tmux;
   isAlive: (pid: number) => boolean;
   /** Memasang paket plugin; melempar error kalau gagal atau dibatalkan lewat signal. */
@@ -285,6 +293,16 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
   }
   if (aborted()) return interrupted();
 
+  // Statusline bridge untuk /context. Tidak pernah menggagalkan start.
+  const statusline = prepareStatusline({
+    workspace,
+    stateDir: state,
+    pluginDir: deps.pluginDir,
+    userSettings: deps.userSettings,
+    now: deps.now,
+  });
+  if (statusline.kind !== "installed") deps.log?.(`statusline '${name}' tidak dipasang: ${statusline.reason}`);
+
   // bot.pid lama sudah dipastikan mati; dihapus supaya tanda siap hanya
   // datang dari server plugin sesi ini.
   rmSync(pidFile, { force: true });
@@ -293,7 +311,7 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
       name,
       cwd: workspace,
       env: { TELEGRAM_STATE_DIR: state },
-      argv: claudeArgv(deps.pluginDir),
+      argv: claudeArgv(deps.pluginDir, statusline.kind === "installed" ? statusline.command : null),
     });
   } catch (err) {
     // tmux menolak nama sesi yang sudah dipakai: sesi lain menang balapan.
@@ -461,6 +479,7 @@ export function realLaunchDeps(
     ownerId,
     pluginDir: PLUGIN_DIR,
     claudeJson: join(process.env.CLAUDE_CONFIG_DIR || homedir(), ".claude.json"),
+    userSettings: join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json"),
     tmux: realTmux,
     isAlive,
     installPlugin: (s) => installPluginLocked({ dataDir, pluginDir: PLUGIN_DIR, isAlive, sleep, now, signal: s }),
