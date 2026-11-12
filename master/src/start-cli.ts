@@ -29,7 +29,7 @@ if (needsOwner && !/^[1-9][0-9]*$/.test(ownerRaw)) {
 
 const secs = Number(process.env.READY_TIMEOUT);
 const deps = {
-  ...realLaunchDeps(dir, Number(ownerRaw) || 0),
+  ...realLaunchDeps(dir, Number(ownerRaw) || 0, (m) => console.error(`start-bot: ${m}`)),
   timeoutMs: Number.isFinite(secs) && secs > 0 ? secs * 1000 : READY_TIMEOUT_MS,
 };
 const res = await launchBot(name, deps);

@@ -68,7 +68,7 @@ async function serve(
   log: ReturnType<typeof createLogger>,
   write: (line: string) => void,
 ): Promise<number> {
-  const launchDeps = realLaunchDeps(dir, config.ownerId);
+  const launchDeps = realLaunchDeps(dir, config.ownerId, log);
   const bot = createMasterBot({
     token: config.token,
     ownerId: config.ownerId,

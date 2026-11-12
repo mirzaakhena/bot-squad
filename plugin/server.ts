@@ -55,6 +55,9 @@ if (!TOKEN) {
 }
 const INBOX_DIR = join(STATE_DIR, 'inbox')
 const PID_FILE = join(STATE_DIR, 'bot.pid')
+// Set once shutdown() starts; declared early because the stderr 'error'
+// listener below can call shutdown() before the MCP transport is up.
+let shuttingDown = false
 
 // Telegram allows exactly one getUpdates consumer per token. If a previous
 // session crashed (SIGKILL, terminal closed) its server.ts grandchild can
@@ -95,6 +98,18 @@ const PERMISSION_REPLY_RE = /^\s*(y|yes|n|no)\s+([a-km-z]{5})\s*$/i
 
 const bot = new Bot(TOKEN)
 let botUsername = ''
+
+// When the Claude CLI dies hard (kill -9, crash) our stdout/stderr pipes have
+// no reader any more. The next write fails with EPIPE, emitted as an 'error'
+// event on the stream. Without a listener that error lands in the
+// uncaughtException handler above, which writes to stderr again: another
+// EPIPE, forever, at ~99% CPU. Under bun 1.3.11 that loop also starves timers,
+// so shutdown()'s 2s force-exit never fires and the process lives on as an
+// orphan (bot.pid already removed). A broken output pipe means the client is
+// gone, so treat it like stdin EOF and shut down. A stdout EPIPE (MCP reply
+// in flight) ends up here too: uncaughtException writes to stderr, which fails
+// once and lands in this listener.
+process.stderr.on('error', () => shutdown())
 
 type PendingEntry = {
   senderId: string
@@ -655,7 +670,6 @@ await mcp.connect(new StdioServerTransport())
 // When Claude Code closes the MCP connection, stdin gets EOF. Without this
 // the bot keeps polling forever as a zombie, holding the token and blocking
 // the next session with 409 Conflict.
-let shuttingDown = false
 function shutdown(): void {
   if (shuttingDown) return
   shuttingDown = true
