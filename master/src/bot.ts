@@ -5,8 +5,9 @@ import { describeError, type Logger } from "./log.ts";
 import { parseRegisterArgs, registerBot, USAGE } from "./register.ts";
 import { setBotStatus, type WriteHooks } from "./registry.ts";
 import type { LaunchResult } from "./launch.ts";
+import { sendWithRetry, type RetryPolicy } from "./retry.ts";
 
-/** Perintah yang sudah berfungsi. Daftar ini juga dikirim lewat setMyCommands. */
+/** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
 export const COMMANDS = [
   { command: "start", description: "Tampilkan daftar perintah" },
   { command: "help", description: "Tampilkan daftar perintah" },
@@ -39,14 +40,26 @@ export type MasterBotOptions = {
   launch: (name: string) => Promise<LaunchResult>;
   /** Dipanggil dengan proses penyalaan di latar belakang; dipakai tes untuk menunggunya. */
   onLaunch?: (done: Promise<void>) => void;
+  /** Dibatalkan saat master-bot berhenti: percobaan kirim ulang laporan dihentikan. */
+  signal?: AbortSignal;
+  /** Jeda kirim ulang laporan penyalaan; diganti di tes. */
+  reportRetry?: RetryPolicy;
 };
 
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** Pesan hasil penyalaan bot untuk pemilik (HTML). */
-export function launchReport(name: string, username: string, res: LaunchResult): string {
+export const STATUS_NOT_RECORDED = "Status di registry gagal dicatat; lihat log master-bot.";
+
+/**
+ * Pesan hasil penyalaan bot untuk pemilik (HTML). statusRecorded false berarti
+ * status active/failed gagal ditulis ke registry.
+ */
+export function launchReport(name: string, username: string, res: LaunchResult, statusRecorded = true): string {
   const who = `@${escapeHtml(username)} ('${name}')`;
-  if (res.kind === "active") return `Bot ${who} aktif. Silakan ajak bicara.`;
+  if (res.kind === "active") {
+    const text = `Bot ${who} aktif. Silakan ajak bicara.`;
+    return statusRecorded ? text : `${text}\n\n${STATUS_NOT_RECORDED}`;
+  }
   if (res.kind === "already-running") {
     return `Bot ${who} tidak dinyalakan: ${escapeHtml(res.reason)}. Satu bot tidak boleh berjalan dua kali.`;
   }
@@ -57,7 +70,11 @@ export function launchReport(name: string, username: string, res: LaunchResult):
       ? `Lihat langsung di server: <code>tmux attach -t ${name}</code>`
       : "Sesi tmux-nya sudah tidak ada.",
   );
-  parts.push("Status tercatat 'failed'. Percobaan ulang menunggu perintah berikutnya (belum tersedia).");
+  parts.push(
+    statusRecorded
+      ? "Status tercatat 'failed'. Percobaan ulang menunggu perintah berikutnya (belum tersedia)."
+      : `${STATUS_NOT_RECORDED} Percobaan ulang menunggu perintah berikutnya (belum tersedia).`,
+  );
   return parts.join("\n\n");
 }
 
@@ -90,18 +107,33 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
         res = { kind: "failed", reason: "error di master-bot saat menyalakan", sessionAlive: false };
         opts.log(`penyalaan '${name}' error: ${describeError(err)}`);
       }
+      let statusRecorded = true;
       if (res.kind !== "already-running") {
         try {
-          await setBotStatus(opts.dataDir, name, res.kind === "active" ? "active" : "failed", opts.registryHooks);
+          statusRecorded = await setBotStatus(opts.dataDir, name, res.kind === "active" ? "active" : "failed", opts.registryHooks);
+          if (!statusRecorded) opts.log(`status '${name}' gagal dicatat: tidak ada di registry`);
         } catch (err) {
+          statusRecorded = false;
           opts.log(`status '${name}' gagal dicatat: ${describeError(err)}`);
         }
       }
       opts.log(`penyalaan '${name}': ${res.kind}${res.kind === "active" ? "" : ` (${res.reason})`}`);
-      try {
-        await bot.api.sendMessage(opts.ownerId, launchReport(name, username, res), { parse_mode: "HTML" });
-      } catch (err) {
-        opts.log(`laporan penyalaan '${name}' gagal dikirim: ${describeError(err)}`);
+      // Gangguan sementara (jaringan, 5xx, 429) dicoba ulang dengan jeda
+      // bertambah; error lain dan berhentinya master-bot langsung dicatat.
+      const text = launchReport(name, username, res, statusRecorded);
+      const out = await sendWithRetry(
+        (signal) => bot.api.sendMessage(opts.ownerId, text, { parse_mode: "HTML" }, signal),
+        opts.signal,
+        opts.reportRetry,
+        ({ attempt, waitMs, reason }) =>
+          opts.log(
+            `laporan penyalaan '${name}' gagal dikirim (percobaan ${attempt}): ${reason}; dicoba lagi dalam ${Math.round(waitMs / 1000)} detik`,
+          ),
+      );
+      if (out.ok) {
+        if (out.attempts > 1) opts.log(`laporan penyalaan '${name}' terkirim pada percobaan ${out.attempts}`);
+      } else {
+        opts.log(`laporan penyalaan '${name}' tidak terkirim: ${out.reason}`);
       }
     })();
     opts.onLaunch?.(done);
