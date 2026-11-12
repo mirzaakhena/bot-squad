@@ -1,2 +1,3 @@
-goal: Tutup sisa temuan reviewer: batasi MASTER_BOT_API_ROOT ke lokal, status jelas saat master-bot berhenti di tengah penyalaan, dan rekam waktu pesan masuk untuk menyelidiki keterlambatan
+goal: Perintah /context di chat bot: sisa konteks dan kuota dari statusline, mengikuti mirza-bots
 order:
+  - 261112230304   # Perintah context di chat bot sisa konteks dan kuota

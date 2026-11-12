@@ -1,1 +1,17 @@
 {"t":"2026-11-12 23:03:29","event":"created","status":"backlog","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 05:45:45","event":"question","key":"Q1","blocking":true,"session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:45:45","event":"question","key":"Q2","blocking":true,"session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:45:45","event":"question","key":"Q3","blocking":true,"session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:45:45","event":"question","key":"Q4","blocking":true,"session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:46:00","event":"question","key":"Q5","blocking":true,"session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:46:00","event":"assumption","key":"A1","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:46:00","event":"assumption","key":"A2","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:46:00","event":"assumption","key":"A3","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:46:00","event":"assumption","key":"A4","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:46:01","event":"assumption","key":"A5","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:48:40","event":"answer","key":"Q1","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:48:40","event":"answer","key":"Q2","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:48:40","event":"answer","key":"Q3","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:48:40","event":"answer","key":"Q4","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:48:41","event":"answer","key":"Q5","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
+{"t":"2026-11-13 05:49:11","event":"moved","to":"todo","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"planner:a2760025d4ccd6e98"}
