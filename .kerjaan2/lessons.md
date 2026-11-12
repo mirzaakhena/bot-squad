@@ -26,3 +26,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Uji server plugin tanpa Telegram: BOT_SQUAD_TELEGRAM_API_ROOT=http://127.0.0.1:<port> + MCP initialize di stdin (plugin/test/plugin-log.test.ts); /start tiruan butuh entities bot_command
 - Tes yang men-spawn main.ts sebaiknya memberi HTTPS_PROXY=http://127.0.0.1:9 dan NO_PROXY=localhost,127.0.0.1,::1,[::1] supaya bug yang lolos ke api.telegram.org gagal lokal; Bun mencocokkan NO_PROXY untuk IPv6 dengan bentuk [::1]
 - Scratchpad dipakai bersama semua agen: simpan berkas sementara di subfolder ber-ID tiket, jangan nama generik (bak.ts). 261112223102 sempat meng-commit tes milik 261112230301 karena itu.
+- Done when 'tanpa variabel perilaku tidak berubah' harus diuji di jalur jaringan (token sah + proxy mati, cek tujuan permintaan), bukan hanya di jalur gagal konfigurasi yang berhenti sebelum client dipakai.
