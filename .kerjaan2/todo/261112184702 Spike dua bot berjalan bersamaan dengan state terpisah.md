@@ -15,7 +15,12 @@ Banyak bot akan berjalan di satu mesin. Masing-masing bot harus membaca token da
 
 Ada satu masalah lagi. Setiap kali plugin dinyalakan, ia memasang paket di folder plugin yang dipakai bersama semua bot. Kalau beberapa bot dinyalakan bersamaan, pemasangan paket itu bisa saling bertabrakan.
 
-Untuk spike ini dibutuhkan dua token bot uji dari pemilik.
+Dua token bot uji dari pemilik sudah tersedia. Token tidak boleh ditulis ke repo, tiket, log, atau commit.
+
+- `uji-01`: token @mirza_001_bot ada di `~/.bot-squad/bots/uji-01/state/.env`. Token ini baru. Token lama di folder ini ternyata milik @mirza_master_bot dan sudah dipindah ke `~/.bot-squad/master/.env` sebagai `MASTER_BOT_TOKEN`. Jadi, sebelum mulai, pastikan tidak ada sesi tmux `uji-01` lama yang masih berjalan dengan token itu. Sesi seperti itu akan berebut poller dengan master-bot. `access.json` uji-01 dari spike 4701 sudah ada dan berisi pemilik saja.
+- `uji-02`: token @mirza_002_bot ada di `~/.bot-squad/bots/uji-02/state/.env`. Workspace-nya sudah ada, tetapi `access.json` belum ada, dan `scripts/start-bot.sh` yang akan menulisnya.
+
+Plugin sudah di-rebrand (tiket 4703). Namanya sekarang bot-squad dan channel-nya `plugin:bot-squad@inline`. `scripts/start-bot.sh` dan CLAUDE.md sudah memakai nama ini. Pesan stderr plugin, misalnya `bot-squad channel: polling as @<username>`, tidak masuk `--debug-file`. Untuk merekamnya, pakai shim bun di PATH (lihat lessons).
 
 ## Request
 
@@ -23,11 +28,11 @@ Buktikan bahwa dua bot bisa berjalan bersamaan di satu mesin dan benar-benar ter
 
 ## Done when
 
-- [ ] CLAUDE.md mencatat apakah pengaturan folder state per bot benar-benar sampai ke plugin, dan cara yang dipakai kalau ternyata tidak sampai.
-- [ ] CLAUDE.md mencatat cara menangani pemasangan paket plugin supaya beberapa bot bisa dinyalakan bersamaan dengan aman.
-- [ ] Dua bot dinyalakan pada saat yang hampir bersamaan, dan keduanya sampai ke kondisi siap.
-- [ ] (owner) Pemilik mengirim pesan ke tiap bot, dan masing-masing membalas dari sesinya sendiri tanpa pesan nyasar ke bot lain.
-- [ ] Mematikan satu bot tidak mengganggu bot yang lain.
+- [ ] CLAUDE.md mencatat apakah pengaturan folder state per bot benar-benar sampai ke plugin, dan cara yang dipakai kalau ternyata tidak sampai. Buktinya diambil dari dua bot: uji-01 polling sebagai @mirza_001_bot dan uji-02 sebagai @mirza_002_bot, masing-masing dengan bot.pid di folder state-nya sendiri.
+- [ ] CLAUDE.md mencatat cara menangani pemasangan paket plugin supaya beberapa bot bisa dinyalakan bersamaan dengan aman. Sesuai jawaban Q3: scripts/start-bot.sh menjalankan bun install sekali dengan kunci sebelum tmux dibuka, dan kalau terbukti perlu, script start di plugin/package.json diubah menjadi 'bun server.ts'.
+- [ ] `scripts/start-bot.sh uji-01` dan `scripts/start-bot.sh uji-02` dinyalakan pada saat yang hampir bersamaan, dan keduanya sampai ke kondisi siap.
+- [ ] (owner) Pemilik mengirim pesan ke @mirza_001_bot dan @mirza_002_bot, dan masing-masing membalas dari sesinya sendiri tanpa pesan nyasar ke bot lain.
+- [ ] Mematikan satu bot, dengan tmux kill-session lalu satu kali dengan kill -9 pada proses claude-nya, tidak mengganggu bot yang lain: sesi tmux, bot.pid, dan polling bot yang masih menyala tetap hidup.
 
 ## Out of scope
 
@@ -49,3 +54,5 @@ Buktikan bahwa dua bot bisa berjalan bersamaan di satu mesin dan benar-benar ter
 ## Decisions
 - Lane standard: spike, hanya catatan dan skrip start yang mudah dibatalkan
 - Tidak blocked oleh tiket lain di board (4701 sudah done), tetapi tidak bisa jalan sebelum pemilik menyerahkan token bot uji kedua; tetap di backlog sampai token ada
+- Token kedua tersedia (uji-02 @mirza_002_bot); tiket disesuaikan dengan nama plugin bot-squad dan token baru uji-01. Berjalan berdampingan dengan 4704 (review) dan 4705: tidak ada yang bergantung, hanya bersinggungan di CLAUDE.md
+- 2026-11-12 moved to todo: Token bot uji kedua sudah diberikan pemilik; semua pertanyaan terjawab
