@@ -38,7 +38,8 @@ Pemilik (Telegram)
 ```
 bot-squad/            # root project & root git
 ├── CLAUDE.md
-├── master/           # aplikasi master-bot (belum dibuat)
+├── package.json      # workspace Bun: hanya ["master"]; plugin/ memasang dependency-nya sendiri
+├── master/           # aplikasi master-bot (Bun + grammY), tes di master/test/
 ├── scripts/          # start-bot.sh: hasil spike menyalakan satu bot
 └── plugin/           # fork plugin Telegram resmi, sudah diganti nama jadi "bot-squad"
 ```
@@ -68,6 +69,20 @@ Token dan state **tidak boleh** masuk repo.
 - Plugin mendeklarasikan `claude/channel` dan `claude/channel/permission`, sehingga pesan masuk dan permintaan izin bisa diteruskan lewat Telegram.
 - `--channels` hanya menerima plugin dari allowlist Anthropic (`claude-plugins-official`) atau `allowedChannelPlugins` di managed settings. Plugin lokal kita **tidak** bisa lewat `--channels`: Claude tetap start, tetapi channel tidak terdaftar. Plugin kita harus dimuat dengan `--plugin-dir <repo>/plugin --dangerously-load-development-channels plugin:bot-squad@inline` (perintah lengkap di bagian "Menyalakan satu bot"). `--channels` dan `--dangerously-load-development-channels` sama-sama tidak muncul di `claude --help`.
 - Terdaftar sebagai server MCP saja tidak cukup untuk mengirim pesan masuk: server juga harus disebut di flag channel.
+
+## Menjalankan master-bot
+
+Sekali di root repo: `bun install`. Lalu jalankan dari root repo:
+
+```bash
+bun run --cwd master start
+```
+
+- Konfigurasi dibaca dari `$BOT_SQUAD_HOME/master/.env` (default `~/.bot-squad/master/.env`, sebaiknya `chmod 600`): `MASTER_BOT_TOKEN=<token dari @BotFather>` dan `OWNER_TELEGRAM_ID=<angka>`. Hanya file ini yang dibaca, bukan environment.
+- Kalau ada yang kurang, token ditolak Telegram (401), atau master-bot sudah berjalan di tempat lain (409), aplikasi berhenti dengan kode 1 dan pesan yang menyebut penyebab serta letak file. Token tidak pernah dicetak: semua log disensor.
+- Hanya pesan di chat pribadi pemilik yang dilayani. Semua update lain (akun lain, grup, termasuk pesan pemilik di grup, channel, inline query) dibuang tanpa balasan, dan log hanya mencatat `update diabaikan dari <id>`.
+- Perintah saat ini: `/start` dan `/help`. Menu Telegram didaftarkan dengan `setMyCommands` setiap start dari daftar `COMMANDS` di `master/src/bot.ts`.
+- Tes: `bun test` dari root repo. Tes memakai server Telegram tiruan (`master/test/fake-telegram.ts`), jadi tidak butuh token asli.
 
 ## Menyalakan satu bot (hasil spike, Claude Code 2.1.322)
 
@@ -137,7 +152,8 @@ Prompt yang muncul saat start dan cara menanganinya:
 - [ ] Commit baseline `plugin/` yang belum diubah
 - [ ] Rancang alur `/register <nama> <token>` dari awal sampai bot menyala, lalu didiskusikan dengan pemilik sebelum menulis kode
 - [x] Rebrand `plugin/` menjadi `bot-squad`
-- [ ] Bangun `master/`
+- [x] Kerangka `master/`: konfigurasi, hanya melayani pemilik, `/start` dan `/help`
+- [ ] Perintah master-bot berikutnya (`/register`, dst.)
 
 ## Cara bekerja di proyek ini
 
