@@ -33,7 +33,7 @@ Sesi bot yang crash tidak boleh meninggalkan server plugin yang terus hidup dan 
 - [x] Penyebab server tidak keluar dicatat di CLAUDE.md, termasuk apakah ini bug di plugin atau di bun.
 - [x] Logika mengenali server sisa milik bot tertentu dibuktikan dengan tes otomatis.
 - [x] Mematikan sesi secara normal tetap bersih seperti sebelumnya.
-- [ ] (owner) Pemilik menyalakan uji-01 dan uji-02, lalu menjalankan kill -9 pada proses claude uji-01. Dalam 10 detik ps tidak lagi menunjukkan server plugin uji-01, sementara uji-02 dan plugin WhatsApp tetap hidup. Setelah itu start uji-01 lagi berhasil.
+- [x] (owner) Pemilik menyalakan uji-01 dan uji-02, lalu menjalankan kill -9 pada proses claude uji-01. Dalam 10 detik ps tidak lagi menunjukkan server plugin uji-01, sementara uji-02 dan plugin WhatsApp tetap hidup. Setelah itu start uji-01 lagi berhasil.
 
 ## Out of scope
 
@@ -84,12 +84,13 @@ Sesi bot yang crash tidak boleh meninggalkan server plugin yang terus hidup dan 
 - plugin/test/orphan.test.ts dilewati (dengan peringatan) kalau plugin/node_modules belum dipasang, supaya worktree lain yang hanya menjalankan bun install di root tidak ikut gagal
 
 ## Manual checks
-- M1 [waiting] (item 7) 1. Pastikan ~/.bot-squad/master/.env terisi (lihat Q7).
+- M1 [ok] (item 7) 1. Pastikan ~/.bot-squad/master/.env terisi (lihat Q7).
   2. Jalankan scripts/start-bot.sh uji-01 lalu scripts/start-bot.sh uji-02.
   3. Cari pid claude uji-01: ps -axo pid,args | grep 'claude --setting-sources' lalu cocokkan dengan tmux list-panes -t '=uji-01' -F '#{pane_pid}'.
   4. kill -9 <pid claude uji-01>.
   5. Tunggu 10 detik, jalankan ps -axo pid,ppid,%cpu,args | grep 'bun server.ts': pid dari bots/uji-01/state/bot.pid tadi tidak ada, server uji-02 dan WhatsApp masih ada.
   6. scripts/start-bot.sh uji-01 lagi: keluar dengan 'siap'.
+  Checked by owner, 2026-11-12
 
 ## Handoff
 Server plugin yatim setelah kill -9 claude disebabkan loop EPIPE: handler uncaughtException plugin menulis ke stderr yang sudah putus, dan di bun 1.3.11 loop itu menghambat timer paksa keluar. plugin/server.ts kini memasang listener error di process.stderr yang memanggil shutdown(); variabel shuttingDown dipindah ke atas karena listener bisa jalan sebelum MCP tersambung. Jaring pengaman: master/src/strays.ts mengenali server sisa (bun server.ts, CLAUDE_PLUGIN_ROOT = plugin repo, TELEGRAM_STATE_DIR sama persis) dan launch.ts memanggil deps.killStrays setelah cek start ganda, lalu menulis log per pid. LaunchDeps kini wajib punya killStrays; log opsional lewat realLaunchDeps(dir, owner, log). Jangan longgarkan pengenalan: WhatsApp punya baris perintah yang sama.
