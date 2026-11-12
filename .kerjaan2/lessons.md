@@ -13,3 +13,5 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - createMasterBot wajib diberi dataDir; di tes arahkan ke folder sementara, dan tulis registry.json hanya lewat writeRegistry di dalam serialized()
 - startFakeTelegram menerima argumen ketiga (token -> jawaban getMe) untuk token bot lain; stray.count menghitung permintaan dengan token tak dikenal
 - Bukti 'server plugin ikut mati' setelah kill -9 claude harus dicek beberapa detik kemudian dengan ps (pid, ppid, %CPU), bukan dari hilangnya bot.pid: shutdown menghapus bot.pid sebelum proses benar-benar keluar.
+- Fake sleep di tes loop tunggu harus melempar error setelah melewati batas jauh, kalau tidak loop tanpa henti membuat bun test hang tanpa timeout
+- tmux server mengambil PATH dari klien pertama; untuk menguji jalur gagal, taruh claude tiruan di depan PATH saat belum ada server tmux, lalu matikan sesinya dengan kill-session (bukan kill-server)

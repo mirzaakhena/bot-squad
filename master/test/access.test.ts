@@ -17,6 +17,7 @@ function setup() {
     botInfo: ME,
     // Tes ini tidak pernah menulis data; folder ini tidak dibuat.
     dataDir: "/nonexistent/bot-squad-access-test",
+    launch: () => Promise.reject(new Error("tidak boleh dipanggil di tes akses")),
   });
   return { tg, logs, bot };
 }

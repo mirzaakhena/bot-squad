@@ -20,11 +20,11 @@ Registrasi yang berhasil langsung menyalakan bot. Master-bot memastikan bot bena
 ## Done when
 
 - [ ] (owner) Setelah registrasi, pemilik menerima pesan "aktif" dari master-bot, dan bot baru langsung membalas saat diajak bicara.
-- [ ] Kalau sesi tidak siap dalam batas waktu tertentu, pemilik menerima pesan gagal yang menyertakan potongan isi layar sesi tersebut.
-- [ ] Bot yang sudah berjalan tidak bisa dinyalakan untuk kedua kalinya.
-- [ ] Bot yang gagal menyala tetap tercatat dengan status gagal, sehingga nanti bisa dicoba lagi.
-- [ ] Sesi bot berjalan di folder kerjanya sendiri dan memakai folder state miliknya sendiri.
-- [ ] Logika menentukan bot siap, gagal, atau sudah berjalan dibuktikan dengan tes otomatis.
+- [x] Kalau sesi tidak siap dalam batas waktu tertentu, pemilik menerima pesan gagal yang menyertakan potongan isi layar sesi tersebut.
+- [x] Bot yang sudah berjalan tidak bisa dinyalakan untuk kedua kalinya.
+- [x] Bot yang gagal menyala tetap tercatat dengan status gagal, sehingga nanti bisa dicoba lagi.
+- [x] Sesi bot berjalan di folder kerjanya sendiri dan memakai folder state miliknya sendiri.
+- [x] Logika menentukan bot siap, gagal, atau sudah berjalan dibuktikan dengan tes otomatis.
 
 ## Out of scope
 
@@ -52,9 +52,41 @@ Registrasi yang berhasil langsung menyalakan bot. Master-bot memastikan bot bena
   Why: Aturan ini sudah terbukti di spike 4701 dan tercatat di CLAUDE.md
   If wrong: Ganti pengecekan start ganda di master dengan aturan baru dan perbarui tesnya
   Confirmed by owner, 2026-11-12
+- A2 [unseen] Sesi tmux yang gagal (batas waktu atau dialog tak terduga) dibiarkan hidup, tidak dimatikan master
+  Why: Jawaban Q3 meminta 'tmux attach -t <nama>' di pesan gagal, jadi sesinya harus masih ada untuk dilihat
+  If wrong: Tambahkan tmux kill-session di jalur gagal launch.ts dan hapus petunjuk attach dari pesan
+- A3 [unseen] Kalau bot ternyata sudah berjalan saat dinyalakan, status registry tidak diubah (bukan failed)
+  Why: Bot yang sedang berjalan bukan bot yang gagal; menandainya failed akan menyesatkan /restart nanti
+  If wrong: Di bot.ts, catat already-running sebagai failed juga
+- A4 [unseen] Server plugin yatim setelah kill -9 tidak dibersihkan di tiket ini; cek start ganda tetap tmux dan bot.pid (A1)
+  Why: Pembersihan proses yatim butuh mematikan proses, dan CLAUDE.md menaruhnya di urusan restart, yang di luar cakupan
+  If wrong: Tambahkan pencarian bun server.ts berdasarkan TELEGRAM_STATE_DIR sebelum start di launch.ts
 
 ## Decisions
 - Lane strict: menyalakan sesi Claude bebas izin dan menjaga satu poller per token
 - Menunggu 4705 (registry dan folder bot), 4702 (cara aman menyalakan beberapa bot) dan 4703 (id channel plugin:bot-squad@inline)
 - Semua pertanyaan terjawab; 4703 sudah landed. Masuk todo menunggu 4705 dan 4702 landed
 - 2026-11-12 moved to todo: Disetujui pemilik; menunggu 4705 dan 4702
+- Red-proof: cek sesi tmux, cek bot.pid hidup, kunci in-process, cek ulang setelah new-session gagal, siap butuh plugin hidup, dialog tak terduga, batas waktu, jawab dialog sekali, hapus bot.pid basi, cwd workspace, TELEGRAM_STATE_DIR, kunci install, status failed dan active dicatat, layar di pesan gagal, potongan 20 baris dan 3000 karakter; all red
+- Penyalaan berjalan di latar belakang setelah balasan 'Menyalakan...' terkirim, karena grammY memproses update satu per satu; dengan begitu urutan pesan tetap dan master-bot melayani perintah lain (Q5)
+
+## Manual checks
+- M1 [waiting] (item 1) 1. Di server, jalankan master-bot: bun run --cwd master start dari root repo.
+  2. Buat bot baru di @BotFather dan salin tokennya.
+  3. Kirim /register <nama> <token> ke master-bot.
+  4. Pesan berisi token hilang dari chat, lalu master-bot membalas 'terdaftar ... Menyalakan <nama>...'.
+  5. Dalam beberapa detik datang pesan kedua: 'Bot @<username> ('<nama>') aktif'.
+  6. Buka chat bot baru itu dan kirim 'halo'. Bot membalas.
+
+## Handoff
+Logika menyalakan bot kini ada di master/src/launch.ts (launchBot), dipakai master-bot setelah /register dan oleh scripts/start-bot.sh lewat master/src/start-cli.ts. Urutan: cek start ganda (tmux, bot.pid, set in-process), token, access.json, trust ~/.claude.json, bun install plugin berkunci, hapus bot.pid lama, tmux new-session, lalu baca layar tiap detik sampai siap, gagal, atau 90 detik. Semua efek samping (tmux, proses, jam, install) disuntikkan, jadi tes memakai tiruan. bot.ts mencatat status active/failed lewat setBotStatus di registry.ts. Jangan sampai: dua poller per token, Enter buta ke dialog selain development channel, atau token di pesan/log. /restart nanti sebaiknya memakai launchBot dan membersihkan server yatim lebih dulu.
+
+## Review
+- 2026-11-12 strict, round 1, at 0b17f46: passed.
+  1: (owner) tidak memblokir; M1 berisi langkah dari awal (jalankan master, buat token, /register) sampai hasil yang terlihat (pesan 'aktif', bot membalas 'halo')
+  2: nyata di salinan dengan claude tiruan yang macet, READY_TIMEOUT=3: start-bot.sh keluar 1 dengan 'belum siap setelah 3 detik', layar terakhir dan 'tmux attach -t rv-stuck'; tes register-launch memeriksa <pre> dan attach di pesan; layar timeout dihapus -> tes batas waktu merah
+  3: nyata: start-bot.sh rv-ok kedua kali keluar 1 'sesi tmux sudah hidup'; cek bot.pid dibuang -> 2 tes merah; kunci in-process dibuang -> tes install bersamaan merah
+  4: status failed tidak dicatat (hanya active) -> 2 tes register-launch merah; setBotStatus lewat serialized
+  5: nyata: pane rv-ok di bots/rv-ok/workspace, TELEGRAM_STATE_DIR=bots/rv-ok/state, trust ditulis ke CLAUDE_CONFIG_DIR uji; cwd diganti state -> tes merah
+  6: 49 tes launch/register-launch lulus; 7 mutasi (bot.pid, siap tanpa plugin, failed, layar, cwd, kunci, batas waktu) semuanya merah. Tidak ada skrip cek lain di repo selain bun test
+  note: pesan gagal selalu menulis 'Status tercatat failed' walau setBotStatus gagal (hanya dicatat di log)

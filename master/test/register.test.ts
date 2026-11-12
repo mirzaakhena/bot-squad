@@ -68,6 +68,9 @@ function makeBot() {
     dataDir: home,
     getMeTimeoutMs: 100,
     registryHooks: hooks,
+    // Penyalaan diuji di register-launch.test.ts; di sini tidak pernah selesai,
+    // jadi status tetap "registered" dan hanya ada satu balasan.
+    launch: () => new Promise(() => {}),
   });
 }
 

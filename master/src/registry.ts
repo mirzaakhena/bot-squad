@@ -83,3 +83,18 @@ export function serialized<T>(fn: () => Promise<T>): Promise<T> {
   queue = next.catch(() => {});
   return next;
 }
+
+/**
+ * Mengubah status satu bot di registry (satu per satu, lewat serialized).
+ * Mengembalikan false kalau bot itu tidak ada di registry.
+ */
+export function setBotStatus(dataDir: string, name: string, status: BotStatus, hooks: WriteHooks = {}): Promise<boolean> {
+  return serialized(async () => {
+    const reg = readRegistry(dataDir);
+    const rec = reg.bots[name];
+    if (!rec || !Object.hasOwn(reg.bots, name)) return false;
+    reg.bots[name] = { ...rec, status };
+    writeRegistry(dataDir, reg, hooks);
+    return true;
+  });
+}
