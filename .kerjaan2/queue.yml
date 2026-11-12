@@ -1,3 +1,2 @@
 goal: Menutup empat bug dari cek manual: server plugin yatim, laporan penyalaan hilang, menu master-bot, dan master-bot ganda
 order:
-  - 261112211002   # Cegah master-bot berjalan dua kali di mesin yang sama

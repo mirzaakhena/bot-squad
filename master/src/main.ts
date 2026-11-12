@@ -75,6 +75,7 @@ async function serve(
     log,
     client: opts.client,
     dataDir: dir,
+    signal: opts.signal,
     launch: (name) => launchBot(name, launchDeps),
   });
 
