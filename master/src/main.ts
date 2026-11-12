@@ -5,6 +5,7 @@ import { createLogger, describeError, redact } from "./log.ts";
 import { launchBot, realLaunchDeps } from "./launch.ts";
 import { syncCommandMenu } from "./menu.ts";
 import { acquireMasterLock, type LockDeps } from "./lock.ts";
+import { resolveApiRoot } from "./api-root.ts";
 
 export type RunOptions = ConfigSource & {
   /** Penulis log; default stderr. */
@@ -138,7 +139,13 @@ if (import.meta.main) {
   const ac = new AbortController();
   process.once("SIGINT", () => ac.abort());
   process.once("SIGTERM", () => ac.abort());
-  // MASTER_BOT_API_ROOT hanya untuk tes dengan Telegram tiruan.
-  const apiRoot = process.env.MASTER_BOT_API_ROOT?.trim();
-  process.exit(await run({ signal: ac.signal, client: apiRoot ? { apiRoot } : undefined }));
+  // MASTER_BOT_API_ROOT hanya untuk tes dengan Telegram tiruan, dan hanya
+  // boleh menunjuk ke mesin lokal; dicek sebelum token dibaca.
+  const apiRoot = resolveApiRoot(process.env);
+  if (apiRoot.kind === "rejected") {
+    process.stderr.write(`master-bot: ${apiRoot.message}\n`);
+    process.exit(1);
+  }
+  if (apiRoot.kind === "local") process.stderr.write(`master-bot: ${apiRoot.warning}\n`);
+  process.exit(await run({ signal: ac.signal, client: apiRoot.kind === "local" ? { apiRoot: apiRoot.apiRoot } : undefined }));
 }
