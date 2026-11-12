@@ -34,11 +34,11 @@ Laporan hasil penyalaan bot (aktif atau gagal) harus sampai ke pemilik walaupun 
 
 ## Done when
 
-- [ ] Kalau pengiriman laporan penyalaan gagal karena gangguan sementara (error jaringan, 5xx, atau 429 dengan menunggu retry_after), master mencoba lagi dengan jeda yang bertambah (2, 4, 8, ... paling lama 60 detik per jeda, total sekitar 10 menit), dan laporan tetap sampai setelah koneksi pulih. Ini dibuktikan dengan tes otomatis memakai Telegram tiruan yang gagal beberapa kali.
-- [ ] Error 4xx lain (misalnya 400 atau 403) tidak dicoba ulang dan langsung dicatat di log.
-- [ ] Kalau percobaan habis, atau master-bot dihentikan saat laporan masih menunggu dikirim ulang (percobaan dihentikan, berhenti tidak ditunda), log master menyebut laporan '<nama>' tidak terkirim beserta alasannya, tanpa mencetak token.
-- [ ] Kalimat "Status tercatat 'failed'" hanya muncul kalau pencatatan status berhasil. Kalau pencatatan gagal, laporan (aktif maupun gagal) memuat "Status di registry gagal dicatat; lihat log master-bot." (catatan reviewer 4706).
-- [ ] CLAUDE.md mencatat penyebab keterlambatan pesan pertama ke bot baru, atau menyatakan penyebabnya belum diketahui beserta apa yang sudah diperiksa.
+- [x] Kalau pengiriman laporan penyalaan gagal karena gangguan sementara (error jaringan, 5xx, atau 429 dengan menunggu retry_after), master mencoba lagi dengan jeda yang bertambah (2, 4, 8, ... paling lama 60 detik per jeda, total sekitar 10 menit), dan laporan tetap sampai setelah koneksi pulih. Ini dibuktikan dengan tes otomatis memakai Telegram tiruan yang gagal beberapa kali.
+- [x] Error 4xx lain (misalnya 400 atau 403) tidak dicoba ulang dan langsung dicatat di log.
+- [x] Kalau percobaan habis, atau master-bot dihentikan saat laporan masih menunggu dikirim ulang (percobaan dihentikan, berhenti tidak ditunda), log master menyebut laporan '<nama>' tidak terkirim beserta alasannya, tanpa mencetak token.
+- [x] Kalimat "Status tercatat 'failed'" hanya muncul kalau pencatatan status berhasil. Kalau pencatatan gagal, laporan (aktif maupun gagal) memuat "Status di registry gagal dicatat; lihat log master-bot." (catatan reviewer 4706).
+- [x] CLAUDE.md mencatat penyebab keterlambatan pesan pertama ke bot baru, atau menyatakan penyebabnya belum diketahui beserta apa yang sudah diperiksa.
 - [ ] (owner) Dengan panduan foreman, pemilik mematikan sesi uji-03 kalau masih hidup, menghapus entri uji-03 dari ~/.bot-squad/registry.json dan folder ~/.bot-squad/bots/uji-03, lalu mendaftarkan ulang '/register uji-03 <token mirza_003_bot>' dan menerima pesan "aktif" dari master-bot. Worker tidak menyentuh data asli ini.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
@@ -64,7 +64,35 @@ Laporan hasil penyalaan bot (aktif atau gagal) harus sampai ke pemilik walaupun 
 - A2 [unseen] Tes memakai master/test/fake-telegram.ts dengan handler sendMessage yang gagal N kali; tidak ada token asli di tes
   Why: Aturan pelajaran: tes master-bot memakai fake-telegram, jangan token asli
   If wrong: -
+- A3 [unseen] Uji asli dengan uji-02 tidak dijalankan untuk menyelidiki jeda 2 menit
+  Why: Pesan uji harus dikirim dari akun pemilik dan gangguan jaringan tidak boleh dibuat sengaja, jadi uji-02 tidak bisa mengulang kejadiannya; bukti diambil dari transkrip sesi uji-03 dan kode plugin/grammY
+  If wrong: Nyalakan uji-02 dengan BOT_SQUAD_HOME sementara dan DEBUG=grammy:error, minta pemilik mengirim pesan saat jaringan terganggu
 
 ## Decisions
 - Lane standard: logika kirim ulang di master-bot, mudah dibatalkan, tidak menyentuh data
 - Tidak solo dan tidak menunggu: tidak ada tiket lain yang membaca hasilnya; berbagi file (main.ts, CLAUDE.md) diselesaikan merge queue
+- Jeda terakhir boleh melewati batas 10 menit paling banyak satu jeda maksimum (urutan 2..32 lalu 60 x9 = 602 detik), dan 429 dengan retry_after yang melewati sisa waktu langsung menyerah; supaya total sekitar 10 menit tanpa menunggu retry_after yang sangat panjang.
+
+## Manual checks
+- M1 [waiting] (item 6) 1. Matikan master-bot kalau sedang berjalan (Ctrl+C).
+  2. Cek sesi uji-03: 'tmux ls'; kalau ada, 'tmux kill-session -t uji-03', lalu pastikan tidak ada proses 'bun server.ts' milik uji-03 (ps).
+  3. Hapus entri "uji-03" dari ~/.bot-squad/registry.json (biarkan bot lain) dan hapus folder ~/.bot-squad/bots/uji-03.
+  4. Jalankan master-bot dari root repo: bun run --cwd master start.
+  5. Di chat master-bot kirim '/register uji-03 <token mirza_003_bot>'.
+  6. Harus muncul 'Menyalakan uji-03...' lalu pesan 'Bot @mirza_003_bot (uji-03) aktif. Silakan ajak bicara.' Kalau jaringan sempat terganggu, log master menulis 'dicoba lagi dalam N detik' dan pesan aktif tetap datang setelah koneksi pulih.
+
+## Handoff
+Laporan hasil penyalaan (pesan kedua setelah /register) kini dikirim lewat sendWithRetry di master/src/retry.ts: HttpError dan 5xx dicoba ulang dengan jeda 2..60 detik (total sekitar 10 menit), 429 menunggu retry_after, 4xx lain tidak. createMasterBot menerima signal (dari run() di main.ts) yang menghentikan percobaan seketika saat master-bot berhenti, dan reportRetry untuk sleep tiruan di tes. launchReport punya argumen statusRecorded; kalimat 'Status tercatat failed' hanya kalau setBotStatus berhasil (mengembalikan true). Jangan sampai: pengiriman ulang memblokir handler, berhenti ditunda, atau error grammY yang memuat token dicetak tanpa logger tersensor. Perintah lain yang mengirim pesan latar belakang sebaiknya memakai sendWithRetry yang sama.
+
+## Review
+- 2026-11-12 standard, round 1, at d8ab920: passed.
+  1: bun test master/test/report-retry.test.ts (20 lulus): Telegram tiruan dengan fetch gagal 3x lalu pulih (jeda 2,4,8 dan laporan aktif sampai), 502 2x lalu pulih, 429 menunggu retry_after 5 detik; urutan 2..32 lalu 60 total 570-660 detik. Mutasi di salinan (4xx dianggap sementara) membuat tes terkait gagal.
+  2: tes 400/403 lewat Telegram tiruan dan 400/401/403/404 di tingkat fungsi: satu percobaan, tanpa jeda, log 'tidak terkirim' memuat kode; gagal saat dimutasi.
+  3: tes percobaan habis dan tes berhenti saat menunggu jeda (<2 detik, 1 percobaan) serta sebelum laporan siap lulus, noToken diperiksa. Penerusan signal di main.ts (satu baris) dinilai dengan membaca, karena run() memakai launchBot asli (tmux/claude).
+  4: tes registry gagal ditulis (beforeRename melempar): laporan gagal dan aktif memuat kalimat pengganti, tanpa 'Status tercatat'; mutasi yang menghapus kalimat di laporan aktif membuat tes gagal.
+  5: CLAUDE.md di worktree mencatat jeda ~114 detik, penyebab belum diketahui, apa yang sudah diperiksa, dan cara merekam bukti lain kali (dibaca).
+  6: (owner) Manual checks M1 bisa diikuti dari awal; catatan kecil: teks yang diharapkan di langkah 6 sebenarnya berbentuk "Bot @mirza_003_bot ('uji-03') aktif. Silakan ajak bicara."
+  note: selain bun test, repo tidak punya skrip atau CI pemeriksaan lain. Follow-up ditulis untuk master-bot yang dihentikan saat penyalaan masih berjalan.
+
+## Follow-ups
+- F1 [open] Kalau master-bot dihentikan (Ctrl+C/SIGTERM) saat penyalaan bot masih berjalan (launchBot, sampai 90 detik), main.ts memanggil process.exit setelah run() selesai tanpa menunggu proses latar belakang, sehingga log tidak pernah mencatat laporan '<nama>' tidak terkirim dan status registry tetap 'registered'. Tes 'sudah berhenti sebelum laporan siap' hanya menguji createMasterBot dalam satu proses, bukan jalur process.exit di master/src/main.ts.
