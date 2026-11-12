@@ -55,12 +55,14 @@ Ganti identitas plugin menjadi "bot-squad" di semua tempat yang terlihat oleh Cl
   → Pemilik: token lama (@mirza_master_bot) dipindah ke master-bot sebagai MASTER_BOT_TOKEN; uji-01 diganti token bot uji baru (@mirza_001_bot). Sudah dijalankan foreman. (owner, 2026-11-12)
 
 ## Assumptions
-- A1 [unseen] Instruksi MCP untuk Claude menyebut tag pesan masuk sebagai <channel source="bot-squad" ...>, mengikuti nama server MCP baru
+- A1 [confirmed] Instruksi MCP untuk Claude menyebut tag pesan masuk sebagai <channel source="bot-squad" ...>, mengikuti nama server MCP baru
   Why: Upstream menulis source sama dengan nama servernya (telegram); setelah server bernama bot-squad, tag mengikuti nama server. Belum dilihat langsung karena butuh pesan masuk
   If wrong: Kalau tag yang tampil tetap source="telegram" atau bentuk lain, ganti teks itu di instruksi server.ts (satu baris)
-- A2 [unseen] Versi paket di package.json tetap 0.0.1 seperti upstream; versi 0.0.7 hanya di plugin.json
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Versi paket di package.json tetap 0.0.1 seperti upstream; versi 0.0.7 hanya di plugin.json
   Why: Q3 menyebut versi tetap 0.0.7, yaitu versi plugin; versi paket npm upstream memang 0.0.1 dan tidak dipakai di mana pun
   If wrong: Ubah version di plugin/package.json menjadi 0.0.7
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane standard: ganti nama di plugin, bisa dibatalkan lewat git, tetapi menyentuh server.ts dan cara start bot

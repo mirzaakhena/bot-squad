@@ -52,15 +52,18 @@ Registrasi yang berhasil langsung menyalakan bot. Master-bot memastikan bot bena
   Why: Aturan ini sudah terbukti di spike 4701 dan tercatat di CLAUDE.md
   If wrong: Ganti pengecekan start ganda di master dengan aturan baru dan perbarui tesnya
   Confirmed by owner, 2026-11-12
-- A2 [unseen] Sesi tmux yang gagal (batas waktu atau dialog tak terduga) dibiarkan hidup, tidak dimatikan master
+- A2 [confirmed] Sesi tmux yang gagal (batas waktu atau dialog tak terduga) dibiarkan hidup, tidak dimatikan master
   Why: Jawaban Q3 meminta 'tmux attach -t <nama>' di pesan gagal, jadi sesinya harus masih ada untuk dilihat
   If wrong: Tambahkan tmux kill-session di jalur gagal launch.ts dan hapus petunjuk attach dari pesan
-- A3 [unseen] Kalau bot ternyata sudah berjalan saat dinyalakan, status registry tidak diubah (bukan failed)
+  Confirmed by owner, 2026-11-12
+- A3 [confirmed] Kalau bot ternyata sudah berjalan saat dinyalakan, status registry tidak diubah (bukan failed)
   Why: Bot yang sedang berjalan bukan bot yang gagal; menandainya failed akan menyesatkan /restart nanti
   If wrong: Di bot.ts, catat already-running sebagai failed juga
-- A4 [unseen] Server plugin yatim setelah kill -9 tidak dibersihkan di tiket ini; cek start ganda tetap tmux dan bot.pid (A1)
+  Confirmed by owner, 2026-11-12
+- A4 [confirmed] Server plugin yatim setelah kill -9 tidak dibersihkan di tiket ini; cek start ganda tetap tmux dan bot.pid (A1)
   Why: Pembersihan proses yatim butuh mematikan proses, dan CLAUDE.md menaruhnya di urusan restart, yang di luar cakupan
   If wrong: Tambahkan pencarian bun server.ts berdasarkan TELEGRAM_STATE_DIR sebelum start di launch.ts
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane strict: menyalakan sesi Claude bebas izin dan menjaga satu poller per token

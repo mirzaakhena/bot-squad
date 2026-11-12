@@ -34,3 +34,6 @@
 {"t":"2026-11-12 20:58:27","event":"agent","role":"reviewer","agent":"aa88131e503aff97c","step":"review:1:0:0","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
 {"t":"2026-11-12 21:00:33","event":"verdict","result":"pass","round":1,"commit":"0b17f46","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"reviewer:aa88131e503aff97c"}
 {"t":"2026-11-12 21:00:49","event":"landed","branch":"k2/261112184706-perintah-register-menyalakan-bot","files":["CLAUDE.md","master/src/bot.ts","master/src/launch.ts","master/src/main.ts","master/src/registry.ts","master/src/start-cli.ts","master/test/access.test.ts","master/test/launch.test.ts","master/test/register-launch.test.ts","master/test/register.test.ts","scripts/start-bot.sh"],"session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 21:10:49","event":"assumption-confirmed","key":"A2","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 21:10:49","event":"assumption-confirmed","key":"A3","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 21:10:49","event":"assumption-confirmed","key":"A4","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}

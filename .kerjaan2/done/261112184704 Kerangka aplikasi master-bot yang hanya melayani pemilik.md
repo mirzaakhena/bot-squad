@@ -89,4 +89,5 @@ Menambah workspace Bun di root (package.json hanya berisi master) dan aplikasi m
   Merge efd06d9 hanya menyelesaikan konflik CLAUDE.md: bagian master-bot dari tiket ini dan rebrand 4703 (plugin:bot-squad@inline, status Rebrand) sama-sama tetap. Tanpa penanda konflik; master/, package.json, bun.lock tidak berubah sejak 1aa92a1.
 
 ## Follow-ups
-- F1 [open] 409 master-bot: saat instance kedua dijalankan, Telegram memberi 409 kepada poller LAMA, jadi instance yang sudah berjalan berhenti dengan pesan 'sudah berjalan di tempat lain' sementara instance baru mengambil alih diam-diam (teruji langsung dengan token asli 2026-11-12). Pertimbangkan kunci lokal (pid/lock file di $BOT_SQUAD_HOME/master/) agar instance kedua di mesin yang sama menolak start, dan/atau ubah teks pesan 409 agar menjelaskan bahwa proses ini digantikan oleh poller lain.
+- F1 [ticketed] 409 master-bot: saat instance kedua dijalankan, Telegram memberi 409 kepada poller LAMA, jadi instance yang sudah berjalan berhenti dengan pesan 'sudah berjalan di tempat lain' sementara instance baru mengambil alih diam-diam (teruji langsung dengan token asli 2026-11-12). Pertimbangkan kunci lokal (pid/lock file di $BOT_SQUAD_HOME/master/) agar instance kedua di mesin yang sama menolak start, dan/atau ubah teks pesan 409 agar menjelaskan bahwa proses ini digantikan oleh poller lain.
+  → 261112211002
