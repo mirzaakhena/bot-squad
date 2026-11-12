@@ -6,7 +6,7 @@ import { parseRegisterArgs, registerBot, USAGE } from "./register.ts";
 import { setBotStatus, type WriteHooks } from "./registry.ts";
 import type { LaunchResult } from "./launch.ts";
 
-/** Perintah yang sudah berfungsi. Daftar ini juga dikirim lewat setMyCommands. */
+/** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
 export const COMMANDS = [
   { command: "start", description: "Tampilkan daftar perintah" },
   { command: "help", description: "Tampilkan daftar perintah" },
