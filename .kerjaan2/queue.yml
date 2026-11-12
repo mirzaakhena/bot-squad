@@ -1,5 +1,3 @@
 goal: Rebrand plugin menjadi bot-squad, kerangka master-bot yang hanya melayani pemilik, dan /register yang memvalidasi serta mencatat bot baru
 order:
-  - 261112184703   # Rebrand plugin dari telegram menjadi bot-squad
-  - 261112184704   # Kerangka aplikasi master-bot yang hanya melayani pemilik
   - 261112184705   # Perintah register validasi dan pencatatan bot baru

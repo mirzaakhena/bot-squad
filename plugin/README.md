@@ -1,4 +1,14 @@
-# Telegram
+# bot-squad
+
+> **Fork notice.** This plugin is a modified fork of the official Telegram plugin from
+> [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official),
+> `external_plugins/telegram` v0.0.7 (commit `e0ab6e5`), licensed under Apache-2.0 (see [LICENSE](./LICENSE)).
+> Changes made in this fork: the plugin, its MCP server and its skills are renamed from
+> `telegram` to `bot-squad` (`/bot-squad:access`, `/bot-squad:configure`), log and error
+> messages say `bot-squad channel`, and the default state directory is
+> `~/.claude/channels/bot-squad` instead of `~/.claude/channels/telegram`. The
+> `TELEGRAM_*` environment variables are unchanged. The full diff against upstream is in
+> this repository's git history.
 
 Connect a Telegram bot to your Claude Code with an MCP server.
 
@@ -24,18 +34,18 @@ BotFather replies with a token that looks like `123456789:AAHfiqksKZ8...` — th
 
 These are Claude Code commands — run `claude` to start a session first.
 
-Install the plugin:
-```
-/plugin install telegram@claude-plugins-official
+This fork is not in a marketplace. Load it for one session with `--plugin-dir`:
+```sh
+claude --plugin-dir <repo>/plugin
 ```
 
 **3. Give the server the token.**
 
 ```
-/telegram:configure 123456789:AAHfiqksKZ8...
+/bot-squad:configure 123456789:AAHfiqksKZ8...
 ```
 
-Writes `TELEGRAM_BOT_TOKEN=...` to `~/.claude/channels/telegram/.env`. You can also write that file by hand, or set the variable in your shell environment — shell takes precedence.
+Writes `TELEGRAM_BOT_TOKEN=...` to `~/.claude/channels/bot-squad/.env`. You can also write that file by hand, or set the variable in your shell environment — shell takes precedence.
 
 > To run multiple bots on one machine (different tokens, separate allowlists), point `TELEGRAM_STATE_DIR` at a different directory per instance.
 
@@ -44,15 +54,17 @@ Writes `TELEGRAM_BOT_TOKEN=...` to `~/.claude/channels/telegram/.env`. You can a
 The server won't connect without this — exit your session and start a new one:
 
 ```sh
-claude --channels plugin:telegram@claude-plugins-official
+claude --plugin-dir <repo>/plugin --dangerously-load-development-channels plugin:bot-squad@inline
 ```
+
+`--channels` only accepts allowlisted plugins, so a local fork has to be loaded as a development channel.
 
 **5. Pair.**
 
-With Claude Code running from the previous step, DM your bot on Telegram — it replies with a 6-character pairing code. If the bot doesn't respond, make sure your session is running with `--channels`. In your Claude Code session:
+With Claude Code running from the previous step, DM your bot on Telegram — it replies with a 6-character pairing code. If the bot doesn't respond, make sure your session is running with the channel flag above. In your Claude Code session:
 
 ```
-/telegram:access pair <code>
+/bot-squad:access pair <code>
 ```
 
 Your next DM reaches the assistant.
@@ -61,7 +73,7 @@ Your next DM reaches the assistant.
 
 **6. Lock it down.**
 
-Pairing is for capturing IDs. Once you're in, switch to `allowlist` so strangers don't get pairing-code replies. Ask Claude to do it, or `/telegram:access policy allowlist` directly.
+Pairing is for capturing IDs. Once you're in, switch to `allowlist` so strangers don't get pairing-code replies. Ask Claude to do it, or `/bot-squad:access policy allowlist` directly.
 
 ## Access control
 
@@ -82,7 +94,7 @@ Inbound messages trigger a typing indicator automatically — Telegram shows
 
 ## Photos
 
-Inbound photos are downloaded to `~/.claude/channels/telegram/inbox/` and the
+Inbound photos are downloaded to `~/.claude/channels/bot-squad/inbox/` and the
 local path is included in the `<channel>` notification so the assistant can
 `Read` it. Telegram compresses photos — if you need the original file, send it
 as a document instead (long-press → Send as File).
