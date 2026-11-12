@@ -40,6 +40,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
     log,
     client: opts.client,
     dataDir: dir,
+    signal: opts.signal,
     launch: (name) => launchBot(name, launchDeps),
   });
 
