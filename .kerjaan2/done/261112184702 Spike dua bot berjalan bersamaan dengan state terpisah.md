@@ -31,7 +31,7 @@ Buktikan bahwa dua bot bisa berjalan bersamaan di satu mesin dan benar-benar ter
 - [x] CLAUDE.md mencatat apakah pengaturan folder state per bot benar-benar sampai ke plugin, dan cara yang dipakai kalau ternyata tidak sampai. Buktinya diambil dari dua bot: uji-01 polling sebagai @mirza_001_bot dan uji-02 sebagai @mirza_002_bot, masing-masing dengan bot.pid di folder state-nya sendiri.
 - [x] CLAUDE.md mencatat cara menangani pemasangan paket plugin supaya beberapa bot bisa dinyalakan bersamaan dengan aman. Sesuai jawaban Q3: scripts/start-bot.sh menjalankan bun install sekali dengan kunci sebelum tmux dibuka, dan kalau terbukti perlu, script start di plugin/package.json diubah menjadi 'bun server.ts'.
 - [x] `scripts/start-bot.sh uji-01` dan `scripts/start-bot.sh uji-02` dinyalakan pada saat yang hampir bersamaan, dan keduanya sampai ke kondisi siap.
-- [ ] (owner) Pemilik mengirim pesan ke @mirza_001_bot dan @mirza_002_bot, dan masing-masing membalas dari sesinya sendiri tanpa pesan nyasar ke bot lain.
+- [x] (owner) Pemilik mengirim pesan ke @mirza_001_bot dan @mirza_002_bot, dan masing-masing membalas dari sesinya sendiri tanpa pesan nyasar ke bot lain.
 - [x] Mematikan satu bot, dengan tmux kill-session lalu satu kali dengan kill -9 pada proses claude-nya, tidak mengganggu bot yang lain: sesi tmux, bot.pid, dan polling bot yang masih menyala tetap hidup.
 
 ## Out of scope
@@ -59,11 +59,12 @@ Buktikan bahwa dua bot bisa berjalan bersamaan di satu mesin dan benar-benar ter
 - Kunci install memakai mkdir atomik, bukan flock, karena flock tidak ada bawaan di macOS; kunci basi dideteksi lewat pid pemilik.
 
 ## Manual checks
-- M1 [waiting] (item 4) 1. Pastikan tidak ada sesi tmux uji-01 atau uji-02 (tmux ls).
+- M1 [ok] (item 4) 1. Pastikan tidak ada sesi tmux uji-01 atau uji-02 (tmux ls).
   2. Dari root repo jalankan scripts/start-bot.sh uji-01 & scripts/start-bot.sh uji-02 & wait; keduanya mencetak 'siap'.
   3. Di Telegram kirim 'halo 1' ke @mirza_001_bot dan 'halo 2' ke @mirza_002_bot.
   4. Masing-masing bot membalas pesannya sendiri; tmux attach -t uji-01 hanya menampilkan 'halo 1', uji-02 hanya 'halo 2'.
   5. Matikan: tmux kill-session -t uji-01; tmux kill-session -t uji-02.
+  Checked by owner, 2026-11-12
 
 ## Handoff
 Plugin tidak lagi memasang paket sendiri: script start di plugin/package.json hanya 'bun server.ts'. scripts/start-bot.sh (langkah 3b) menjalankan bun install di plugin/ dengan kunci folder ~/.bot-squad/locks/plugin-install.lock sebelum tmux dibuka, karena bun install paralel di folder bersama terbukti gagal (EEXIST). Jangan kembalikan bun install ke script start; setiap jalur yang menyalakan plugin harus menjalankan install berkunci lebih dulu. TELEGRAM_STATE_DIR lewat tmux -e terbukti sampai ke server plugin. Perhatian: kill -9 pada claude meninggalkan bun server.ts yatim (~99% CPU, bot.pid sudah hilang); CLAUDE.md mencatat cara membersihkannya, penyebabnya di F1.

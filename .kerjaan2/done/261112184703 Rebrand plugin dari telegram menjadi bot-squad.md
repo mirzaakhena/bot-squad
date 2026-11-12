@@ -23,7 +23,7 @@ Ganti identitas plugin menjadi "bot-squad" di semua tempat yang terlihat oleh Cl
 - [x] Pesan yang ditulis plugin, termasuk pesan error dan instruksi untuk Claude, menyebut bot-squad, bukan plugin Telegram resmi.
 - [x] Plugin bot-squad bisa terpasang di mesin yang juga punya plugin Telegram resmi tanpa saling bentrok: nama plugin, nama server MCP, skill, dan folder state default berbeda. Ini dibuktikan dengan membaca manifest dan kode, tanpa memasang plugin resmi.
 - [x] Setelah rebrand, scripts/start-bot.sh uji-01 sampai ke kondisi siap. Log debug memuat 'Channel notifications registered' untuk plugin:bot-squad@inline, dan plugin polling sebagai @username uji-01.
-- [ ] (owner) Pemilik mengirim pesan ke bot uji-01 setelah rebrand dan mendapat balasan dari Claude.
+- [x] (owner) Pemilik mengirim pesan ke bot uji-01 setelah rebrand dan mendapat balasan dari Claude.
 - [x] Cara menyalakan bot yang tercatat di CLAUDE.md diperbarui ke nama baru.
 - [x] Concern di CLAUDE.md mencatat peringatan kuning "plugin:<id>@inline · plugin not installed" di layar awal sesi bot, padahal channel berfungsi penuh. Catatan itu juga menyebut apakah peringatan masih muncul setelah rebrand. Peringatan ini tidak harus hilang.
 - [x] Tanda atribusi lisensi upstream tetap ada.
@@ -71,11 +71,12 @@ Ganti identitas plugin menjadi "bot-squad" di semua tempat yang terlihat oleh Cl
 - 2026-11-12 moved to todo: Disetujui pemilik, semua pertanyaan terjawab
 
 ## Manual checks
-- M1 [waiting] (item 5) 1. Setelah tiket ini masuk main, di repo jalankan scripts/start-bot.sh uji-01 (pastikan belum ada sesi uji-01 yang hidup).
+- M1 [ok] (item 5) 1. Setelah tiket ini masuk main, di repo jalankan scripts/start-bot.sh uji-01 (pastikan belum ada sesi uji-01 yang hidup).
   2. Tunggu sampai muncul start-bot: 'uji-01' siap.
   3. Dari akun Telegram pemilik, kirim pesan ke bot yang tokennya ada di state uji-01 (saat ini @mirza_master_bot).
   4. Harus muncul balasan dari Claude di chat itu.
   5. Matikan dengan tmux kill-session -t uji-01.
+  Checked by owner, 2026-11-12
 
 ## Handoff
 Plugin di plugin/ sekarang beridentitas bot-squad: nama plugin dan server MCP bot-squad (id channel plugin:bot-squad@inline, server plugin:bot-squad:bot-squad), skill /bot-squad:access dan /bot-squad:configure, paket bot-squad-channel, awalan log 'bot-squad channel:', dan default state ~/.claude/channels/bot-squad. Variabel TELEGRAM_* dan kata Telegram sebagai platform sengaja tetap. scripts/start-bot.sh dan CLAUDE.md memakai plugin:bot-squad@inline. Yang tidak boleh rusak: master (4704/4706) harus menyalakan bot dengan plugin:bot-squad@inline, bukan telegram; LICENSE tetap dan catatan fork di README plugin harus dipertahankan. Perilaku plugin tidak diubah selain folder state default.

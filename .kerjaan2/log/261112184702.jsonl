@@ -28,3 +28,4 @@
 {"t":"2026-11-12 20:40:44","event":"agent","role":"reviewer","agent":"a5845e9ed138c40aa","step":"review:2:0:0","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
 {"t":"2026-11-12 20:42:29","event":"verdict","result":"pass","round":2,"commit":"a407c9f","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"reviewer:a5845e9ed138c40aa"}
 {"t":"2026-11-12 20:42:43","event":"landed","branch":"k2/261112184702-spike-dua-bot-berjalan","files":["CLAUDE.md","plugin/package.json","scripts/start-bot.sh"],"session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 21:48:48","event":"manual-ok","key":"M1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}

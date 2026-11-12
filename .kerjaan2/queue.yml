@@ -1,2 +1,6 @@
-goal: Dua bot berjalan bersamaan dengan aman, lalu /register yang mencatat dan menyalakan bot baru
+goal: Menutup empat bug dari cek manual: server plugin yatim, laporan penyalaan hilang, menu master-bot, dan master-bot ganda
 order:
+  - 261112211001   # Server plugin yatim setelah sesi bot crash
+  - 261112214001   # Laporan penyalaan bot hilang saat koneksi Telegram terganggu
+  - 261112212301   # Menu perintah master-bot tertutup menu lama dari bot lain
+  - 261112211002   # Cegah master-bot berjalan dua kali di mesin yang sama
