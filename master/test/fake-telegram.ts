@@ -28,8 +28,15 @@ export const fail = (status: number, description: string): Reply => ({
  * Server Telegram tiruan. Mencatat setiap panggilan API dan memeriksa bahwa
  * token di URL adalah token yang diharapkan.
  */
-export function startFakeTelegram(token: string, handlers: Record<string, Handler> = {}) {
+export function startFakeTelegram(
+  token: string,
+  handlers: Record<string, Handler> = {},
+  /** getMe untuk token bot lain (token -> jawaban), dipakai tes /register. */
+  otherBots: Record<string, Handler> = {},
+) {
   const calls: Call[] = [];
+  /** Panggilan dengan token selain token master-bot. */
+  const otherCalls: Array<{ token: string; method: string }> = [];
   let pending: Update[] = [];
   const base: Record<string, Handler> = {
     getMe: () => ok(ME),
@@ -49,7 +56,14 @@ export function startFakeTelegram(token: string, handlers: Record<string, Handle
     async fetch(req) {
       const url = new URL(req.url);
       const m = /^\/bot([^/]+)\/(\w+)$/.exec(url.pathname);
-      if (!m || decodeURIComponent(m[1]!) !== token) {
+      const urlToken = m ? decodeURIComponent(m[1]!) : "";
+      if (m && urlToken !== token && Object.hasOwn(otherBots, urlToken)) {
+        otherCalls.push({ token: urlToken, method: m[2]! });
+        if (m[2] !== "getMe") return Response.json({ ok: false, error_code: 400, description: "hanya getMe" }, { status: 400 });
+        const r = await otherBots[urlToken]!({});
+        return Response.json(r.body, { status: r.status ?? 200 });
+      }
+      if (!m || urlToken !== token) {
         return Response.json({ ok: false, error_code: 404, description: "Not Found" }, { status: 404 });
       }
       const method = m[2]!;
@@ -64,6 +78,7 @@ export function startFakeTelegram(token: string, handlers: Record<string, Handle
   return {
     apiRoot: `http://127.0.0.1:${server.port}`,
     calls,
+    otherCalls,
     push: (...u: Update[]) => pending.push(...u),
     stop: () => server.stop(true),
   };
