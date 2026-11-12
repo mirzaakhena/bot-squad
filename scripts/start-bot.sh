@@ -69,6 +69,34 @@ BOTS_DIR="$BOTS_DIR" CLAUDE_JSON="$CLAUDE_JSON" bun -e '
   console.error("start-bot: trust ditulis untuk " + dir);
 '
 
+# 3b. Pasang paket plugin sekali, dengan kunci, sebelum tmux dibuka.
+#     Folder plugin dipakai bersama semua bot, dan `bun install` yang berjalan
+#     bersamaan di folder yang sama saling bertabrakan (EEXIST / FileNotFound),
+#     bahkan saat node_modules sudah lengkap. Karena itu plugin sendiri tidak
+#     lagi menjalankan install (script start di plugin/package.json hanya
+#     `bun server.ts`), dan di sini install dijalankan bergiliran.
+#     Kuncinya folder (mkdir atomik, jalan di macOS dan Linux tanpa flock).
+#     Kunci yang pemiliknya sudah mati dianggap basi dan diambil alih.
+LOCK="$ROOT/locks/plugin-install.lock"
+mkdir -p "$ROOT/locks"
+for ((i = 0; ; i++)); do
+  if mkdir "$LOCK" 2>/dev/null; then
+    echo $$ > "$LOCK/pid"
+    break
+  fi
+  holder="$(cat "$LOCK/pid" 2>/dev/null || true)"
+  if [[ -n "$holder" ]] && ! kill -0 "$holder" 2>/dev/null; then
+    rm -rf "$LOCK"
+    continue
+  fi
+  ((i < 1200)) || die "kunci install plugin tidak lepas setelah 120s: $LOCK"
+  sleep 0.1
+done
+trap 'rm -rf "$LOCK"' EXIT
+bun install --cwd "$PLUGIN_DIR" --no-summary 1>&2 || die "bun install di $PLUGIN_DIR gagal"
+rm -rf "$LOCK"
+trap - EXIT
+
 # 4. Nyalakan sesi.
 #    --setting-sources project,local : abaikan ~/.claude/settings.json (plugin,
 #        hook, dan skipDangerousModePermissionPrompt milik pemilik tidak ikut).
