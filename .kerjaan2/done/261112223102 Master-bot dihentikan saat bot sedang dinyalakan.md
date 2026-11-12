@@ -36,15 +36,18 @@ Menghentikan master-bot di tengah penyalaan bot tidak boleh meninggalkan status 
   → Paling lama 5 detik. (owner, 2026-11-12)
 
 ## Assumptions
-- A1 [unseen] Lingkup hanya master-bot. Ctrl+C pada scripts/start-bot.sh (start-cli.ts) tidak diubah.
+- A1 [confirmed] Lingkup hanya master-bot. Ctrl+C pada scripts/start-bot.sh (start-cli.ts) tidak diubah.
   Why: Background dan Request hanya membahas master-bot dan laporannya ke pemilik.
   If wrong: Buat tiket terpisah untuk start-cli.
-- A2 [unseen] Tes proses sungguhan menjalankan master/src/main.ts dengan HOME dan BOT_SQUAD_HOME di folder sementara baru (salinan, tanpa symlink; dicek find -type l), MASTER_BOT_API_ROOT ke Telegram tiruan di 127.0.0.1, claude tiruan di depan PATH yang tidak pernah siap, dan server tmux terpisah lewat TMUX_TMPDIR sementara. Server tmux pemilik, sesi uji-01..03, master-bot pemilik, dan ~/.bot-squad tidak pernah disentuh atau dimatikan.
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Tes proses sungguhan menjalankan master/src/main.ts dengan HOME dan BOT_SQUAD_HOME di folder sementara baru (salinan, tanpa symlink; dicek find -type l), MASTER_BOT_API_ROOT ke Telegram tiruan di 127.0.0.1, claude tiruan di depan PATH yang tidak pernah siap, dan server tmux terpisah lewat TMUX_TMPDIR sementara. Server tmux pemilik, sesi uji-01..03, master-bot pemilik, dan ~/.bot-squad tidak pernah disentuh atau dimatikan.
   Why: Arahan foreman (data asli dan proses pemilik terlarang) dan pelajaran tiket sebelumnya (tmux mengambil PATH dari klien pertama; scratchpad lama berisi symlink ke data asli).
   If wrong: Ganti cara tes.
-- A3 [unseen] Log memuat dua baris: 'penyalaan <nama> terputus: master-bot berhenti' beserta status yang ditulis, lalu baris yang sudah ada 'laporan penyalaan <nama> tidak terkirim: master-bot berhenti sebelum laporan terkirim'. Kalau penulisan status gagal saat berhenti, itu juga dicatat di log.
+  Confirmed by owner, 2026-11-12
+- A3 [confirmed] Log memuat dua baris: 'penyalaan <nama> terputus: master-bot berhenti' beserta status yang ditulis, lalu baris yang sudah ada 'laporan penyalaan <nama> tidak terkirim: master-bot berhenti sebelum laporan terkirim'. Kalau penulisan status gagal saat berhenti, itu juga dicatat di log.
   Why: Mengikuti pola log yang sudah ada di bot.ts dan retry.ts.
   If wrong: Ubah teks log.
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane standard: mengubah status registry dan jalur berhenti master-bot; tidak ada data yang tak bisa dipulihkan atau izin.

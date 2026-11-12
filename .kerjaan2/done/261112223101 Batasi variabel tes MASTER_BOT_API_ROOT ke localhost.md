@@ -27,18 +27,22 @@ Variabel pengganti alamat Telegram hanya boleh menunjuk ke mesin lokal. Kalau va
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Alamat dicek lewat hostname hasil parse URL, dibandingkan persis dengan localhost, 127.0.0.1, dan ::1 (ditulis [::1]); port bebas, skema http atau https. Bentuk seperti http://localhost@evil.com atau localhost.evil.com ditolak karena hostname-nya bukan mesin lokal.
+- A1 [confirmed] Alamat dicek lewat hostname hasil parse URL, dibandingkan persis dengan localhost, 127.0.0.1, dan ::1 (ditulis [::1]); port bebas, skema http atau https. Bentuk seperti http://localhost@evil.com atau localhost.evil.com ditolak karena hostname-nya bukan mesin lokal.
   Why: Done when menyebut tepat tiga alamat itu; parse URL mencegah akal-akalan string.
   If wrong: Ubah daftar host yang diizinkan di main.ts dan tesnya.
-- A2 [unseen] Nilai yang tidak bisa di-parse sebagai URL, atau skema selain http/https, ditolak sama seperti alamat non-lokal (keluar kode 1, pesan jelas, token tidak dicetak). Nilai kosong atau hanya spasi tetap dianggap tidak di-set, seperti sekarang.
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Nilai yang tidak bisa di-parse sebagai URL, atau skema selain http/https, ditolak sama seperti alamat non-lokal (keluar kode 1, pesan jelas, token tidak dicetak). Nilai kosong atau hanya spasi tetap dianggap tidak di-set, seperti sekarang.
   Why: Lane strict: ragu berarti tolak; perilaku nilai kosong sudah ada dan Done when 3 meminta perilaku tanpa variabel tidak berubah.
   If wrong: Longgarkan validasi di main.ts.
-- A3 [unseen] Penolakan memakai kode keluar 1 dan diawali 'master-bot:' seperti ConfigError, dan pesannya menyebut nama variabel MASTER_BOT_API_ROOT serta alamat yang ditolak (alamat bukan rahasia).
+  Confirmed by owner, 2026-11-12
+- A3 [confirmed] Penolakan memakai kode keluar 1 dan diawali 'master-bot:' seperti ConfigError, dan pesannya menyebut nama variabel MASTER_BOT_API_ROOT serta alamat yang ditolak (alamat bukan rahasia).
   Why: Konvensi pesan error master-bot di CLAUDE.md dan main.ts.
   If wrong: Ubah teks pesan.
-- A4 [unseen] URL lokal yang memuat username atau password (mis. http://user:pass@localhost) juga ditolak
+  Confirmed by owner, 2026-11-12
+- A4 [confirmed] URL lokal yang memuat username atau password (mis. http://user:pass@localhost) juga ditolak
   Why: Lane strict; tidak ada pemakaian tes yang butuh userinfo dan bentuk ini mirip akal-akalan alamat
   If wrong: Hapus syarat username/password di api-root.ts dan kasus tesnya
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane strict: menyangkut ke mana token master-bot dan token bot (getMe di register.ts memakai apiRoot yang sama) dikirim.

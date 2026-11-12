@@ -31,24 +31,30 @@ Setiap bot selalu merekam kapan pesan masuk diterima dan diteruskan ke Claude, s
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Agen tidak pernah menyalakan bot dengan token asli pemilik (uji-01..03), termasuk dari salinan folder state, dan tidak menyentuh ~/.bot-squad maupun proses pemilik. Semua uji memakai Telegram tiruan dan folder state sementara (salinan, tanpa symlink).
+- A1 [confirmed] Agen tidak pernah menyalakan bot dengan token asli pemilik (uji-01..03), termasuk dari salinan folder state, dan tidak menyentuh ~/.bot-squad maupun proses pemilik. Semua uji memakai Telegram tiruan dan folder state sementara (salinan, tanpa symlink).
   Why: Satu poller per token (CLAUDE.md) dan arahan foreman.
   If wrong: Pemilik menyediakan token bot uji khusus agen.
-- A2 [unseen] Baris pesan masuk boleh memuat chat_id dan message_id (bukan rahasia, dibutuhkan untuk mencocokkan dengan transkrip), dengan waktu dalam ISO 8601 beserta zona waktu.
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Baris pesan masuk boleh memuat chat_id dan message_id (bukan rahasia, dibutuhkan untuk mencocokkan dengan transkrip), dengan waktu dalam ISO 8601 beserta zona waktu.
   Why: Pemilik hanya melarang isi pesan dan token; ID dibutuhkan untuk mencocokkan kejadian.
   If wrong: Hapus ID dari baris log.
-- A3 [unseen] Log ditulis oleh server plugin, bukan dengan menangkap stderr dari luar, jadi berlaku untuk setiap jalur penyalaan (master-bot dan start-bot.sh). Baris stderr yang sudah ada tetap dipertahankan.
+  Confirmed by owner, 2026-11-12
+- A3 [confirmed] Log ditulis oleh server plugin, bukan dengan menangkap stderr dari luar, jadi berlaku untuk setiap jalur penyalaan (master-bot dan start-bot.sh). Baris stderr yang sudah ada tetap dipertahankan.
   Why: Pelajaran proyek: stderr plugin tidak masuk ke log Claude, dan shim bun hanya bekerja di server tmux baru.
   If wrong: Pindahkan perekaman ke launch.ts.
-- A4 [unseen] Untuk tes, server plugin menerima BOT_SQUAD_TELEGRAM_API_ROOT yang hanya boleh menunjuk localhost/127.0.0.1/[::1]; alamat lain membuat server keluar kode 1 tanpa mencetak token
+  Confirmed by owner, 2026-11-12
+- A4 [confirmed] Untuk tes, server plugin menerima BOT_SQUAD_TELEGRAM_API_ROOT yang hanya boleh menunjuk localhost/127.0.0.1/[::1]; alamat lain membuat server keluar kode 1 tanpa mencetak token
   Why: Done when meminta tes dengan Telegram tiruan memakai server plugin sungguhan; aturannya sama dengan tiket 261112223101 untuk master-bot
   If wrong: Hapus blok API_ROOT di plugin/server.ts dan uji server lewat cara lain
-- A5 [unseen] Pesan yang tidak diteruskan (dibuang, pairing, perintah /start /help /status, jenis tak didukung) tetap mendapat satu baris pesan dengan hasil=... dan kolom waktu teruskan '-'
+  Confirmed by owner, 2026-11-12
+- A5 [confirmed] Pesan yang tidak diteruskan (dibuang, pairing, perintah /start /help /status, jenis tak didukung) tetap mendapat satu baris pesan dengan hasil=... dan kolom waktu teruskan '-'
   Why: 'Setiap pesan masuk menghasilkan satu baris'; pesan yang dibuang juga bukti bahwa pesan sampai ke plugin
   If wrong: Hanya panggil logInbound untuk hasil diteruskan/izin
-- A6 [unseen] 'Diteruskan ke Claude' = saat notifikasi MCP selesai ditulis ke stdout; 'diterima' = saat getUpdates mengembalikan pesan itu, bukan saat handler mulai
+  Confirmed by owner, 2026-11-12
+- A6 [confirmed] 'Diteruskan ke Claude' = saat notifikasi MCP selesai ditulis ke stdout; 'diterima' = saat getUpdates mengembalikan pesan itu, bukan saat handler mulai
   Why: Handler grammY berjalan berurutan, jadi waktu handler bisa tertunda oleh pesan sebelumnya; yang ingin dibuktikan adalah jeda sebelum plugin menerima
   If wrong: Ubah titik pencatatan di transformer dan handleInbound
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane standard: menambah log di plugin; tidak menyentuh login, izin, atau data yang tak bisa dipulihkan. Token harus tetap tersensor.
