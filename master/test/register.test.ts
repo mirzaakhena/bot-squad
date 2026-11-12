@@ -196,6 +196,11 @@ describe("token ditolak dengan alasan yang jelas, tanpa jejak", () => {
       expect(r.deleted).toBe(true);
       expect(snapshot()).toEqual({});
       expect(r.reply).not.toContain(token);
+      if (reason === "Token tidak valid" && !Object.hasOwn(OTHER_BOTS, token)) {
+        // Bentuk yang bukan token ditolak tanpa menghubungi Telegram.
+        expect(tg.stray.count).toBe(0);
+        expect(tg.otherCalls).toEqual([]);
+      }
     });
   }
 
@@ -209,6 +214,7 @@ describe("token ditolak dengan alasan yang jelas, tanpa jejak", () => {
     expect(r.deleted).toBe(true);
     expect(snapshot()).toEqual({});
     expect(tg.otherCalls).toEqual([]);
+    expect(r.calls.map((c) => c.method)).not.toContain("getMe");
   });
 
   test("token lain milik master-bot (ID sama) ditolak", async () => {

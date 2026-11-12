@@ -81,7 +81,9 @@ bun run --cwd master start
 - Konfigurasi dibaca dari `$BOT_SQUAD_HOME/master/.env` (default `~/.bot-squad/master/.env`, sebaiknya `chmod 600`): `MASTER_BOT_TOKEN=<token dari @BotFather>` dan `OWNER_TELEGRAM_ID=<angka>`. Hanya file ini yang dibaca, bukan environment.
 - Kalau ada yang kurang, token ditolak Telegram (401), atau master-bot sudah berjalan di tempat lain (409), aplikasi berhenti dengan kode 1 dan pesan yang menyebut penyebab serta letak file. Token tidak pernah dicetak: semua log disensor.
 - Hanya pesan di chat pribadi pemilik yang dilayani. Semua update lain (akun lain, grup, termasuk pesan pemilik di grup, channel, inline query) dibuang tanpa balasan, dan log hanya mencatat `update diabaikan dari <id>`.
-- Perintah saat ini: `/start` dan `/help`. Menu Telegram didaftarkan dengan `setMyCommands` setiap start dari daftar `COMMANDS` di `master/src/bot.ts`.
+- Perintah saat ini: `/start`, `/help`, dan `/register <nama> <token>`. Menu Telegram didaftarkan dengan `setMyCommands` setiap start dari daftar `COMMANDS` di `master/src/bot.ts`.
+- `/register <nama> <token>` (tiket 261112184705): pesan yang memuat argumen langsung dihapus. Nama harus cocok `^[a-z0-9][a-z0-9-]{0,31}$` dan bukan `master`. Ditolak kalau nama sudah ada di registry, folder `bots/<nama>` sudah ada di disk, token salah bentuk, token milik master-bot, atau ID bot dari `getMe` sudah terdaftar. `getMe` 401/404 berarti token tidak valid; jaringan, timeout 10 detik, 429, dan 5xx berarti "coba lagi". Kalau berhasil: `bots/<nama>/{state,workspace}` (0700), `state/.env` (0600), `state/access.json` (allowlist pemilik saja), dan catatan di `registry.json`. Bot belum dinyalakan.
+- `registry.json`: `{ "bots": { "<nama>": { "telegramId", "username", "status": "registered", "createdAt" } } }`. Token tidak pernah masuk registry. Ditulis atomik (file sementara, fsync, rename) lewat `master/src/registry.ts`, dan registrasi diproses satu per satu.
 - Tes: `bun test` dari root repo. Tes memakai server Telegram tiruan (`master/test/fake-telegram.ts`), jadi tidak butuh token asli.
 
 ## Menyalakan satu bot (hasil spike, Claude Code 2.1.322)
@@ -153,7 +155,8 @@ Prompt yang muncul saat start dan cara menanganinya:
 - [ ] Rancang alur `/register <nama> <token>` dari awal sampai bot menyala, lalu didiskusikan dengan pemilik sebelum menulis kode
 - [x] Rebrand `plugin/` menjadi `bot-squad`
 - [x] Kerangka `master/`: konfigurasi, hanya melayani pemilik, `/start` dan `/help`
-- [ ] Perintah master-bot berikutnya (`/register`, dst.)
+- [x] `/register`: validasi, folder bot, dan registry (belum menyalakan bot)
+- [ ] Perintah master-bot berikutnya (menyalakan bot, list, stop, dst.)
 
 ## Cara bekerja di proyek ini
 

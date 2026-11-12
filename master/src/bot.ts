@@ -1,7 +1,7 @@
 import { Bot, type ApiClientOptions } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { isOwnerUpdate, senderIdForLog } from "./access.ts";
-import { describeError, redact, type Logger } from "./log.ts";
+import { describeError, type Logger } from "./log.ts";
 import { parseRegisterArgs, registerBot, USAGE } from "./register.ts";
 import type { WriteHooks } from "./registry.ts";
 
@@ -91,11 +91,10 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
         opts.log(`registrasi gagal: ${describeError(err)}`);
         text = "Registrasi gagal karena error di server master-bot. Tidak ada yang tercatat; lihat log master-bot.";
       }
-      if (deleteFailed) text += `\n\n${DELETE_FAILED}`;
-      // Lapisan terakhir: balasan tidak pernah memuat token.
-      text = redact(text, [args.token, opts.token]);
     }
-    if (!args.ok && deleteFailed) text += `\n\n${DELETE_FAILED}`;
+    // Balasan hanya dirangkai dari teks tetap, nama yang sudah lolos aturan,
+    // dan username dari Telegram: token tidak pernah ikut.
+    if (deleteFailed) text += `\n\n${DELETE_FAILED}`;
     await ctx.reply(text);
   });
 

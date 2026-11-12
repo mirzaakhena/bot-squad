@@ -115,7 +115,9 @@ export function registerBot(name: string, token: string, deps: RegisterDeps): Pr
       };
     }
 
-    if (!TOKEN_SHAPE.test(token)) return { ok: false, reason: INVALID_TOKEN };
+    if (!TOKEN_SHAPE.test(token)) {
+      return { ok: false, reason: "Token tidak valid: bentuknya bukan token bot dari @BotFather (<angka>:<kode>)." };
+    }
     if (token === deps.masterToken) {
       return { ok: false, reason: "Token itu milik master-bot sendiri, tidak bisa didaftarkan sebagai bot." };
     }

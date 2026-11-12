@@ -37,6 +37,8 @@ export function startFakeTelegram(
   const calls: Call[] = [];
   /** Panggilan dengan token selain token master-bot. */
   const otherCalls: Array<{ token: string; method: string }> = [];
+  /** Jumlah permintaan dengan token yang tidak dikenal sama sekali. */
+  const stray = { count: 0 };
   let pending: Update[] = [];
   const base: Record<string, Handler> = {
     getMe: () => ok(ME),
@@ -64,6 +66,7 @@ export function startFakeTelegram(
         return Response.json(r.body, { status: r.status ?? 200 });
       }
       if (!m || urlToken !== token) {
+        stray.count++;
         return Response.json({ ok: false, error_code: 404, description: "Not Found" }, { status: 404 });
       }
       const method = m[2]!;
@@ -79,6 +82,7 @@ export function startFakeTelegram(
     apiRoot: `http://127.0.0.1:${server.port}`,
     calls,
     otherCalls,
+    stray,
     push: (...u: Update[]) => pending.push(...u),
     stop: () => server.stop(true),
   };
