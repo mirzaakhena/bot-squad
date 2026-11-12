@@ -118,6 +118,11 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
         }
       }
       opts.log(`penyalaan '${name}': ${res.kind}${res.kind === "active" ? "" : ` (${res.reason})`}`);
+      if (res.kind === "failed" && res.interrupted) {
+        opts.log(
+          `penyalaan '${name}' terputus: master-bot berhenti; status ${statusRecorded ? "ditulis 'failed'" : "gagal ditulis"}`,
+        );
+      }
       // Gangguan sementara (jaringan, 5xx, 429) dicoba ulang dengan jeda
       // bertambah; error lain dan berhentinya master-bot langsung dicatat.
       const text = launchReport(name, username, res, statusRecorded);

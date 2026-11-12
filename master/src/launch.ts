@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { NAME_RULE } from "./register.ts";
 import { redact } from "./log.ts";
 import { killStrayServers, listServerProcesses, type Killed } from "./strays.ts";
+import { abortableSleep } from "./retry.ts";
 
 /**
  * Menyalakan satu bot sebagai sesi Claude Code di tmux, dengan cara yang
@@ -51,6 +52,8 @@ export type Tmux = {
   /** Isi layar sesi, atau null kalau sesi sudah tidak ada. */
   capture(name: string): Promise<string | null>;
   sendEnter(name: string): Promise<void>;
+  /** Mematikan sesi; melempar error kalau tmux menolak (sesi yang sudah tidak ada bukan error). */
+  killSession(name: string): Promise<void>;
 };
 
 export type LaunchDeps = {
@@ -61,8 +64,8 @@ export type LaunchDeps = {
   claudeJson: string;
   tmux: Tmux;
   isAlive: (pid: number) => boolean;
-  /** Memasang paket plugin; melempar error kalau gagal. */
-  installPlugin: () => Promise<void>;
+  /** Memasang paket plugin; melempar error kalau gagal atau dibatalkan lewat signal. */
+  installPlugin: (signal?: AbortSignal) => Promise<void>;
   /**
    * Mematikan server plugin sisa yang memakai folder state ini (SIGTERM, 2
    * detik, SIGKILL) dan mengembalikan yang dimatikan. Hanya dipanggil setelah
@@ -71,10 +74,17 @@ export type LaunchDeps = {
   killStrays: (stateDir: string) => Promise<Killed[]>;
   /** Satu baris log (tanpa token); default tidak menulis apa-apa. */
   log?: (message: string) => void;
-  sleep: (ms: number) => Promise<void>;
+  /** Harus selesai lebih awal kalau signal dibatalkan. */
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   now: () => number;
   timeoutMs?: number;
   pollMs?: number;
+  /**
+   * Dibatalkan saat master-bot berhenti (tiket 261112223102). Penyalaan yang
+   * belum siap dihentikan: sesi tmux-nya dimatikan dan hasilnya "failed"
+   * dengan interrupted. Kalau bot ternyata sudah siap, hasilnya "active".
+   */
+  signal?: AbortSignal;
 };
 
 export type LaunchResult =
@@ -87,7 +97,11 @@ export type LaunchResult =
       screen?: string;
       /** Sesi tmux masih ada, jadi pemilik bisa tmux attach. */
       sessionAlive: boolean;
+      /** Penyalaan diputus karena master-bot berhenti. */
+      interrupted?: true;
     };
+
+export const INTERRUPTED_REASON = "penyalaan terputus karena master-bot berhenti";
 
 export type ScreenState = "dev-prompt" | "unexpected-dialog" | "ready" | "waiting";
 
@@ -183,7 +197,39 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
   const { botsDir, state, workspace, pidFile } = botPaths(deps.dataDir, name);
   const timeoutMs = deps.timeoutMs ?? READY_TIMEOUT_MS;
   const pollMs = deps.pollMs ?? POLL_MS;
+  const signal = deps.signal;
+  const aborted = () => signal?.aborted === true;
+  let sessionCreated = false;
+  /**
+   * Master-bot berhenti di tengah penyalaan. Satu tangkapan terakhir: kalau
+   * bot sudah siap, sesinya dibiarkan dan hasilnya active. Kalau belum, sesi
+   * dimatikan supaya status failed sesuai kenyataan (keputusan pemilik, Q2).
+   */
+  const interrupted = async (): Promise<LaunchResult> => {
+    let pane: string | null = null;
+    if (sessionCreated) {
+      pane = await deps.tmux.capture(name).catch(() => null);
+      const pid = readPid(pidFile);
+      if (pane !== null && classifyScreen(pane, pid !== null && deps.isAlive(pid)) === "ready") {
+        return { kind: "active", pid: pid! };
+      }
+      try {
+        await deps.tmux.killSession(name);
+        deps.log?.(`sesi tmux '${name}' dimatikan karena penyalaannya terputus`);
+      } catch (err) {
+        deps.log?.(`sesi tmux '${name}' gagal dimatikan: ${short(err)}`);
+      }
+    }
+    return {
+      kind: "failed",
+      reason: INTERRUPTED_REASON,
+      sessionAlive: false,
+      interrupted: true,
+      ...(pane !== null ? { screen: screenSnippet(pane) } : {}),
+    };
+  };
 
+  if (aborted()) return interrupted();
   let busy: string | null;
   try {
     busy = await runningReason(name, deps);
@@ -230,11 +276,14 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
     return fail(`trust folder di ${deps.claudeJson} gagal ditulis (${short(err)})`);
   }
 
+  if (aborted()) return interrupted();
   try {
-    await deps.installPlugin();
+    await deps.installPlugin(signal);
   } catch (err) {
+    if (aborted()) return interrupted();
     return fail(`paket plugin gagal dipasang (${short(err)})`);
   }
+  if (aborted()) return interrupted();
 
   // bot.pid lama sudah dipastikan mati; dihapus supaya tanda siap hanya
   // datang dari server plugin sesi ini.
@@ -253,6 +302,7 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
     }
     return fail(`sesi tmux gagal dibuat (${short(err)})`);
   }
+  sessionCreated = true;
 
   // Dialog development channel dijawab sekali. Dialog lain tidak dijawab:
   // pilihan default-nya "No, exit", jadi lebih aman dinyatakan gagal.
@@ -260,7 +310,9 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
   let answered = false;
   let last: string | null = null;
   while (deps.now() < deadline) {
-    await deps.sleep(pollMs);
+    if (aborted()) return interrupted();
+    await deps.sleep(pollMs, signal);
+    if (aborted()) return interrupted();
     const pane = await deps.tmux.capture(name);
     if (pane === null) {
       return fail("sesi berhenti saat start", false, last !== null ? screenSnippet(last) : undefined);
@@ -269,7 +321,7 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
     const pid = readPid(pidFile);
     const state = classifyScreen(pane, pid !== null && deps.isAlive(pid));
     if (state === "dev-prompt") {
-      if (!answered) {
+      if (!answered && !aborted()) {
         await deps.tmux.sendEnter(name);
         answered = true;
       }
@@ -295,8 +347,12 @@ function short(err: unknown): string {
 // ---------------------------------------------------------------------------
 // Implementasi asli: tmux, bun install dengan kunci, jam.
 
-async function exec(argv: string[], opts: { stdout?: "pipe" | "inherit" } = {}) {
+async function exec(argv: string[], opts: { stdout?: "pipe" | "inherit"; signal?: AbortSignal } = {}) {
   const proc = Bun.spawn(argv, { stdin: "ignore", stdout: opts.stdout ?? "pipe", stderr: "pipe" });
+  const kill = () => proc.kill();
+  if (opts.signal?.aborted) kill();
+  opts.signal?.addEventListener("abort", kill, { once: true });
+  proc.exited.finally(() => opts.signal?.removeEventListener("abort", kill));
   const [code, out, err] = await Promise.all([
     proc.exited,
     opts.stdout === "inherit" ? Promise.resolve("") : new Response(proc.stdout as ReadableStream).text(),
@@ -321,6 +377,10 @@ export const realTmux: Tmux = {
   async sendEnter(name) {
     await exec(["tmux", "send-keys", "-t", `=${name}:`, "Enter"]);
   },
+  async killSession(name) {
+    const r = await exec(["tmux", "kill-session", "-t", `=${name}`]);
+    if (r.code !== 0 && (await realTmux.hasSession(name))) throw new Error(r.err.trim() || `tmux keluar dengan kode ${r.code}`);
+  },
 };
 
 export function isAlive(pid: number): boolean {
@@ -341,6 +401,8 @@ export type InstallOptions = {
   /** Perintah install; default `bun install --cwd <pluginDir> --no-summary`. */
   install?: () => Promise<void>;
   lockTimeoutMs?: number;
+  /** Menghentikan tunggu kunci dan bun install (master-bot berhenti). */
+  signal?: AbortSignal;
 };
 
 /**
@@ -366,13 +428,15 @@ export async function installPluginLocked(o: InstallOptions): Promise<void> {
       rmSync(lock, { recursive: true, force: true });
       continue;
     }
+    if (o.signal?.aborted) throw new Error("install plugin dibatalkan: master-bot berhenti");
     if (o.now() >= deadline) throw new Error(`kunci install plugin tidak lepas: ${lock}`);
     await o.sleep(100);
   }
   try {
     if (o.install) await o.install();
     else {
-      const r = await exec(["bun", "install", "--cwd", o.pluginDir, "--no-summary"]);
+      const r = await exec(["bun", "install", "--cwd", o.pluginDir, "--no-summary"], { signal: o.signal });
+      if (o.signal?.aborted) throw new Error("install plugin dibatalkan: master-bot berhenti");
       if (r.code !== 0) throw new Error(`bun install keluar dengan kode ${r.code}`);
     }
   } finally {
@@ -384,8 +448,13 @@ export async function installPluginLocked(o: InstallOptions): Promise<void> {
 export const PLUGIN_DIR = resolve(import.meta.dir, "..", "..", "plugin");
 
 /** Dependensi asli untuk menyalakan bot di mesin ini. */
-export function realLaunchDeps(dataDir: string, ownerId: number, log?: (message: string) => void): LaunchDeps {
-  const sleep = (ms: number) => Bun.sleep(ms);
+export function realLaunchDeps(
+  dataDir: string,
+  ownerId: number,
+  log?: (message: string) => void,
+  signal?: AbortSignal,
+): LaunchDeps {
+  const sleep = (ms: number, s?: AbortSignal) => abortableSleep(ms, s);
   const now = () => Date.now();
   return {
     dataDir,
@@ -394,13 +463,14 @@ export function realLaunchDeps(dataDir: string, ownerId: number, log?: (message:
     claudeJson: join(process.env.CLAUDE_CONFIG_DIR || homedir(), ".claude.json"),
     tmux: realTmux,
     isAlive,
-    installPlugin: () => installPluginLocked({ dataDir, pluginDir: PLUGIN_DIR, isAlive, sleep, now }),
+    installPlugin: (s) => installPluginLocked({ dataDir, pluginDir: PLUGIN_DIR, isAlive, sleep, now, signal: s }),
     killStrays: (stateDir) =>
       killStrayServers(
         { stateDir, pluginDir: PLUGIN_DIR },
         { list: listServerProcesses, kill: (pid, sig) => process.kill(pid, sig), sleep },
       ),
     ...(log ? { log } : {}),
+    ...(signal ? { signal } : {}),
     sleep,
     now,
   };
