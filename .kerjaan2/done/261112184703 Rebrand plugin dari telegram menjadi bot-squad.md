@@ -59,6 +59,7 @@ Ganti identitas plugin menjadi "bot-squad" di semua tempat yang terlihat oleh Cl
   Why: Upstream menulis source sama dengan nama servernya (telegram); setelah server bernama bot-squad, tag mengikuti nama server. Belum dilihat langsung karena butuh pesan masuk
   If wrong: Kalau tag yang tampil tetap source="telegram" atau bentuk lain, ganti teks itu di instruksi server.ts (satu baris)
   Confirmed by owner, 2026-11-12
+  Confirmed by owner, 2026-11-12
 - A2 [confirmed] Versi paket di package.json tetap 0.0.1 seperti upstream; versi 0.0.7 hanya di plugin.json
   Why: Q3 menyebut versi tetap 0.0.7, yaitu versi plugin; versi paket npm upstream memang 0.0.1 dan tidak dipakai di mana pun
   If wrong: Ubah version di plugin/package.json menjadi 0.0.7

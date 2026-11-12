@@ -33,3 +33,4 @@
 {"t":"2026-11-12 20:17:59","event":"agent","role":"reviewer","agent":"a65256efc126964f0","step":"integrate:1:reviewer","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
 {"t":"2026-11-12 20:18:35","event":"verdict","result":"pass","integration":true,"commit":"efd06d9","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"reviewer:a65256efc126964f0"}
 {"t":"2026-11-12 20:18:51","event":"landed","branch":"k2/261112184704-kerangka-aplikasi-master-bot","files":["CLAUDE.md","bun.lock","master/.gitkeep","master/package.json","master/src/access.ts","master/src/bot.ts","master/src/config.ts","master/src/log.ts","master/src/main.ts","master/test/access.test.ts","master/test/fake-telegram.ts","master/test/log.test.ts","master/test/run.test.ts","master/test/updates.ts","package.json"],"session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 21:40:06","event":"manual-ok","key":"M1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}

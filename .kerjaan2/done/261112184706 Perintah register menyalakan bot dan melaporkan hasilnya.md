@@ -74,12 +74,13 @@ Registrasi yang berhasil langsung menyalakan bot. Master-bot memastikan bot bena
 - Penyalaan berjalan di latar belakang setelah balasan 'Menyalakan...' terkirim, karena grammY memproses update satu per satu; dengan begitu urutan pesan tetap dan master-bot melayani perintah lain (Q5)
 
 ## Manual checks
-- M1 [waiting] (item 1) 1. Di server, jalankan master-bot: bun run --cwd master start dari root repo.
+- M1 [failed] (item 1) 1. Di server, jalankan master-bot: bun run --cwd master start dari root repo.
   2. Buat bot baru di @BotFather dan salin tokennya.
   3. Kirim /register <nama> <token> ke master-bot.
   4. Pesan berisi token hilang dari chat, lalu master-bot membalas 'terdaftar ... Menyalakan <nama>...'.
   5. Dalam beberapa detik datang pesan kedua: 'Bot @<username> ('<nama>') aktif'.
   6. Buka chat bot baru itu dan kirim 'halo'. Bot membalas.
+  Failed by owner, 2026-11-12
 
 ## Handoff
 Logika menyalakan bot kini ada di master/src/launch.ts (launchBot), dipakai master-bot setelah /register dan oleh scripts/start-bot.sh lewat master/src/start-cli.ts. Urutan: cek start ganda (tmux, bot.pid, set in-process), token, access.json, trust ~/.claude.json, bun install plugin berkunci, hapus bot.pid lama, tmux new-session, lalu baca layar tiap detik sampai siap, gagal, atau 90 detik. Semua efek samping (tmux, proses, jam, install) disuntikkan, jadi tes memakai tiruan. bot.ts mencatat status active/failed lewat setBotStatus di registry.ts. Jangan sampai: dua poller per token, Enter buta ke dialog selain development channel, atau token di pesan/log. /restart nanti sebaiknya memakai launchBot dan membersihkan server yatim lebih dulu.
@@ -93,3 +94,7 @@ Logika menyalakan bot kini ada di master/src/launch.ts (launchBot), dipakai mast
   5: nyata: pane rv-ok di bots/rv-ok/workspace, TELEGRAM_STATE_DIR=bots/rv-ok/state, trust ditulis ke CLAUDE_CONFIG_DIR uji; cwd diganti state -> tes merah
   6: 49 tes launch/register-launch lulus; 7 mutasi (bot.pid, siap tanpa plugin, failed, layar, cwd, kunci, batas waktu) semuanya merah. Tidak ada skrip cek lain di repo selain bun test
   note: pesan gagal selalu menulis 'Status tercatat failed' walau setBotStatus gagal (hanya dicatat di log)
+
+## Follow-ups
+- F1 [ticketed] Manual check M1 failed: (item 1) 1. Di server, jalankan master-bot: bun run --cwd master start dari root repo.
+  → 261112214001

@@ -22,7 +22,7 @@ Buat aplikasi master-bot paling dasar. Aplikasi ini membaca konfigurasinya dari 
 - [x] Aplikasi bisa dijalankan dengan satu perintah yang tercatat di CLAUDE.md.
 - [x] Kalau token atau ID pemilik tidak ada, aplikasi berhenti dengan pesan yang jelas tentang apa yang kurang dan di mana harus mengisinya.
 - [x] Kalau token master-bot ditolak Telegram (401) atau master-bot sudah berjalan di tempat lain (409), aplikasi berhenti dengan pesan yang jelas tanpa mencetak token.
-- [ ] (owner) Pemilik mengirim /start atau /help ke master-bot dan mendapat daftar perintah.
+- [x] (owner) Pemilik mengirim /start atau /help ke master-bot dan mendapat daftar perintah.
 - [x] Pesan dari akun Telegram lain sama sekali tidak dibalas. Ini dibuktikan dengan tes otomatis.
 - [x] Token tidak pernah muncul di log atau di balasan.
 - [x] Tidak ada hal yang khusus macOS, sehingga aplikasi juga bisa jalan di Linux.
@@ -63,13 +63,14 @@ Buat aplikasi master-bot paling dasar. Aplikasi ini membaca konfigurasinya dari 
 - Kegagalan bot.stop() ditangkap dan error tak tertangani di proses disensor, karena error jaringan grammY membawa URL berisi token
 
 ## Manual checks
-- M1 [waiting] (item 4) 1. Buat master-bot di @BotFather.
+- M1 [ok] (item 4) 1. Buat master-bot di @BotFather.
   2. Isi ~/.bot-squad/master/.env dengan MASTER_BOT_TOKEN=<token> di samping OWNER_TELEGRAM_ID yang sudah ada, lalu chmod 600.
   3. Di root repo jalankan 'bun install' lalu 'bun run --cwd master start'; terminal menampilkan 'berjalan sebagai @<username>'.
   4. Kirim /start ke master-bot dari akun pemilik: muncul daftar perintah /start dan /help.
   5. Kirim /help: daftar yang sama.
   6. Ketik '/' di chat: menu berisi start dan help.
   7. Opsional: kirim /start dari akun lain, tidak ada balasan dan terminal mencatat 'update diabaikan dari <id>'.
+  Checked by owner, 2026-11-12
 
 ## Handoff
 Menambah workspace Bun di root (package.json hanya berisi master) dan aplikasi master/: config.ts membaca $BOT_SQUAD_HOME/master/.env (MASTER_BOT_TOKEN, OWNER_TELEGRAM_ID) dan melempar ConfigError yang jelas; access.ts menentukan update milik pemilik (DM pemilik saja); bot.ts memasang penjaga akses sebagai middleware pertama lalu /start dan /help dari daftar COMMANDS; main.ts menjalankan init, setMyCommands, polling, dan menerjemahkan 401/409 menjadi pesan berhenti. Yang tidak boleh rusak: penjaga akses harus tetap middleware pertama sebelum perintah baru apa pun, semua log lewat createLogger yang menyensor token, dan perintah baru ditambahkan ke COMMANDS agar menu dan /help tetap sesuai.

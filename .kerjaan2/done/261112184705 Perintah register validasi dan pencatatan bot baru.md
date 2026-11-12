@@ -26,7 +26,7 @@ Pemilik bisa mendaftarkan bot baru lewat master-bot. Nama dan token divalidasi, 
 
 ## Done when
 
-- [ ] (owner) Setelah pemilik mengirim perintah registrasi, pesan yang berisi token langsung hilang dari chat, baik registrasinya berhasil maupun gagal.
+- [x] (owner) Setelah pemilik mengirim perintah registrasi, pesan yang berisi token langsung hilang dari chat, baik registrasinya berhasil maupun gagal.
 - [x] Nama yang tidak sesuai aturan, nama yang sudah terdaftar, dan token yang tidak valid ditolak dengan alasan yang jelas, dan tidak ada folder atau catatan yang tertinggal.
 - [x] Token yang sudah dipakai bot lain yang terdaftar ditolak.
 - [x] Registrasi yang berhasil membuat folder state dan folder kerja untuk bot itu. Token hanya bisa dibaca oleh pemilik akun mesin.
@@ -70,11 +70,12 @@ Pemilik bisa mendaftarkan bot baru lewat master-bot. Nama dan token divalidasi, 
 - Token yang bentuknya bukan token bot ditolak tanpa menghubungi Telegram, supaya teks sembarang tidak pernah masuk ke URL API
 
 ## Manual checks
-- M1 [waiting] (item 1) 1. Isi ~/.bot-squad/master/.env dengan MASTER_BOT_TOKEN dan OWNER_TELEGRAM_ID, lalu jalankan 'bun run --cwd master start' dari root repo.
+- M1 [ok] (item 1) 1. Isi ~/.bot-squad/master/.env dengan MASTER_BOT_TOKEN dan OWNER_TELEGRAM_ID, lalu jalankan 'bun run --cwd master start' dari root repo.
   2. Buat bot uji baru di @BotFather dan salin tokennya.
   3. Di chat pribadi dengan master-bot, kirim '/register Salah <token>': pesan itu hilang dari chat dan master-bot membalas 'Nama tidak sesuai aturan'.
   4. Kirim '/register uji-03 <token>': pesan itu hilang dan master-bot membalas 'Bot @<username> terdaftar sebagai uji-03'.
   5. Kirim lagi '/register uji-03 <token>': pesan hilang, balasan 'sudah terdaftar'. Di ketiga kasus tidak ada pesan berisi token yang tersisa di chat.
+  Checked by owner, 2026-11-12
 
 ## Handoff
 Menambah /register <nama> <token> di master-bot. master/src/register.ts memvalidasi nama, token (bentuk, getMe lewat fetch tanpa polling, ID master-bot, ID bot duplikat), lalu membuat bots/<nama>/{state,workspace} 0700, state/.env 0600, access.json allowlist pemilik. master/src/registry.ts memegang bentuk registry.json { bots: { nama: { telegramId, username, status, createdAt } } }, menulisnya atomik, dan serialized() mengantrekan semua perubahan; 4706 harus memakai readRegistry/writeRegistry di dalam serialized(), jangan menulis file itu sendiri. Pesan /register yang berargumen selalu dihapus lebih dulu. createMasterBot kini wajib diberi dataDir. Token tidak boleh masuk registry, balasan, atau log.

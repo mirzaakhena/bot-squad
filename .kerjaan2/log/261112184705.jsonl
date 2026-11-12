@@ -35,3 +35,4 @@
 {"t":"2026-11-12 20:26:43","event":"agent","role":"reviewer","agent":"aa6cecb1c879e3ddd","step":"review:1:0:0","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
 {"t":"2026-11-12 20:28:57","event":"verdict","result":"pass","round":1,"commit":"162287c","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"reviewer:aa6cecb1c879e3ddd"}
 {"t":"2026-11-12 20:29:13","event":"landed","branch":"k2/261112184705-perintah-register-validasi-dan","files":["CLAUDE.md","master/src/bot.ts","master/src/main.ts","master/src/register.ts","master/src/registry.ts","master/test/access.test.ts","master/test/fake-telegram.ts","master/test/register.test.ts","master/test/run.test.ts","master/test/updates.ts"],"session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 21:40:06","event":"manual-ok","key":"M1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
