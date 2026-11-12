@@ -82,8 +82,9 @@ bun run --cwd master start
 - Kalau ada yang kurang, token ditolak Telegram (401), atau master-bot sudah berjalan di tempat lain (409), aplikasi berhenti dengan kode 1 dan pesan yang menyebut penyebab serta letak file. Token tidak pernah dicetak: semua log disensor.
 - Hanya pesan di chat pribadi pemilik yang dilayani. Semua update lain (akun lain, grup, termasuk pesan pemilik di grup, channel, inline query) dibuang tanpa balasan, dan log hanya mencatat `update diabaikan dari <id>`.
 - Perintah saat ini: `/start`, `/help`, dan `/register <nama> <token>`. Menu Telegram didaftarkan dengan `setMyCommands` setiap start dari daftar `COMMANDS` di `master/src/bot.ts`.
-- `/register <nama> <token>` (tiket 261112184705): pesan yang memuat argumen langsung dihapus. Nama harus cocok `^[a-z0-9][a-z0-9-]{0,31}$` dan bukan `master`. Ditolak kalau nama sudah ada di registry, folder `bots/<nama>` sudah ada di disk, token salah bentuk, token milik master-bot, atau ID bot dari `getMe` sudah terdaftar. `getMe` 401/404 berarti token tidak valid; jaringan, timeout 10 detik, 429, dan 5xx berarti "coba lagi". Kalau berhasil: `bots/<nama>/{state,workspace}` (0700), `state/.env` (0600), `state/access.json` (allowlist pemilik saja), dan catatan di `registry.json`. Bot belum dinyalakan.
-- `registry.json`: `{ "bots": { "<nama>": { "telegramId", "username", "status": "registered", "createdAt" } } }`. Token tidak pernah masuk registry. Ditulis atomik (file sementara, fsync, rename) lewat `master/src/registry.ts`, dan registrasi diproses satu per satu.
+- `/register <nama> <token>` (tiket 261112184705): pesan yang memuat argumen langsung dihapus. Nama harus cocok `^[a-z0-9][a-z0-9-]{0,31}$` dan bukan `master`. Ditolak kalau nama sudah ada di registry, folder `bots/<nama>` sudah ada di disk, token salah bentuk, token milik master-bot, atau ID bot dari `getMe` sudah terdaftar. `getMe` 401/404 berarti token tidak valid; jaringan, timeout 10 detik, 429, dan 5xx berarti "coba lagi". Kalau berhasil: `bots/<nama>/{state,workspace}` (0700), `state/.env` (0600), `state/access.json` (allowlist pemilik saja), dan catatan di `registry.json`.
+- Setelah registrasi berhasil (tiket 261112184706), master-bot membalas `Menyalakan '<nama>'...` lalu menyalakan bot di latar belakang lewat `master/src/launch.ts` (langkah yang sama dengan `scripts/start-bot.sh`), sehingga perintah lain tetap dilayani. Hasilnya dikirim sebagai pesan kedua: `aktif`, atau `gagal` dengan alasan, 20 baris terakhir layar yang tidak kosong (maks. ~3000 karakter, token disensor) dan `tmux attach -t <nama>` kalau sesinya masih ada. Batas waktu 90 detik. Status di registry menjadi `active` atau `failed`; kalau bot ternyata sudah berjalan, status tidak diubah. Sesi yang gagal dibiarkan hidup supaya bisa dilihat. Percobaan ulang belum ada (menunggu /restart).
+- `registry.json`: `{ "bots": { "<nama>": { "telegramId", "username", "status", "createdAt" } } }`, dengan `status` salah satu dari `registered`, `active`, `failed`. Token tidak pernah masuk registry. Ditulis atomik (file sementara, fsync, rename) lewat `master/src/registry.ts`, dan registrasi diproses satu per satu.
 - Tes: `bun test` dari root repo. Tes memakai server Telegram tiruan (`master/test/fake-telegram.ts`), jadi tidak butuh token asli.
 
 ## Menyalakan satu bot (hasil spike, Claude Code 2.1.322)
@@ -93,6 +94,8 @@ Satu perintah, tanpa input manusia:
 ```bash
 scripts/start-bot.sh <nama-bot>        # contoh: scripts/start-bot.sh uji-01
 ```
+
+Skrip ini hanya pembungkus tipis untuk `master/src/start-cli.ts`, yang memakai `master/src/launch.ts`, kode yang sama dengan master-bot. Kode keluar 0 berarti siap, 1 berarti gagal atau sudah berjalan, dan 2 berarti pemakaian salah. `READY_TIMEOUT` (detik) mengubah batas waktu.
 
 Prasyarat: `~/.bot-squad/master/.env` berisi `OWNER_TELEGRAM_ID`, dan `~/.bot-squad/bots/<nama>/state/.env` berisi `TELEGRAM_BOT_TOKEN`. `BOT_SQUAD_HOME` bisa dipakai untuk mengganti `~/.bot-squad`. Skrip ini menjalankan langkah berikut:
 
@@ -180,7 +183,8 @@ Cara merekam stderr plugin (pesan `polling as @...`): taruh shim `bun` di depan 
 - [x] Rebrand `plugin/` menjadi `bot-squad`
 - [x] Kerangka `master/`: konfigurasi, hanya melayani pemilik, `/start` dan `/help`
 - [x] `/register`: validasi, folder bot, dan registry (belum menyalakan bot)
-- [ ] Perintah master-bot berikutnya (menyalakan bot, list, stop, dst.)
+- [x] `/register` langsung menyalakan bot dan melaporkan aktif atau gagal
+- [ ] Perintah master-bot berikutnya (list, stop, restart, dst.)
 
 ## Cara bekerja di proyek ini
 

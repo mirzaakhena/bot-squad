@@ -2,6 +2,7 @@ import { GrammyError, type ApiClientOptions } from "grammy";
 import { createMasterBot, COMMANDS } from "./bot.ts";
 import { ConfigError, dataDir, loadConfig, type ConfigSource } from "./config.ts";
 import { createLogger, describeError, redact } from "./log.ts";
+import { launchBot, realLaunchDeps } from "./launch.ts";
 
 export type RunOptions = ConfigSource & {
   /** Penulis log; default stderr. */
@@ -31,12 +32,15 @@ export async function run(opts: RunOptions = {}): Promise<number> {
 
   knownSecrets.push(config.token);
   const log = createLogger([config.token], write);
+  const dir = dataDir(opts);
+  const launchDeps = realLaunchDeps(dir, config.ownerId);
   const bot = createMasterBot({
     token: config.token,
     ownerId: config.ownerId,
     log,
     client: opts.client,
-    dataDir: dataDir(opts),
+    dataDir: dir,
+    launch: (name) => launchBot(name, launchDeps),
   });
 
   const explain = (err: unknown): string => {

@@ -3,7 +3,8 @@ import type { UserFromGetMe } from "grammy/types";
 import { isOwnerUpdate, senderIdForLog } from "./access.ts";
 import { describeError, type Logger } from "./log.ts";
 import { parseRegisterArgs, registerBot, USAGE } from "./register.ts";
-import type { WriteHooks } from "./registry.ts";
+import { setBotStatus, type WriteHooks } from "./registry.ts";
+import type { LaunchResult } from "./launch.ts";
 
 /** Perintah yang sudah berfungsi. Daftar ini juga dikirim lewat setMyCommands. */
 export const COMMANDS = [
@@ -34,7 +35,31 @@ export type MasterBotOptions = {
   getMeTimeoutMs?: number;
   /** Kait untuk tes penulisan registry. */
   registryHooks?: WriteHooks;
+  /** Menyalakan bot yang baru terdaftar (asli: launchBot dengan realLaunchDeps). */
+  launch: (name: string) => Promise<LaunchResult>;
+  /** Dipanggil dengan proses penyalaan di latar belakang; dipakai tes untuk menunggunya. */
+  onLaunch?: (done: Promise<void>) => void;
 };
+
+const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Pesan hasil penyalaan bot untuk pemilik (HTML). */
+export function launchReport(name: string, username: string, res: LaunchResult): string {
+  const who = `@${escapeHtml(username)} ('${name}')`;
+  if (res.kind === "active") return `Bot ${who} aktif. Silakan ajak bicara.`;
+  if (res.kind === "already-running") {
+    return `Bot ${who} tidak dinyalakan: ${escapeHtml(res.reason)}. Satu bot tidak boleh berjalan dua kali.`;
+  }
+  const parts = [`Bot ${who} gagal dinyalakan: ${escapeHtml(res.reason)}.`];
+  if (res.screen) parts.push(`Isi layar terakhir:\n<pre>${escapeHtml(res.screen)}</pre>`);
+  parts.push(
+    res.sessionAlive
+      ? `Lihat langsung di server: <code>tmux attach -t ${name}</code>`
+      : "Sesi tmux-nya sudah tidak ada.",
+  );
+  parts.push("Status tercatat 'failed'. Percobaan ulang menunggu perintah berikutnya (belum tersedia).");
+  return parts.join("\n\n");
+}
 
 const DELETE_FAILED =
   "Peringatan: pesan yang berisi token gagal dihapus dari chat. Hapus pesan itu sendiri.";
@@ -54,6 +79,34 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
 
   bot.command(["start", "help"], (ctx) => ctx.reply(helpText()));
 
+  // Penyalaan berjalan di latar belakang supaya master-bot tetap melayani
+  // perintah lain selama menunggu (bisa sampai 90 detik).
+  const launchInBackground = (name: string, username: string) => {
+    const done = (async () => {
+      let res: LaunchResult;
+      try {
+        res = await opts.launch(name);
+      } catch (err) {
+        res = { kind: "failed", reason: "error di master-bot saat menyalakan", sessionAlive: false };
+        opts.log(`penyalaan '${name}' error: ${describeError(err)}`);
+      }
+      if (res.kind !== "already-running") {
+        try {
+          await setBotStatus(opts.dataDir, name, res.kind === "active" ? "active" : "failed", opts.registryHooks);
+        } catch (err) {
+          opts.log(`status '${name}' gagal dicatat: ${describeError(err)}`);
+        }
+      }
+      opts.log(`penyalaan '${name}': ${res.kind}${res.kind === "active" ? "" : ` (${res.reason})`}`);
+      try {
+        await bot.api.sendMessage(opts.ownerId, launchReport(name, username, res), { parse_mode: "HTML" });
+      } catch (err) {
+        opts.log(`laporan penyalaan '${name}' gagal dikirim: ${describeError(err)}`);
+      }
+    })();
+    opts.onLaunch?.(done);
+  };
+
   bot.command("register", async (ctx) => {
     const match = typeof ctx.match === "string" ? ctx.match : "";
     const hasArgs = match.trim() !== "";
@@ -71,6 +124,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
 
     const args = parseRegisterArgs(match);
     let text: string;
+    let toLaunch: { name: string; username: string } | undefined;
     if (!args.ok) {
       text = USAGE;
     } else {
@@ -84,9 +138,12 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
           getMeTimeoutMs: opts.getMeTimeoutMs,
           registryHooks: opts.registryHooks,
         });
-        text = res.ok
-          ? `Bot @${res.username} terdaftar sebagai '${args.name}'. Folder state dan workspace sudah dibuat; bot belum dinyalakan.`
-          : `Registrasi ditolak. ${res.reason}`;
+        if (res.ok) {
+          text = `Bot @${res.username} terdaftar sebagai '${args.name}'. Menyalakan '${args.name}'...`;
+          toLaunch = { name: args.name, username: res.username };
+        } else {
+          text = `Registrasi ditolak. ${res.reason}`;
+        }
       } catch (err) {
         opts.log(`registrasi gagal: ${describeError(err)}`);
         text = "Registrasi gagal karena error di server master-bot. Tidak ada yang tercatat; lihat log master-bot.";
@@ -95,7 +152,13 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     // Balasan hanya dirangkai dari teks tetap, nama yang sudah lolos aturan,
     // dan username dari Telegram: token tidak pernah ikut.
     if (deleteFailed) text += `\n\n${DELETE_FAILED}`;
-    await ctx.reply(text);
+    // Bot dinyalakan setelah balasan "Menyalakan..." terkirim, supaya urutan
+    // pesan di chat selalu: terdaftar/menyalakan, lalu aktif atau gagal.
+    try {
+      await ctx.reply(text);
+    } finally {
+      if (toLaunch) launchInBackground(toLaunch.name, toLaunch.username);
+    }
   });
 
   bot.catch((err) => {
