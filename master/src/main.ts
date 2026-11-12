@@ -4,6 +4,7 @@ import { ConfigError, dataDir, loadConfig, type ConfigSource } from "./config.ts
 import { createLogger, describeError, redact } from "./log.ts";
 import { launchBot, realLaunchDeps } from "./launch.ts";
 import { syncCommandMenu } from "./menu.ts";
+import { acquireMasterLock, type LockDeps } from "./lock.ts";
 
 export type RunOptions = ConfigSource & {
   /** Penulis log; default stderr. */
@@ -11,6 +12,8 @@ export type RunOptions = ConfigSource & {
   client?: ApiClientOptions;
   /** Menghentikan polling dengan rapi saat dibatalkan. */
   signal?: AbortSignal;
+  /** Pengganti cek pid untuk kunci instance tunggal (tes). */
+  lock?: LockDeps;
 };
 
 /** Token yang sudah dibaca, untuk menyensor error yang lolos dari run(). */
@@ -34,6 +37,37 @@ export async function run(opts: RunOptions = {}): Promise<number> {
   knownSecrets.push(config.token);
   const log = createLogger([config.token], write);
   const dir = dataDir(opts);
+
+  // Kunci diambil sebelum panggilan Telegram apa pun: getUpdates dari
+  // instance kedua akan mengusir instance pertama, bukan sebaliknya.
+  const lock = acquireMasterLock(dir, opts.lock);
+  if (lock.kind === "held") {
+    write(
+      `master-bot: master-bot sudah berjalan di mesin ini (pid ${lock.pid}, kunci ${lock.path}).\n` +
+        `Instance ini dibatalkan tanpa menghubungi Telegram; master-bot yang sedang berjalan tidak terganggu.\n` +
+        `Untuk menjalankan ulang, hentikan dulu proses ${lock.pid}.`,
+    );
+    return 1;
+  }
+  releaseLock = lock.release;
+  try {
+    return await serve(opts, config, dir, log, write);
+  } finally {
+    releaseLock = undefined;
+    lock.release();
+  }
+}
+
+/** Pelepas kunci yang sedang dipegang, untuk jalur keluar darurat. */
+let releaseLock: (() => void) | undefined;
+
+async function serve(
+  opts: RunOptions,
+  config: ReturnType<typeof loadConfig>,
+  dir: string,
+  log: ReturnType<typeof createLogger>,
+  write: (line: string) => void,
+): Promise<number> {
   const launchDeps = realLaunchDeps(dir, config.ownerId);
   const bot = createMasterBot({
     token: config.token,
@@ -53,9 +87,11 @@ export async function run(opts: RunOptions = {}): Promise<number> {
     }
     if (err instanceof GrammyError && err.error_code === 409) {
       return (
-        `master-bot sudah berjalan di tempat lain (409 Conflict): ` +
-        `Telegram hanya mengizinkan satu poller per token.\n` +
-        `Hentikan proses master-bot yang lain, lalu jalankan lagi.`
+        `proses ini digantikan oleh master-bot lain yang memakai token yang sama (409 Conflict). ` +
+        `Telegram hanya mengizinkan satu penerima pesan per token dan memilih yang paling baru, ` +
+        `jadi master-bot yang lain itulah yang sekarang menerima pesan, bukan proses ini.\n` +
+        `Kemungkinan master-bot itu berjalan di mesin lain atau dengan folder data (BOT_SQUAD_HOME) lain. ` +
+        `Hentikan yang tidak dipakai; kalau yang ini yang mau dipakai, jalankan lagi setelah yang lain berhenti.`
       );
     }
     return `master-bot berhenti karena error: ${describeError(err)}`;
@@ -90,6 +126,9 @@ export async function run(opts: RunOptions = {}): Promise<number> {
 
 if (import.meta.main) {
   const fatal = (err: unknown) => {
+    try {
+      releaseLock?.();
+    } catch {}
     process.stderr.write(redact(`master-bot: error tak terduga: ${describeError(err)}`, knownSecrets) + "\n");
     process.exit(1);
   };
@@ -98,5 +137,7 @@ if (import.meta.main) {
   const ac = new AbortController();
   process.once("SIGINT", () => ac.abort());
   process.once("SIGTERM", () => ac.abort());
-  process.exit(await run({ signal: ac.signal }));
+  // MASTER_BOT_API_ROOT hanya untuk tes dengan Telegram tiruan.
+  const apiRoot = process.env.MASTER_BOT_API_ROOT?.trim();
+  process.exit(await run({ signal: ac.signal, client: apiRoot ? { apiRoot } : undefined }));
 }
