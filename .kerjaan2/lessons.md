@@ -12,3 +12,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Di zsh, argumen '=nama' tanpa kutip (mis. tmux -t =uji-01) diekspansi jadi path perintah; selalu kutip '=uji-01'
 - createMasterBot wajib diberi dataDir; di tes arahkan ke folder sementara, dan tulis registry.json hanya lewat writeRegistry di dalam serialized()
 - startFakeTelegram menerima argumen ketiga (token -> jawaban getMe) untuk token bot lain; stray.count menghitung permintaan dengan token tak dikenal
+- Bukti 'server plugin ikut mati' setelah kill -9 claude harus dicek beberapa detik kemudian dengan ps (pid, ppid, %CPU), bukan dari hilangnya bot.pid: shutdown menghapus bot.pid sebelum proses benar-benar keluar.

@@ -38,9 +38,9 @@ Pemilik (Telegram)
 ```
 bot-squad/            # root project & root git
 ├── CLAUDE.md
-├── package.json      # workspace Bun: hanya ["master"]; plugin/ memasang dependency-nya sendiri
+├── package.json      # workspace Bun: hanya ["master"]; dependency plugin/ dipasang terpisah oleh scripts/start-bot.sh
 ├── master/           # aplikasi master-bot (Bun + grammY), tes di master/test/
-├── scripts/          # start-bot.sh: hasil spike menyalakan satu bot
+├── scripts/          # start-bot.sh: hasil spike menyalakan bot (satu atau beberapa sekaligus)
 └── plugin/           # fork plugin Telegram resmi, sudah diganti nama jadi "bot-squad"
 ```
 
@@ -99,6 +99,7 @@ Prasyarat: `~/.bot-squad/master/.env` berisi `OWNER_TELEGRAM_ID`, dan `~/.bot-sq
 1. Menolak start kalau sesi tmux `<nama>` atau server plugin di `state/bot.pid` masih hidup, karena satu token hanya boleh punya satu poller.
 2. Menulis `state/access.json` (kalau belum ada) dengan `dmPolicy: "allowlist"` dan `allowFrom: [OWNER_TELEGRAM_ID]`. Pairing tidak diperlukan, dan pesan dari akun lain dibuang diam-diam, termasuk `/start`.
 3. Menandai `~/.bot-squad/bots` sebagai trusted di `~/.claude.json` (`projects["<path>"].hasTrustDialogAccepted = true`). Langkah ini dilewati kalau folder itu atau salah satu induknya sudah trusted. Workspace baru mewarisi trust dari folder induk.
+3b. Menjalankan `bun install` di `plugin/` dengan kunci `~/.bot-squad/locks/plugin-install.lock`, supaya beberapa bot bisa dinyalakan bersamaan (lihat "Menjalankan banyak bot bersamaan").
 4. Membuka sesi tmux dengan perintah berikut:
 
 ```bash
@@ -130,6 +131,29 @@ Prompt yang muncul saat start dan cara menanganinya:
 | "Quick safety check: Is this a project you created or one you trust?" (default **No, exit**) | Workspace baru yang belum trusted, juga tidak lewat folder induknya | Dicegah: trust `~/.bot-squad/bots` sekali di `~/.claude.json` (langkah 3) |
 | "WARNING: Claude Code running in Bypass Permissions mode" (default **No, exit**) | Setiap start dengan `--dangerously-skip-permissions` kalau `skipDangerousModePermissionPrompt` tidak aktif. Di MacBook ini tidak muncul karena sudah aktif di `~/.claude/settings.json`, tetapi muncul begitu pengaturan user diabaikan | Dicegah: `--settings '{"skipDangerousModePermissionPrompt":true}'` |
 | "WARNING: Loading development channels" (default **1. I am using this for local development**) | **Setiap** start dengan `--dangerously-load-development-channels`. Jawabannya tidak disimpan, dan tidak ada pengaturan untuk melewatinya (`allowedChannelPlugins` hanya ada di managed settings, yang butuh akses root dan berlaku untuk seluruh mesin) | Dijawab otomatis: `tmux send-keys -t <nama>: Enter` (langkah 5) |
+
+## Menjalankan banyak bot bersamaan (hasil spike 261112184702, Claude Code 2.1.322, bun 1.3.11)
+
+Diuji dengan dua bot: `uji-01` (@mirza_001_bot) dan `uji-02` (@mirza_002_bot), dinyalakan hampir bersamaan dengan `scripts/start-bot.sh`.
+
+**Folder state per bot sampai ke plugin.** `TELEGRAM_STATE_DIR` yang diberikan lewat `tmux new-session -e` diwariskan oleh `claude` ke proses server plugin. Komentar di `server.ts` ("Plugin-spawned servers don't get an env block") hanya berarti `.mcp.json` tidak punya blok `env`. Environment proses induk tetap diteruskan. Buktinya: uji-01 polling sebagai @mirza_001_bot dan uji-02 sebagai @mirza_002_bot, masing-masing menulis `bot.pid` di folder state-nya sendiri, dan environment tiap proses `server.ts` berisi `TELEGRAM_STATE_DIR` miliknya. Tidak perlu cara lain.
+
+**Pemasangan paket plugin.** Folder `plugin/` dipakai bersama semua bot. Upstream menjalankan `bun install` setiap kali server plugin start. `bun install` yang berjalan bersamaan di satu folder terbukti saling bertabrakan (`Failed to link which: EEXIST`, `FileNotFound: failed copying files from cache`). Ini terjadi baik saat `node_modules` belum ada maupun saat sudah lengkap. Proses yang kalah keluar dengan kode 1, dan karena script start upstream memakai `&&`, server plugin bot itu tidak pernah jalan. Perbaikannya:
+
+- Script `start` di `plugin/package.json` sekarang hanya `bun server.ts`. Plugin tidak lagi memasang paket sendiri.
+- `scripts/start-bot.sh` menjalankan `bun install --cwd plugin` sebelum tmux dibuka, satu per satu, dengan kunci folder `~/.bot-squad/locks/plugin-install.lock` (`mkdir` atomik, jalan di macOS dan Linux tanpa `flock`). Kalau pemilik kunci sudah mati, kuncinya dianggap basi dan diambil alih. Kalau kunci tidak lepas dalam 120 detik, start gagal. Kalau `node_modules` sudah lengkap, install hanya butuh beberapa milidetik.
+- Akibatnya, plugin yang dijalankan **di luar** `start-bot.sh` (misalnya `claude --plugin-dir plugin` manual) butuh `bun install` di `plugin/` lebih dulu. Master nanti harus memakai langkah yang sama, atau memanggil `start-bot.sh`.
+- Celah kecil yang tersisa: kalau dua proses mendapati kunci basi pada saat yang sama, keduanya bisa masuk bersamaan. Ini hanya terjadi setelah ada start yang crash di tengah install.
+
+**Mematikan satu bot tidak mengganggu bot lain, tetapi `kill -9` meninggalkan server yatim.**
+
+- `tmux kill-session -t uji-01`: server plugin uji-01 benar-benar keluar (dicek dengan `ps` beberapa detik kemudian) dan `bot.pid`-nya terhapus.
+- `kill -9` pada proses `claude` uji-01: sesi tmux-nya hilang karena perintah di pane-nya selesai, dan server plugin menjalankan `shutdown()`: `bot.pid` dihapus dan polling berhenti. Tetapi proses `bun server.ts` **tidak keluar**. Proses itu menjadi yatim (ppid 1, status `R`) dan memakan sekitar 99% CPU terus-menerus. Ini teramati berulang di macOS dengan Claude Code 2.1.322 dan bun 1.3.11, dengan atau tanpa shim. Karena `bot.pid` sudah hilang, cek di langkah 1 `start-bot.sh` dan cek pid basi di `server.ts` tidak menemukannya. Start ulang bot itu tetap berhasil (polling sudah berhenti), tetapi proses yatimnya tetap menumpuk.
+- Jangan memakai hilangnya `bot.pid` sebagai bukti server sudah mati. `shutdown()` menghapusnya sebelum proses benar-benar keluar. Cek dengan `ps -o pid,ppid,stat,%cpu,etime -p <pid>`.
+- Cara membersihkan (belum diuji di spike ini, karena izin agen menolak mematikan proses): cari `bun server.ts` yang environment-nya berisi `TELEGRAM_STATE_DIR` bot itu (`ps -E` di macOS, `/proc/<pid>/environ` di Linux), lalu matikan. `SIGTERM` kemungkinan tidak cukup karena hanya memanggil `shutdown()` lagi, yang sudah macet, jadi pakai `kill -9`. Penyebab macetnya belum dicari (follow-up F1 tiket 261112184702). Master nanti perlu membersihkan server yatim seperti ini sebelum dan sesudah me-restart bot.
+- Selama itu, sesi tmux, `bot.pid`, dan polling uji-02 tetap hidup, tanpa 409 atau error di stderr. Menyalakan ulang uji-01 saat uji-02 hidup juga lancar.
+
+Cara merekam stderr plugin (pesan `polling as @...`): taruh shim `bun` di depan `PATH` sebelum `start-bot.sh` dijalankan, misalnya skrip yang menjalankan `exec <bun-asli> "$@" 2> >(tee -a <log> >&2)`. Shim ini hanya terpakai kalau server tmux belum hidup, karena sesi baru mengambil `PATH` dari server tmux. Bun shell di script `start` juga memanggil `bun` lewat `PATH`, jadi shim terpanggil dua kali (`bun run` lalu `bun server.ts`) dan setiap baris stderr tercatat ganda. Kalau perlu, beri shim penanda di environment supaya pemanggilan kedua langsung `exec` ke bun asli. Log ini bisa berisi token (stack trace grammY), jadi simpan di luar repo.
 
 ## Concern yang harus ditangani
 
