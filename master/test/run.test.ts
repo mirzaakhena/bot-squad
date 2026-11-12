@@ -133,7 +133,7 @@ test("berjalan penuh: setMyCommands, membalas pemilik, mengabaikan akun lain, to
     expect(await done).toBe(0);
 
     const cmds = tg.calls.find((c) => c.method === "setMyCommands");
-    expect((cmds!.params.commands as any[]).map((c) => c.command)).toEqual(["start", "help"]);
+    expect((cmds!.params.commands as any[]).map((c) => c.command)).toEqual(["start", "help", "register"]);
     const sent = tg.calls.filter((c) => c.method === "sendMessage");
     expect(sent).toHaveLength(1);
     expect(sent[0]!.params.chat_id).toBe(OWNER);

@@ -27,13 +27,13 @@ Pemilik bisa mendaftarkan bot baru lewat master-bot. Nama dan token divalidasi, 
 ## Done when
 
 - [ ] (owner) Setelah pemilik mengirim perintah registrasi, pesan yang berisi token langsung hilang dari chat, baik registrasinya berhasil maupun gagal.
-- [ ] Nama yang tidak sesuai aturan, nama yang sudah terdaftar, dan token yang tidak valid ditolak dengan alasan yang jelas, dan tidak ada folder atau catatan yang tertinggal.
-- [ ] Token yang sudah dipakai bot lain yang terdaftar ditolak.
-- [ ] Registrasi yang berhasil membuat folder state dan folder kerja untuk bot itu. Token hanya bisa dibaca oleh pemilik akun mesin.
-- [ ] Daftar izin bot baru berisi pemilik saja, tanpa pairing.
-- [ ] Bot baru tercatat di daftar bot, dan daftar itu tidak rusak walaupun aplikasi mati di tengah penulisan.
-- [ ] Balasan ke pemilik menyebut username Telegram bot yang terdaftar dan tidak pernah memuat token.
-- [ ] Semua aturan validasi di atas dibuktikan dengan tes otomatis.
+- [x] Nama yang tidak sesuai aturan, nama yang sudah terdaftar, dan token yang tidak valid ditolak dengan alasan yang jelas, dan tidak ada folder atau catatan yang tertinggal.
+- [x] Token yang sudah dipakai bot lain yang terdaftar ditolak.
+- [x] Registrasi yang berhasil membuat folder state dan folder kerja untuk bot itu. Token hanya bisa dibaca oleh pemilik akun mesin.
+- [x] Daftar izin bot baru berisi pemilik saja, tanpa pairing.
+- [x] Bot baru tercatat di daftar bot, dan daftar itu tidak rusak walaupun aplikasi mati di tengah penulisan.
+- [x] Balasan ke pemilik menyebut username Telegram bot yang terdaftar dan tidak pernah memuat token.
+- [x] Semua aturan validasi di atas dibuktikan dengan tes otomatis.
 
 ## Out of scope
 
@@ -64,3 +64,29 @@ Pemilik bisa mendaftarkan bot baru lewat master-bot. Nama dan token divalidasi, 
 - Lane strict: menangani token BotFather, izin file, dan registry yang tidak boleh rusak
 - Menunggu 4704 (butuh kerangka master-bot). Skema registry.json yang dibuat di sini dipakai 4706
 - 2026-11-12 moved to todo: Disetujui pemilik, semua pertanyaan terjawab; menunggu 4704
+- Red-proof: aturan nama (pola, panjang 32, awalan '-'), nama cadangan master, nama sudah terdaftar, folder sudah ada, bentuk token, string token master-bot, ID master-bot, ID bot duplikat, 401/404 tidak valid, 5xx/429/jaringan/timeout coba lagi, mode folder 0700 dan .env 0600, access.json allowlist pemilik, pembersihan folder saat gagal, registry rusak ditolak, tulis atomik, hapus file sementara, antrean serial, hapus pesan, hapus hanya bila ada argumen, peringatan hapus gagal, jumlah argumen, penjaga pemilik: semuanya dirusak satu per satu, all red
+- getMe untuk token bot baru memakai fetch langsung, bukan grammY: hasilnya hanya jenis kegagalan tanpa pesan error, karena error grammY memuat URL berisi token
+- Folder bot dibuat dulu, baru registry ditulis: kalau proses mati di antaranya, yang tertinggal folder tanpa catatan (ditolak dengan alasan 'folder sudah ada', pemilik bisa menghapusnya), bukan catatan tanpa folder yang akan dinyalakan 4706
+- Token yang bentuknya bukan token bot ditolak tanpa menghubungi Telegram, supaya teks sembarang tidak pernah masuk ke URL API
+
+## Manual checks
+- M1 [waiting] (item 1) 1. Isi ~/.bot-squad/master/.env dengan MASTER_BOT_TOKEN dan OWNER_TELEGRAM_ID, lalu jalankan 'bun run --cwd master start' dari root repo.
+  2. Buat bot uji baru di @BotFather dan salin tokennya.
+  3. Di chat pribadi dengan master-bot, kirim '/register Salah <token>': pesan itu hilang dari chat dan master-bot membalas 'Nama tidak sesuai aturan'.
+  4. Kirim '/register uji-03 <token>': pesan itu hilang dan master-bot membalas 'Bot @<username> terdaftar sebagai uji-03'.
+  5. Kirim lagi '/register uji-03 <token>': pesan hilang, balasan 'sudah terdaftar'. Di ketiga kasus tidak ada pesan berisi token yang tersisa di chat.
+
+## Handoff
+Menambah /register <nama> <token> di master-bot. master/src/register.ts memvalidasi nama, token (bentuk, getMe lewat fetch tanpa polling, ID master-bot, ID bot duplikat), lalu membuat bots/<nama>/{state,workspace} 0700, state/.env 0600, access.json allowlist pemilik. master/src/registry.ts memegang bentuk registry.json { bots: { nama: { telegramId, username, status, createdAt } } }, menulisnya atomik, dan serialized() mengantrekan semua perubahan; 4706 harus memakai readRegistry/writeRegistry di dalam serialized(), jangan menulis file itu sendiri. Pesan /register yang berargumen selalu dihapus lebih dulu. createMasterBot kini wajib diberi dataDir. Token tidak boleh masuk registry, balasan, atau log.
+
+## Review
+- 2026-11-12 strict, round 1, at 162287c: passed.
+  1: (owner) tidak memblokir; M1 berisi langkah dari awal (isi .env, jalankan master, buat bot uji, tiga kiriman) dan hasil yang harus terlihat. Penghapusan sendiri terbukti tes: membuang ctx.deleteMessage() membuat 26 tes merah
+  2: tes register.test.ts membandingkan isi folder data sebelum/sesudah untuk 8 nama salah, master, nama terdaftar, folder sudah ada, 401/404/bentuk salah, 5xx/429/timeout; mutasi {0,32}, awalan '-', hapus 'master', hapus cek folder, 404 bukan invalid, 5xx jadi invalid, hapus cek bentuk token: semuanya merah
+  3: mutasi cek telegramId duplikat, cek ID master-bot, dan cek string token master-bot masing-masing merah
+  4: tes stat mode 0700 folder dan 0600 .env; mutasi .env 0644 merah, hapus pembersihan folder saat gagal merah
+  5: access.json dicek tepat {allowlist, [pemilik]}; mutasi tambah ID lain dan dmPolicy pairing masing-masing merah
+  6: tulis langsung ke registry.json (tanpa tmp+rename) merah, hapus pembersihan tmp merah, hilangkan serialized() merah; tes SIGKILL sebelum rename meninggalkan registry lama
+  7: menyisipkan token ke balasan sukses membuat 14 tes merah (pemeriksaan semua panggilan API dan log)
+  8: bun test di salinan: 94 pass; 21 mutasi di register.ts, registry.ts, bot.ts semuanya merah
+  note: writeRegistry tidak fsync folder setelah rename, jadi saat listrik mati rename bisa hilang (registry tetap utuh, bukan rusak); folder bots/ yang sudah ada tidak di-chmod 0700. Tidak ada skrip/CI lain di repo selain bun test

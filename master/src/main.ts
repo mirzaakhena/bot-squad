@@ -1,6 +1,6 @@
 import { GrammyError, type ApiClientOptions } from "grammy";
 import { createMasterBot, COMMANDS } from "./bot.ts";
-import { ConfigError, loadConfig, type ConfigSource } from "./config.ts";
+import { ConfigError, dataDir, loadConfig, type ConfigSource } from "./config.ts";
 import { createLogger, describeError, redact } from "./log.ts";
 
 export type RunOptions = ConfigSource & {
@@ -36,6 +36,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
     ownerId: config.ownerId,
     log,
     client: opts.client,
+    dataDir: dataDir(opts),
   });
 
   const explain = (err: unknown): string => {

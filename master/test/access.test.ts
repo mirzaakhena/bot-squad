@@ -15,6 +15,8 @@ function setup() {
     log: (m) => logs.push(m),
     client: { apiRoot: tg.apiRoot },
     botInfo: ME,
+    // Tes ini tidak pernah menulis data; folder ini tidak dibuat.
+    dataDir: "/nonexistent/bot-squad-access-test",
   });
   return { tg, logs, bot };
 }
@@ -60,7 +62,7 @@ describe("pemilik dilayani", () => {
         expect(p.chat_id).toBe(OWNER);
         expect(String(p.text)).toContain("/start");
         expect(String(p.text)).toContain("/help");
-        expect(String(p.text)).not.toContain("/register");
+        expect(String(p.text)).toContain("/register");
         expect(JSON.stringify(p)).not.toContain(TOKEN);
       } finally {
         tg.stop();
