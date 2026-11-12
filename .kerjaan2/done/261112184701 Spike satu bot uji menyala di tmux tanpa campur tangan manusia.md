@@ -28,7 +28,7 @@ Temukan dan catat satu cara yang terbukti berhasil untuk menyalakan satu bot uji
 - [x] Ada catatan di CLAUDE.md berisi perintah persis untuk menyalakan satu bot, termasuk cara memuat plugin lokal sebagai channel.
 - [x] Catatan itu mendaftar setiap prompt yang muncul saat start, lengkap dengan cara mencegah atau menjawabnya otomatis.
 - [x] Mengikuti catatan itu dari folder kerja yang benar-benar baru, sesi tmux sampai ke kondisi siap tanpa input manusia.
-- [ ] (owner) Pemilik mengirim pesan ke bot uji di Telegram dan mendapat balasan dari Claude.
+- [x] (owner) Pemilik mengirim pesan ke bot uji di Telegram dan mendapat balasan dari Claude.
 - [ ] (owner) Pesan dari akun Telegram selain pemilik tidak dibalas dan tidak menghasilkan kode pairing.
 - [x] Hal yang tidak berhasil atau masih belum pasti dicatat di bagian concern CLAUDE.md.
 
@@ -41,23 +41,26 @@ Temukan dan catat satu cara yang terbukti berhasil untuk menyalakan satu bot uji
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Trust folder dicegah dengan menulis hasTrustDialogAccepted untuk ~/.bot-squad/bots di ~/.claude.json, tidak dengan menjawab dialog trust otomatis
+- A1 [confirmed] Trust folder dicegah dengan menulis hasTrustDialogAccepted untuk ~/.bot-squad/bots di ~/.claude.json, tidak dengan menjawab dialog trust otomatis
   Why: Trust diwariskan ke subfolder, jadi cukup ditulis sekali; menjawab dialog yang default-nya 'No, exit' berisiko membuat sesi keluar
   If wrong: Hapus entri projects["~/.bot-squad/bots"] dari ~/.claude.json dan ganti langkah 3 skrip dengan menjawab dialog lewat tmux send-keys Down Enter
-- A2 [unseen] Bot dijalankan dengan --setting-sources project,local supaya plugin dan hook global pemilik (WhatsApp, playwright, hook kerjaan2) tidak ikut termuat
+  Confirmed by owner, 2026-11-12
+- A2 [confirmed] Bot dijalankan dengan --setting-sources project,local supaya plugin dan hook global pemilik (WhatsApp, playwright, hook kerjaan2) tidak ikut termuat
   Why: Bot berjalan bebas izin; plugin pemilik yang lain tidak perlu ada di bot
   If wrong: Hapus --setting-sources dari skrip; prompt bypass tetap dicegah oleh --settings
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - 2026-11-12 moved to todo: Pemilik memberi token uji untuk tiket ini
 - Plugin dimuat dengan --plugin-dir + plugin:telegram@inline, bukan server:<name> lewat --mcp-config atau marketplace lokal. Alasannya: berlaku hanya untuk sesi itu, tidak menulis konfigurasi global (marketplace lokal menulis known_marketplaces.json), tidak butuh file JSON per bot, dan skill plugin tetap ikut. Ketiganya terbukti mendaftarkan channel
 
 ## Manual checks
-- M1 [waiting] (item 4) 1. Di terminal Mac, buka folder repo bot-squad (setelah tiket ini di-merge) atau worktree tiket ini.
+- M1 [ok] (item 4) 1. Di terminal Mac, buka folder repo bot-squad (setelah tiket ini di-merge) atau worktree tiket ini.
   2. Jalankan: scripts/start-bot.sh uji-01. Langkah ini akan menandai ~/.bot-squad/bots sebagai trusted di ~/.claude.json.
   3. Tunggu sampai muncul baris "start-bot: 'uji-01' siap" (sekitar 3 detik).
   4. Dari akun Telegram pemilik, kirim pesan apa saja ke bot uji.
   5. Yang seharusnya terjadi: balasan dari Claude muncul di Telegram. Kalau perlu, lihat sesinya dengan tmux attach -t uji-01.
+  Checked by owner, 2026-11-12
 - M2 [waiting] (item 5) 1. Pastikan bot uji-01 sudah hidup (langkah 1-3 dari item 4).
   2. Dari akun Telegram lain (bukan pemilik), kirim pesan biasa ke bot uji, lalu kirim /start.
   3. Yang seharusnya terjadi: tidak ada balasan sama sekali, termasuk tidak ada kode pairing.

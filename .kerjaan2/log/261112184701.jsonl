@@ -15,3 +15,6 @@
 {"t":"2026-11-12 19:15:16","event":"agent","role":"reviewer","agent":"a495b2f6cf11c5c05","step":"review:1:0:0","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
 {"t":"2026-11-12 19:20:02","event":"verdict","result":"pass","round":1,"commit":"423913f","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"reviewer:a495b2f6cf11c5c05"}
 {"t":"2026-11-12 19:20:24","event":"landed","branch":"k2/261112184701-spike-satu-bot-uji","files":["CLAUDE.md","scripts/start-bot.sh"],"session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 19:25:37","event":"assumption-confirmed","key":"A1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 19:25:37","event":"assumption-confirmed","key":"A2","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-12 19:39:09","event":"manual-ok","key":"M1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}

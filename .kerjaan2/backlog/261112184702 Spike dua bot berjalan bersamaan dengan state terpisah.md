@@ -5,7 +5,7 @@ lane: standard
 labels: []
 blocked_by: [261112184701]
 related: []
-touches: []
+touches: [CLAUDE.md, scripts/start-bot.sh, plugin/package.json]
 created: 2026-11-12 18:47
 ---
 
@@ -33,3 +33,19 @@ Buktikan bahwa dua bot bisa berjalan bersamaan di satu mesin dan benar-benar ter
 
 - Menulis kode master-bot.
 - Mengganti nama plugin.
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Questions
+- Q1 [answered] Token bot uji kedua belum ada (baru uji-01). Pilihan: (a) pemilik membuat bot uji kedua di BotFather dan menyimpan tokennya di ~/.bot-squad/bots/uji-02/state/.env (TELEGRAM_BOT_TOKEN=...), lalu tiket ini masuk antrean; (b) tiket tetap di backlog sampai token ada, dan 4706 ikut menunggu; (c) persempit tiket: tanpa token kedua, hanya uji tabrakan bun install. Rekomendasi (a), karena (c) tidak bisa membuktikan item 3-5 dan 4706 tetap butuh hasilnya.
+  → (a) pemilik akan membuat bot uji kedua dan memberikan tokennya, disimpan di ~/.bot-squad/bots/uji-02/state/.env. Token BELUM diberikan, jadi 4702 tetap di backlog sampai token ada. (owner, 2026-11-12)
+- Q2 [answered] Item 1 (folder state sampai ke plugin) praktis sudah terjawab spike 4701: start-bot.sh meneruskan TELEGRAM_STATE_DIR lewat tmux -e dan plugin membaca token uji-01 dari folder state-nya. Pilihan: (a) item 1 tetap, worker cukup membuktikannya ulang dengan dua bot dan mencatat buktinya; (b) hapus item 1. Rekomendasi (a): dengan dua bot, buktinya jauh lebih kuat (tiap bot polling sebagai @username-nya sendiri).
+  → (a) item 1 tetap, dibuktikan ulang dengan dua bot. (owner, 2026-11-12)
+- Q3 [answered] Seberapa jauh worker boleh memperbaiki tabrakan bun install di folder plugin bersama? Pilihan: (a) hanya mencatat di CLAUDE.md; (b) mengubah scripts/start-bot.sh supaya bun install dijalankan sekali dengan kunci sebelum tmux dibuka, dan kalau terbukti perlu, mengubah script start di plugin/package.json menjadi hanya 'bun server.ts'; (c) salinan plugin per bot. Rekomendasi (b): perbaikannya kecil dan langsung dipakai 4706. (c) memboroskan disk dan membuat rebrand/upgrade harus disalin ke setiap bot.
+  → (b) install sekali dengan kunci, dan kalau terbukti perlu, script start diubah menjadi 'bun server.ts'. (owner, 2026-11-12)
+- Q4 [answered] Item 5 'mematikan satu bot': caranya apa dan apa buktinya? Rekomendasi: tmux kill-session -t <nama>. Bukti: proses server plugin bot itu (bot.pid) ikut mati, sedangkan sesi tmux, bot.pid, dan polling bot yang lain tetap hidup (worker bisa mengeceknya lewat proses dan log debug, tanpa harus mengirim pesan). Alternatif: juga uji crash dengan kill -9 pada proses claude. Rekomendasi: cukup kill-session ditambah satu kill -9, karena di dunia nyata crash juga terjadi.
+  → kill-session ditambah satu kill -9. (owner, 2026-11-12)
+
+## Decisions
+- Lane standard: spike, hanya catatan dan skrip start yang mudah dibatalkan
+- Tidak blocked oleh tiket lain di board (4701 sudah done), tetapi tidak bisa jalan sebelum pemilik menyerahkan token bot uji kedua; tetap di backlog sampai token ada
