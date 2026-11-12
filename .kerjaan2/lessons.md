@@ -28,3 +28,5 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Scratchpad dipakai bersama semua agen: simpan berkas sementara di subfolder ber-ID tiket, jangan nama generik (bak.ts). 261112223102 sempat meng-commit tes milik 261112230301 karena itu.
 - Done when 'tanpa variabel perilaku tidak berubah' harus diuji di jalur jaringan (token sah + proxy mati, cek tujuan permintaan), bukan hanya di jalur gagal konfigurasi yang berhenti sebelum client dipakai.
 - bot.init grammY mencoba ulang tanpa henti saat Telegram tak terjangkau, dan master-bot tidak bereaksi pada SIGTERM selama itu; proxy tiruan harus memutus koneksi (jawaban 403 proxy dianggap jawaban server)
+- Soket tmux di scratchpad melebihi batas panjang path (File name too long); pakai tmux -S ./s dengan cd ke folder soket
+- Statusline dari --settings mengalahkan statusLine project/local workspace dan berjalan dengan cwd workspace serta env sesi (Claude Code 2.1.323)

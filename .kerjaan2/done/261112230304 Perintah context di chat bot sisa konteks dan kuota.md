@@ -23,12 +23,12 @@ Ikuti persis /context di mirza-bots (keputusan pemilik): format balasan dari /Us
 
 ## Done when
 
-- [ ] /context di chat bot membalas dengan isi dan format renderContext mirza-bots, dari status.json bot itu sendiri: bagian Context (bar titik, persen, token), Rate Limit 5h dan 7d (persen dan "reset <durasi>", bagian dihilangkan kalau tidak ada data, bukan 0%), metadata yang barisnya dilewati kalau tanpa data, dan "Last update: HH:MM WIB (Xm ago)"; label berbahasa Inggris; tanpa mengirim apa pun ke sesi Claude.
-- [ ] Kalau data belum tersedia (sesi baru) atau status.json tidak terbaca, balasannya menjelaskan itu, bukan angka kosong atau salah.
-- [ ] Pengirim yang tidak ada di allowFrom tidak mendapat balasan apa pun atas /context, dibuktikan tes.
-- [ ] Statusline bot menangkap payload lalu meneruskan payload yang sama ke statusline pendahulu (lapisan project/local workspace bot, lalu user ~/.claude/settings.json) dan mencetak keluarannya; gagal menangkap tidak mematikan baris status; kalau pendahulu tidak bisa dipastikan, tidak ada rantai yang merusak dipasang dan /context melapor apa adanya.
-- [ ] Statusline milik pemilik di luar bot-squad tidak berubah: tidak ada berkas pengaturan Claude yang ditulis.
-- [ ] Dibuktikan dengan tes otomatis.
+- [x] /context di chat bot membalas dengan isi dan format renderContext mirza-bots, dari status.json bot itu sendiri: bagian Context (bar titik, persen, token), Rate Limit 5h dan 7d (persen dan "reset <durasi>", bagian dihilangkan kalau tidak ada data, bukan 0%), metadata yang barisnya dilewati kalau tanpa data, dan "Last update: HH:MM WIB (Xm ago)"; label berbahasa Inggris; tanpa mengirim apa pun ke sesi Claude.
+- [x] Kalau data belum tersedia (sesi baru) atau status.json tidak terbaca, balasannya menjelaskan itu, bukan angka kosong atau salah.
+- [x] Pengirim yang tidak ada di allowFrom tidak mendapat balasan apa pun atas /context, dibuktikan tes.
+- [x] Statusline bot menangkap payload lalu meneruskan payload yang sama ke statusline pendahulu (lapisan project/local workspace bot, lalu user ~/.claude/settings.json) dan mencetak keluarannya; gagal menangkap tidak mematikan baris status; kalau pendahulu tidak bisa dipastikan, tidak ada rantai yang merusak dipasang dan /context melapor apa adanya.
+- [x] Statusline milik pemilik di luar bot-squad tidak berubah: tidak ada berkas pengaturan Claude yang ditulis.
+- [x] Dibuktikan dengan tes otomatis.
 - [ ] (owner) Pemilik mengirim /context ke bot uji dan angkanya masuk akal.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
@@ -61,9 +61,39 @@ Ikuti persis /context di mirza-bots (keputusan pemilik): format balasan dari /Us
 - A5 [unseen] Bot yang sudah hidup baru mendapat /context setelah dinyalakan ulang (start-bot.sh atau /register ulang); belum ada /restart. Dicatat di CLAUDE.md.
   Why: --settings hanya dibaca saat claude start.
   If wrong: Tidak ada.
+- A6 [unseen] status.json sesi sebelumnya dihapus saat bot dinyalakan, supaya /context sesi baru tidak menampilkan angka sesi lama.
+  Why: Done when 2: sesi baru harus dijelaskan belum ada data, bukan angka lama.
+  If wrong: Hapus rmSync status.json di prepareStatusline (master/src/statusline.ts).
+- A7 [unseen] Penantian data /context berjalan tanpa await di handler grammY, supaya tunggu sampai 18 detik tidak menahan pesan lain.
+  Why: grammY memproses update berurutan.
+  If wrong: Kembalikan ke await di bot.command('context').
 
 ## Decisions
 - Lane standard: fitur baca-saja baru di plugin plus satu pengaturan --settings saat start; tidak menyentuh login, uang, atau data yang tak bisa dipulihkan, dan mudah dibatalkan.
 - Tidak solo dan tidak menunggu tiket lain: papan kosong, dan /context dijawab plugin langsung sehingga tidak butuh mekanisme 261112230302. 261112225308 (riset kuota) hanya related, tetap di backlog.
 - Rantai statusline: master menentukan pendahulu saat start (workspace .claude/settings.local.json, .claude/settings.json, lalu ~/.claude/settings.json, seperti resolveChain mirza-bots) dan menyematkannya ke perintah bridge di --settings. Berkas tak terbaca atau JSON rusak berarti tidak pasti: bridge dipasang tanpa rantai (hanya menangkap), dicatat di log; start bot tidak gagal.
 - Q3 tidak perlu ditanyakan lagi: pemilik meminta ikut mirza-bots. Akibatnya statusline user (rekam-statusline.sh) ikut dijalankan di sesi bot, sama seperti di mirza-bots. Bridge mengenali dirinya sendiri (isOurBridge) supaya tidak merantai ke dirinya.
+- Pagar 3 mengikuti mirza-bots, bukan keputusan awal 'bridge tanpa rantai': kalau berkas settings ada tetapi tak terbaca, bridge tidak dipasang sama sekali dan /context melaporkan alasannya. Pemilik meminta pagar README mirza-bots (Q3).
+- Rantai disimpan di <state>/chained-statusline yang ditulis master saat start (seperti mirza-bots), bukan disematkan ke perintah --settings, supaya tidak ada kutip shell bertingkat. Perintah bridge hanya membawa path state.
+
+## Manual checks
+- M1 [waiting] (item 7) 1. Gabungkan tiket ini, lalu nyalakan ulang bot uji (scripts/start-bot.sh <nama> setelah sesi lamanya dimatikan, atau /register bot baru).
+  2. Di chat pribadi bot itu kirim satu pesan biasa dan tunggu jawabannya.
+  3. Kirim /context.
+  4. Harus muncul bagian Context dengan bar titik, persen dan token, Rate Limit 7d (dan 5h kalau akun memilikinya) dengan 'reset <durasi>', baris model/Session/CWD/Cost, dan 'Last update: HH:MM WIB' dengan umur beberapa detik; angkanya cocok dengan baris status di tmux attach -t <nama>.
+
+## Handoff
+/context dijawab plugin dari <state>/status.json bot itu sendiri, tanpa ke Claude; hanya pengirim allowFrom di DM (contextAllowed). Render adalah salinan renderContext mirza-bots (plugin/context-render.ts), jangan diubah. Master (master/src/statusline.ts, dipanggil launch.ts sebelum tmux) mencari statusline pendahulu local>project>user, menulis chained-statusline dan statusline.json di state, lalu memasang plugin/bot-squad-statusline.ts lewat --settings di claudeArgv; kalau tak pasti, tidak dipasang. Yang tidak boleh rusak: tidak ada berkas pengaturan Claude yang ditulis; bridge selalu meneruskan ke pendahulu walau tangkap gagal; bridge dan context.ts hanya mengimpor node:. claudeArgv kini menerima argumen statusLine.
+
+## Review
+- 2026-11-13 standard, round 1, at 755007b: passed.
+  1: context-render.ts identik byte dengan render.ts mirza-bots selain komentar. Uji mandiri (HOME sementara): bridge via sh -c dari --settings lalu answerContext, hasilnya === renderContext mirza-bots asli. context-command.test (server nyata) lulus, stdout tanpa notifikasi ke Claude.
+  2: context.test 'setiap jalan keluar' lulus (sesi baru, tunggu, tak muncul, JSON rusak, EACCES, tanpa bridge); uji mandiri: settings user chmod 000 -> refused, /context membalas alasannya tanpa angka.
+  3: context-command.test lulus: orang asing DM (pairing), pemilik di supergroup, orang asing di grup tidak dikirimi apa pun; pemilik DM dibalas sekali.
+  4: uji mandiri: pendahulu .sh di path berspasi menerima payload sama persis, keluarannya tampil utuh; refused untuk berkas tak terbaca dan bridge sendiri, argv tanpa statusLine. statusline-bridge, statusline, launch test lulus.
+  5: statusline.ts hanya membaca settings; uji mandiri: isi dan mtime settings user tetap, workspace/.claude kosong; yang ditulis hanya berkas di state. Statusline pemilik dirantai, tidak digusur.
+  6: k2 test pada 5 berkas tes terkait: 110 pass 0 fail.
+  7: (owner) M1 bisa diikuti dari awal dan berakhir pada yang harus terlihat.
+  note: sesi claude nyata di tmux (statusLine dari --settings dipakai walau --setting-sources project,local) dinilai dari klaim dan CLAUDE.md saja; butuh login akun.
+  note: di statusline.test, cek claudeArgv('/p', null) tanpa statusLine tak mungkin gagal (literal null); kriteria terbukti lewat launch.test dan uji mandiri.
+  note: rantai ditetapkan saat start (mirza-bots memeriksa ulang tiap /context); ganti statusline user baru berlaku setelah bot dinyalakan ulang.

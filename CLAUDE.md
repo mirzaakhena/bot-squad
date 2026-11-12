@@ -56,7 +56,8 @@ Token dan state **tidak boleh** masuk repo.
 ├── master/.env              # token master-bot + telegram user ID pemilik
 ├── registry.json            # daftar bot terdaftar (sumber kebenaran untuk master)
 └── bots/<nama-bot>/
-    ├── state/               # TELEGRAM_STATE_DIR: .env (token), access.json, inbox/, bot.pid, plugin.log
+    ├── state/               # TELEGRAM_STATE_DIR: .env (token), access.json, inbox/, bot.pid, plugin.log,
+    │                        #   status.json, chained-statusline, statusline.json (untuk /context)
     └── workspace/           # working directory Claude Code untuk bot ini
 ```
 
@@ -113,12 +114,13 @@ tmux new-session -d -s <nama> -x 200 -y 50 -c ~/.bot-squad/bots/<nama>/workspace
   -e TELEGRAM_STATE_DIR=$HOME/.bot-squad/bots/<nama>/state \
   claude \
     --setting-sources project,local \
-    --settings '{"skipDangerousModePermissionPrompt":true}' \
+    --settings '{"skipDangerousModePermissionPrompt":true,"statusLine":{"type":"command","command":"bun '"'"'<repo>/plugin/bot-squad-statusline.ts'"'"' '"'"'<state>'"'"'"}}' \
     --dangerously-skip-permissions \
     --plugin-dir <repo>/plugin \
     --dangerously-load-development-channels plugin:bot-squad@inline
 ```
 
+   `statusLine` hanya ada kalau statusline pendahulu bisa dipastikan (lihat "/context di chat bot").
 5. Membaca layar tmux setiap detik. Begitu dialog development channel muncul, skrip mengirim `Enter` (pilihan 1 sudah terpilih). Bot dianggap siap kalau baris `bypass permissions on` tampil dan proses di `bot.pid` hidup. Kalau muncul dialog lain, skrip berhenti dengan error tanpa menekan apa pun, karena pilihan default dialog itu adalah "No, exit". Dalam uji, bot siap sekitar 3 detik.
 
 Cara memuat plugin lokal sebagai channel:
@@ -177,7 +179,7 @@ Server plugin setiap bot selalu menulis `<TELEGRAM_STATE_DIR>/plugin.log` (untuk
 | :- | :- |
 | `mulai pid=<pid>` | Server plugin menyala. |
 | `polling-mulai bot=@<username>` | Polling berjalan (sama dengan `polling as @...` di stderr). Muncul lagi setiap kali polling dimulai ulang. |
-| `pesan hasil=<hasil> chat= msg= jenis= tanggal= diterima= diteruskan= telat_terima= telat_teruskan= total=` | Satu baris per pesan masuk. `tanggal` = tanggal pesan dari Telegram (resolusi detik), `diterima` = saat `getUpdates` mengembalikan pesan itu, `diteruskan` = saat notifikasi selesai ditulis ke Claude. `telat_terima` = diterima - tanggal, `telat_teruskan` = diteruskan - diterima, `total` = diteruskan - tanggal. `hasil`: `diteruskan`, `izin` (jawaban izin `yes/no xxxxx`), `dibuang` (pengirim tidak di allowlist), `pairing`, `tidak-diteruskan` (perintah plugin `/start`, `/help`, `/status`, atau jenis pesan yang tidak didukung), `gagal` (notifikasi ke Claude gagal, ada `alasan`). Selain `diteruskan`/`izin`, kolom waktu teruskan berisi `-`. |
+| `pesan hasil=<hasil> chat= msg= jenis= tanggal= diterima= diteruskan= telat_terima= telat_teruskan= total=` | Satu baris per pesan masuk. `tanggal` = tanggal pesan dari Telegram (resolusi detik), `diterima` = saat `getUpdates` mengembalikan pesan itu, `diteruskan` = saat notifikasi selesai ditulis ke Claude. `telat_terima` = diterima - tanggal, `telat_teruskan` = diteruskan - diterima, `total` = diteruskan - tanggal. `hasil`: `diteruskan`, `izin` (jawaban izin `yes/no xxxxx`), `dibuang` (pengirim tidak di allowlist), `pairing`, `tidak-diteruskan` (perintah plugin `/start`, `/help`, `/status`, `/context`, atau jenis pesan yang tidak didukung), `gagal` (notifikasi ke Claude gagal, ada `alasan`). Selain `diteruskan`/`izin`, kolom waktu teruskan berisi `-`. |
 | `getUpdates-gagal ke=<n> durasi= ulang= alasan=` | Satu panggilan `getUpdates` gagal. `ke` = kegagalan ke berapa berturut-turut, `durasi` = lama panggilan itu sampai gagal (koneksi yang macet terlihat di sini, batas client grammY 500 detik), `ulang` = jeda sebelum grammY mencoba lagi (`3s`, atau `retry_after` untuk 429), atau `oleh-plugin` untuk 401/409 yang dilempar ke loop plugin. Ini percobaan ulang internal grammY yang dulu hanya terlihat dengan `DEBUG=grammy:error`. |
 | `getUpdates-pulih gagal=<n> sejak= lama=` | `getUpdates` pertama yang berhasil setelah gangguan: berapa kali gagal, sejak kapan, dan berapa lama gangguannya. |
 | `polling-gagal ke= ulang= alasan=` | `bot.start` gagal (misalnya 409, atau `getMe` gagal saat start), lalu loop plugin mencoba lagi. |
@@ -189,6 +191,18 @@ Server plugin setiap bot selalu menulis `<TELEGRAM_STATE_DIR>/plugin.log` (untuk
 Cara membaca keterlambatan: cari baris `pesan` dengan `msg` yang sama dengan `message_id` di transkrip. `total` besar dengan `telat_terima` besar berarti pesan terlambat sampai ke plugin (di Telegram atau jaringan); lihat baris `getUpdates-gagal`/`getUpdates-pulih` di sekitar `tanggal` itu untuk penyebabnya. Kalau tidak ada gangguan tercatat tetapi `telat_terima` besar, curigai satu `getUpdates` yang menggantung tanpa error (akan terlihat sebagai `durasi` panjang kalau akhirnya gagal). `telat_teruskan` besar berarti plugin lambat meneruskan (misalnya unduh foto). Kalau `diteruskan` cepat tetapi Claude baru bereaksi lama kemudian (dibanding waktu catatan di transkrip), jedanya ada di Claude. `telat_terima` bisa sedikit negatif (sampai -1 detik) karena `tanggal` dibulatkan ke detik.
 
 `BOT_SQUAD_TELEGRAM_API_ROOT` hanya untuk tes: mengarahkan server plugin ke Telegram tiruan. Hanya `http(s)://localhost`, `127.0.0.1`, atau `[::1]` yang diterima; nilai lain membuat server keluar dengan kode 1 tanpa mencetak token. Tesnya `plugin/test/log.test.ts` dan `plugin/test/plugin-log.test.ts` (dilewati kalau `plugin/node_modules` belum dipasang).
+
+## /context di chat bot (tiket 261112230304)
+
+Pemilik mengetik `/context` di chat bot dan langsung mendapat sisa konteks sesi itu serta kuota akun, tanpa memakai giliran Claude. Isi dan formatnya sama persis dengan `/context` mirza-bots: `plugin/context-render.ts` adalah salinan `renderContext` dari `mirza-bots/cc-plugin/src/engine/context/render.ts` (bagian Context, Rate Limit 5h/7d yang dihilangkan kalau tidak ada data, metadata yang barisnya dilewati, `Last update: HH:MM WIB` dan `(Xm ago)`; reset kuota berupa durasi).
+
+- **Siapa**: hanya pengirim di `allowFrom` bot itu, di chat pribadi (`contextAllowed` di `plugin/context.ts`). Selain itu tidak dibalas sama sekali, juga saat `dmPolicy` `pairing`. `/context` masuk menu plugin dan dicatat di `plugin.log` sebagai `tidak-diteruskan`.
+- **Sumber data**: hanya `<state>/status.json` bot itu sendiri, ditulis `plugin/bot-squad-statusline.ts` (bridge) setiap kali Claude Code menggambar ulang baris status. Data bisa basi kalau bot lama menganggur; umurnya terlihat di `Last update`.
+- **Bridge** dipasang master saat start (`master/src/statusline.ts`, dipanggil `launch.ts`) lewat `--settings` sesi itu saja. Tidak ada berkas pengaturan Claude yang ditulis. Bridge menangkap payload (gagal menangkap ditelan diam-diam) lalu meneruskan payload yang sama ke statusline pendahulu di `<state>/chained-statusline` (batas 5 detik) dan keluarannya tampil apa adanya; tanpa pendahulu baris statusnya kosong. Pendahulu dicari mengikuti presedens Claude Code: `<workspace>/.claude/settings.local.json`, lalu `<workspace>/.claude/settings.json`, lalu `~/.claude/settings.json` (atau `$CLAUDE_CONFIG_DIR/settings.json`). Akibatnya statusline user pemilik ikut jalan di bot, walau `--setting-sources` tidak memuat pengaturan user.
+- **Pagar** (dari README mirza-bots): kalau salah satu berkas itu ada tetapi tak terbaca atau bukan objek JSON, atau yang efektif ternyata bridge bot-squad sendiri, bridge **tidak** dipasang. Rantai ditulis lalu dibaca ulang; tidak cocok berarti batal. Hasilnya dicatat di `<state>/statusline.json`, alasan penolakan juga di log master-bot/`start-bot.sh` (`statusline '<nama>' tidak dipasang: ...`), dan `/context` membalas alasannya. Start bot tidak pernah gagal karena ini.
+- **Jawaban lain**: sesi tanpa `statusline.json` (dinyalakan sebelum fitur ini) diminta dinyalakan ulang; `--settings` hanya dibaca saat `claude` start, jadi bot lama baru mendapat `/context` setelah dinyalakan ulang. `status.json` sesi lama dihapus saat start; kalau belum ada, plugin membalas `⏳ Menunggu data statusline...` lalu menunggu berkasnya (12 x 1,5 detik) tanpa menahan update lain. `status.json` yang rusak atau tak terbaca dijelaskan, tanpa angka. Sesi baru sebelum giliran pertama menampilkan `Context (tidak tersedia)` tanpa bagian Rate Limit.
+- **Payload nyata** (Claude Code 2.1.323, ditangkap dari sesi uji di tmux tanpa plugin dan tanpa token): sebelum giliran pertama `context_window.used_percentage` bernilai `null` dan `rate_limits` tidak ada. Sesudahnya ada `used_percentage`, `total_input_tokens`, `context_window_size`, dan `rate_limits.seven_day.{used_percentage,resets_at}` (`resets_at` detik epoch); `five_hour` tidak muncul di akun ini saat itu. Statusline dari `--settings` mengalahkan `statusLine` project/local workspace, dan perintahnya berjalan dengan cwd workspace dan environment sesi.
+- Tes: `plugin/test/context.test.ts`, `plugin/test/statusline-bridge.test.ts`, `plugin/test/context-command.test.ts` (server sungguhan, dilewati tanpa `plugin/node_modules`), `master/test/statusline.test.ts`.
 
 ## Concern yang harus ditangani
 
