@@ -1,8 +1,9 @@
 import { GrammyError, type ApiClientOptions } from "grammy";
-import { createMasterBot, COMMANDS } from "./bot.ts";
+import { createMasterBot } from "./bot.ts";
 import { ConfigError, dataDir, loadConfig, type ConfigSource } from "./config.ts";
 import { createLogger, describeError, redact } from "./log.ts";
 import { launchBot, realLaunchDeps } from "./launch.ts";
+import { syncCommandMenu } from "./menu.ts";
 
 export type RunOptions = ConfigSource & {
   /** Penulis log; default stderr. */
@@ -72,12 +73,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
 
   try {
     await bot.init();
-    try {
-      await bot.api.setMyCommands(COMMANDS.map((c) => ({ ...c })));
-    } catch (err) {
-      if (err instanceof GrammyError && (err.error_code === 401 || err.error_code === 409)) throw err;
-      log(`peringatan: menu perintah gagal didaftarkan: ${describeError(err)}`);
-    }
+    await syncCommandMenu(bot.api, config.ownerId, log);
     if (opts.signal?.aborted) return 0;
     await bot.start({
       onStart: (me) => log(`berjalan sebagai @${me.username}, hanya melayani pemilik ${config.ownerId}`),

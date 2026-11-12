@@ -15,3 +15,6 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Bukti 'server plugin ikut mati' setelah kill -9 claude harus dicek beberapa detik kemudian dengan ps (pid, ppid, %CPU), bukan dari hilangnya bot.pid: shutdown menghapus bot.pid sebelum proses benar-benar keluar.
 - Fake sleep di tes loop tunggu harus melempar error setelah melewati batas jauh, kalau tidak loop tanpa henti membuat bun test hang tanpa timeout
 - tmux server mengambil PATH dari klien pertama; untuk menguji jalur gagal, taruh claude tiruan di depan PATH saat belum ada server tmux, lalu matikan sesinya dengan kill-session (bukan kill-server)
+- Di Telegram tiruan, penangan khusus menerima (params, next); panggil next() untuk tetap memakai perilaku bawaan, mis. agar state menu tercatat
+- Tes error jaringan grammY tanpa memutus jaringan: beri client.fetch pembungkus yang melempar TypeError untuk metode tertentu; grammY mengubahnya jadi HttpError
+- Waktu pesan masuk ke bot bisa diukur dari transkrip ~/.claude/projects/<workspace>/*.jsonl: atribut ts di tag <channel> (tanggal Telegram) dibanding timestamp catatan

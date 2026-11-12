@@ -7,7 +7,7 @@ import { setBotStatus, type WriteHooks } from "./registry.ts";
 import type { LaunchResult } from "./launch.ts";
 import { sendWithRetry, type RetryPolicy } from "./retry.ts";
 
-/** Perintah yang sudah berfungsi. Daftar ini juga dikirim lewat setMyCommands. */
+/** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
 export const COMMANDS = [
   { command: "start", description: "Tampilkan daftar perintah" },
   { command: "help", description: "Tampilkan daftar perintah" },
