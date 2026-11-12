@@ -1,0 +1,12 @@
+{
+  "name": "@bot-squad/master",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/main.ts"
+  },
+  "dependencies": {
+    "grammy": "^1.41.1"
+  }
+}
