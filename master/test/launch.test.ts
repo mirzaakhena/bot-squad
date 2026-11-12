@@ -9,6 +9,8 @@ import {
   ensureTrusted,
   installPluginLocked,
   launchBot,
+  PLUGIN_DIR,
+  realLaunchDeps,
   screenSnippet,
   type LaunchDeps,
   type NewSession,
@@ -71,9 +73,21 @@ function fakeTmux(screens: (i: number) => string | null, preexisting: string[] =
 const ALIVE = 4242;
 const DEAD = 4343;
 
-function deps(tmux: Tmux, over: Partial<LaunchDeps> = {}): LaunchDeps & { installs: number; clock: { t: number } } {
+function deps(
+  tmux: Tmux,
+  over: Partial<LaunchDeps> = {},
+): LaunchDeps & { installs: number; clock: { t: number }; strayCalls: string[]; logs: string[] } {
   const clock = { t: 0 };
+  const strayCalls: string[] = [];
+  const logs: string[] = [];
   const d = {
+    strayCalls,
+    logs,
+    killStrays: async (stateDir: string) => {
+      strayCalls.push(stateDir);
+      return [];
+    },
+    log: (m: string) => logs.push(m),
     dataDir: home,
     ownerId: OWNER,
     pluginDir: "/repo/plugin",
@@ -282,6 +296,83 @@ describe("launchBot: sudah berjalan", () => {
   });
 });
 
+describe("launchBot: server plugin sisa", () => {
+  test("dibersihkan untuk folder state bot itu sebelum sesi dibuat; satu baris log per pid", async () => {
+    const p = makeBotDir("bot-01");
+    const f = fakeTmux((i) => (i === 1 && writePid("bot-01", ALIVE), READY));
+    let createdAtCleanup = -1;
+    const d = deps(f.tmux, {
+      killStrays: async (stateDir) => {
+        d.strayCalls.push(stateDir);
+        createdAtCleanup = f.created.length;
+        return [
+          { pid: 7001, signal: "SIGTERM" },
+          { pid: 7002, signal: "SIGKILL" },
+        ];
+      },
+    });
+    const res = await launchBot("bot-01", d);
+    expect(res).toEqual({ kind: "active", pid: ALIVE });
+    expect(d.strayCalls).toEqual([p.state]);
+    expect(createdAtCleanup).toBe(0);
+    expect(d.logs).toEqual([
+      "server plugin sisa 'bot-01' dimatikan: pid 7001 (SIGTERM)",
+      "server plugin sisa 'bot-01' dimatikan: pid 7002 (SIGKILL)",
+    ]);
+  });
+
+  test("tidak ada sisa: tidak ada log", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux((i) => (i === 1 && writePid("bot-01", ALIVE), READY));
+    const d = deps(f.tmux);
+    expect((await launchBot("bot-01", d)).kind).toBe("active");
+    expect(d.strayCalls).toHaveLength(1);
+    expect(d.logs).toEqual([]);
+  });
+
+  test("sesi tmux masih hidup: tidak membersihkan apa pun", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux(() => READY, ["bot-01"]);
+    const d = deps(f.tmux);
+    expect((await launchBot("bot-01", d)).kind).toBe("already-running");
+    expect(d.strayCalls).toEqual([]);
+  });
+
+  test("bot.pid masih hidup: tidak membersihkan apa pun", async () => {
+    makeBotDir("bot-01");
+    writePid("bot-01", ALIVE);
+    const f = fakeTmux(() => READY);
+    const d = deps(f.tmux);
+    expect((await launchBot("bot-01", d)).kind).toBe("already-running");
+    expect(d.strayCalls).toEqual([]);
+  });
+
+  test("sedang dinyalakan oleh panggilan lain: tidak membersihkan lagi", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux(() => (writePid("bot-01", ALIVE), READY));
+    let release!: () => void;
+    const d = deps(f.tmux, { installPlugin: () => new Promise<void>((r) => (release = r)) });
+    const first = launchBot("bot-01", d);
+    await Bun.sleep(5);
+    expect((await launchBot("bot-01", d)).kind).toBe("already-running");
+    expect(d.strayCalls).toHaveLength(1);
+    release();
+    await first;
+  });
+
+  test("pembersihan gagal: start tetap jalan, kegagalan dicatat", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux((i) => (i === 1 && writePid("bot-01", ALIVE), READY));
+    const d = deps(f.tmux, {
+      killStrays: async () => {
+        throw new Error("ps keluar dengan kode 1");
+      },
+    });
+    expect((await launchBot("bot-01", d)).kind).toBe("active");
+    expect(d.logs).toEqual(["pembersihan server plugin sisa 'bot-01' gagal: ps keluar dengan kode 1"]);
+  });
+});
+
 describe("launchBot: gagal", () => {
   test("tidak siap dalam batas waktu: gagal dengan potongan layar, sesi dibiarkan", async () => {
     makeBotDir("bot-01");
@@ -431,4 +522,28 @@ describe("installPluginLocked", () => {
     await expect(installPluginLocked(opts({ install: async () => { throw new Error("x"); } }))).rejects.toThrow("x");
     expect(existsSync(lock())).toBe(false);
   });
+});
+
+describe("realLaunchDeps: pembersihan server sisa terpasang", () => {
+  test("mematikan bun server.ts milik plugin repo ini dengan folder state bot itu, dan meneruskan log", async () => {
+    const p = makeBotDir("uji-01");
+    const script = join(home, "server.ts");
+    writeFileSync(script, "await Bun.sleep(30_000);\n");
+    const child = Bun.spawn(["bun", script], {
+      env: { ...process.env, TELEGRAM_STATE_DIR: p.state, CLAUDE_PLUGIN_ROOT: PLUGIN_DIR },
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    try {
+      await Bun.sleep(300);
+      const logs: string[] = [];
+      const d = realLaunchDeps(home, OWNER, (m) => logs.push(m));
+      d.log!("x");
+      expect(logs).toEqual(["x"]);
+      expect(await d.killStrays(p.state)).toEqual([{ pid: child.pid, signal: "SIGTERM" }]);
+      expect(await child.exited).not.toBe(0);
+    } finally {
+      child.kill("SIGKILL");
+    }
+  }, 15_000);
 });

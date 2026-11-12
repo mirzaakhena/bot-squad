@@ -33,7 +33,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
   knownSecrets.push(config.token);
   const log = createLogger([config.token], write);
   const dir = dataDir(opts);
-  const launchDeps = realLaunchDeps(dir, config.ownerId);
+  const launchDeps = realLaunchDeps(dir, config.ownerId, log);
   const bot = createMasterBot({
     token: config.token,
     ownerId: config.ownerId,

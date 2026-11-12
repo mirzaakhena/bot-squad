@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { NAME_RULE } from "./register.ts";
 import { redact } from "./log.ts";
+import { killStrayServers, listServerProcesses, type Killed } from "./strays.ts";
 
 /**
  * Menyalakan satu bot sebagai sesi Claude Code di tmux, dengan cara yang
@@ -62,6 +63,14 @@ export type LaunchDeps = {
   isAlive: (pid: number) => boolean;
   /** Memasang paket plugin; melempar error kalau gagal. */
   installPlugin: () => Promise<void>;
+  /**
+   * Mematikan server plugin sisa yang memakai folder state ini (SIGTERM, 2
+   * detik, SIGKILL) dan mengembalikan yang dimatikan. Hanya dipanggil setelah
+   * cek start ganda lolos.
+   */
+  killStrays: (stateDir: string) => Promise<Killed[]>;
+  /** Satu baris log (tanpa token); default tidak menulis apa-apa. */
+  log?: (message: string) => void;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
   timeoutMs?: number;
@@ -182,6 +191,16 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
     return fail(`tmux tidak bisa diperiksa (${short(err)})`);
   }
   if (busy) return { kind: "already-running", reason: busy };
+
+  // Jaring pengaman (tiket 261112211001): server plugin sesi lama yang tidak
+  // keluar sendiri. Gagal membersihkan tidak menggagalkan start.
+  try {
+    for (const k of await deps.killStrays(state)) {
+      deps.log?.(`server plugin sisa '${name}' dimatikan: pid ${k.pid} (${k.signal})`);
+    }
+  } catch (err) {
+    deps.log?.(`pembersihan server plugin sisa '${name}' gagal: ${short(err)}`);
+  }
 
   const envFile = join(state, ".env");
   let envText = "";
@@ -365,7 +384,7 @@ export async function installPluginLocked(o: InstallOptions): Promise<void> {
 export const PLUGIN_DIR = resolve(import.meta.dir, "..", "..", "plugin");
 
 /** Dependensi asli untuk menyalakan bot di mesin ini. */
-export function realLaunchDeps(dataDir: string, ownerId: number): LaunchDeps {
+export function realLaunchDeps(dataDir: string, ownerId: number, log?: (message: string) => void): LaunchDeps {
   const sleep = (ms: number) => Bun.sleep(ms);
   const now = () => Date.now();
   return {
@@ -376,6 +395,12 @@ export function realLaunchDeps(dataDir: string, ownerId: number): LaunchDeps {
     tmux: realTmux,
     isAlive,
     installPlugin: () => installPluginLocked({ dataDir, pluginDir: PLUGIN_DIR, isAlive, sleep, now }),
+    killStrays: (stateDir) =>
+      killStrayServers(
+        { stateDir, pluginDir: PLUGIN_DIR },
+        { list: listServerProcesses, kill: (pid, sig) => process.kill(pid, sig), sleep },
+      ),
+    ...(log ? { log } : {}),
     sleep,
     now,
   };
