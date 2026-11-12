@@ -48,10 +48,13 @@ Registrasi yang berhasil langsung menyalakan bot. Master-bot memastikan bot bena
   → trust dicek di setiap start. (owner, 2026-11-12)
 
 ## Assumptions
-- A1 [unseen] Bot dianggap sudah berjalan bila sesi tmux bernama <nama> ada atau proses di state/bot.pid hidup, seperti langkah 1 start-bot.sh
+- A1 [confirmed] Bot dianggap sudah berjalan bila sesi tmux bernama <nama> ada atau proses di state/bot.pid hidup, seperti langkah 1 start-bot.sh
   Why: Aturan ini sudah terbukti di spike 4701 dan tercatat di CLAUDE.md
   If wrong: Ganti pengecekan start ganda di master dengan aturan baru dan perbarui tesnya
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane strict: menyalakan sesi Claude bebas izin dan menjaga satu poller per token
 - Menunggu 4705 (registry dan folder bot), 4702 (cara aman menyalakan beberapa bot) dan 4703 (id channel plugin:bot-squad@inline)
+- Semua pertanyaan terjawab; 4703 sudah landed. Masuk todo menunggu 4705 dan 4702 landed
+- 2026-11-12 moved to todo: Disetujui pemilik; menunggu 4705 dan 4702

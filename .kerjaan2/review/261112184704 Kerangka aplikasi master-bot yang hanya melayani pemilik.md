@@ -19,14 +19,14 @@ Buat aplikasi master-bot paling dasar. Aplikasi ini membaca konfigurasinya dari 
 
 ## Done when
 
-- [ ] Aplikasi bisa dijalankan dengan satu perintah yang tercatat di CLAUDE.md.
-- [ ] Kalau token atau ID pemilik tidak ada, aplikasi berhenti dengan pesan yang jelas tentang apa yang kurang dan di mana harus mengisinya.
-- [ ] Kalau token master-bot ditolak Telegram (401) atau master-bot sudah berjalan di tempat lain (409), aplikasi berhenti dengan pesan yang jelas tanpa mencetak token.
+- [x] Aplikasi bisa dijalankan dengan satu perintah yang tercatat di CLAUDE.md.
+- [x] Kalau token atau ID pemilik tidak ada, aplikasi berhenti dengan pesan yang jelas tentang apa yang kurang dan di mana harus mengisinya.
+- [x] Kalau token master-bot ditolak Telegram (401) atau master-bot sudah berjalan di tempat lain (409), aplikasi berhenti dengan pesan yang jelas tanpa mencetak token.
 - [ ] (owner) Pemilik mengirim /start atau /help ke master-bot dan mendapat daftar perintah.
-- [ ] Pesan dari akun Telegram lain sama sekali tidak dibalas. Ini dibuktikan dengan tes otomatis.
-- [ ] Token tidak pernah muncul di log atau di balasan.
-- [ ] Tidak ada hal yang khusus macOS, sehingga aplikasi juga bisa jalan di Linux.
-- [ ] Tes otomatis berjalan lewat perintah tes proyek.
+- [x] Pesan dari akun Telegram lain sama sekali tidak dibalas. Ini dibuktikan dengan tes otomatis.
+- [x] Token tidak pernah muncul di log atau di balasan.
+- [x] Tidak ada hal yang khusus macOS, sehingga aplikasi juga bisa jalan di Linux.
+- [x] Tes otomatis berjalan lewat perintah tes proyek.
 
 ## Out of scope
 
@@ -48,11 +48,28 @@ Buat aplikasi master-bot paling dasar. Aplikasi ini membaca konfigurasinya dari 
   → hanya perintah yang sudah berfungsi, ditambah setMyCommands saat start. (owner, 2026-11-12)
 
 ## Assumptions
-- A1 [unseen] Lokasi folder data mengikuti BOT_SQUAD_HOME bila diisi, default ~/.bot-squad, sama seperti scripts/start-bot.sh
+- A1 [confirmed] Lokasi folder data mengikuti BOT_SQUAD_HOME bila diisi, default ~/.bot-squad, sama seperti scripts/start-bot.sh
   Why: Konvensi ini sudah dipakai skrip hasil spike dan tercatat di CLAUDE.md
   If wrong: Hapus pembacaan BOT_SQUAD_HOME di master dan pakai ~/.bot-squad tetap
+  Confirmed by owner, 2026-11-12
 
 ## Decisions
 - Lane strict: kontrol akses master-bot, hanya pemilik yang boleh dilayani
 - Tidak solo dan tidak menunggu: aplikasi baru di master/, tidak bergantung pada nama plugin atau hasil spike; 4705 dan 4706 dibangun di atasnya
 - 2026-11-12 moved to todo: Disetujui pemilik, semua pertanyaan terjawab
+- Red-proof: penjaga akses di bot.ts, tiap syarat isOwnerUpdate (pengirim, jenis chat private, ID chat), cek token kosong, cek ID pemilik kosong dan bukan angka, pesan file tidak ada, penjelasan 401, penjelasan 409, sensor di jalur error run, sensor di logger, sensor token dikenal, tangkapan error saat berhenti, all red
+- Konfigurasi hanya dibaca dari file .env di folder data, tidak dari environment, supaya pesan 'di mana mengisinya' selalu menunjuk satu tempat dan variabel shell tidak diam-diam menimpa
+- Penjaga akses mensyaratkan pengirim, jenis chat private, dan ID chat sama dengan pemilik sekaligus; dua syarat terakhir berlapis, jadi tes memakai update sintetis supaya tiap syarat teruji sendiri
+- Kegagalan bot.stop() ditangkap dan error tak tertangani di proses disensor, karena error jaringan grammY membawa URL berisi token
+
+## Manual checks
+- M1 [waiting] (item 4) 1. Buat master-bot di @BotFather.
+  2. Isi ~/.bot-squad/master/.env dengan MASTER_BOT_TOKEN=<token> di samping OWNER_TELEGRAM_ID yang sudah ada, lalu chmod 600.
+  3. Di root repo jalankan 'bun install' lalu 'bun run --cwd master start'; terminal menampilkan 'berjalan sebagai @<username>'.
+  4. Kirim /start ke master-bot dari akun pemilik: muncul daftar perintah /start dan /help.
+  5. Kirim /help: daftar yang sama.
+  6. Ketik '/' di chat: menu berisi start dan help.
+  7. Opsional: kirim /start dari akun lain, tidak ada balasan dan terminal mencatat 'update diabaikan dari <id>'.
+
+## Handoff
+Menambah workspace Bun di root (package.json hanya berisi master) dan aplikasi master/: config.ts membaca $BOT_SQUAD_HOME/master/.env (MASTER_BOT_TOKEN, OWNER_TELEGRAM_ID) dan melempar ConfigError yang jelas; access.ts menentukan update milik pemilik (DM pemilik saja); bot.ts memasang penjaga akses sebagai middleware pertama lalu /start dan /help dari daftar COMMANDS; main.ts menjalankan init, setMyCommands, polling, dan menerjemahkan 401/409 menjadi pesan berhenti. Yang tidak boleh rusak: penjaga akses harus tetap middleware pertama sebelum perintah baru apa pun, semua log lewat createLogger yang menyensor token, dan perintah baru ditambahkan ke COMMANDS agar menu dan /help tetap sesuai.
