@@ -19,9 +19,9 @@ Jawaban bot atas /start, /help, dan /status sesuai cara kerja bot-squad, tanpa i
 
 ## Done when
 
-- [ ] /start dan /help di chat bot menjelaskan bahwa pesan diteruskan ke sesi Claude bot itu, tanpa instruksi pairing.
-- [ ] /status di chat bot memberi tahu pengirim bahwa ia diizinkan (dengan ID/username-nya), tanpa menawarkan kode pairing.
-- [ ] /start, /help, dan /status hanya dibalas untuk pengirim di allowFrom di chat pribadi, apa pun dmPolicy-nya (sama seperti /context); orang lain, termasuk saat dmPolicy 'pairing', tidak mendapat balasan apa pun.
+- [x] /start dan /help di chat bot menjelaskan bahwa pesan diteruskan ke sesi Claude bot itu, tanpa instruksi pairing.
+- [x] /status di chat bot memberi tahu pengirim bahwa ia diizinkan (dengan ID/username-nya), tanpa menawarkan kode pairing.
+- [x] /start, /help, dan /status hanya dibalas untuk pengirim di allowFrom di chat pribadi, apa pun dmPolicy-nya (sama seperti /context); orang lain, termasuk saat dmPolicy 'pairing', tidak mendapat balasan apa pun.
 - [ ] (owner) Pemilik mengirim /start ke bot uji dan melihat teks yang baru.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
@@ -44,3 +44,11 @@ Jawaban bot atas /start, /help, dan /status sesuai cara kerja bot-squad, tanpa i
 ## Decisions
 - Lane light: hanya teks balasan dan deskripsi menu plugin, mudah dibatalkan; gerbang balasan diselaraskan dengan contextAllowed yang sudah ada
 - Tidak solo, tidak menunggu: hanya plugin/server.ts dan tesnya; boleh berjalan berdampingan dengan 261112225308 (yang hanya CLAUDE.md)
+
+## Manual checks
+- M1 [waiting] (item 4) 1. Nyalakan ulang bot uji (plugin baru hanya terbaca saat start).
+  2. Dari akun pemilik, kirim /start ke bot itu.
+  3. Harus tampil teks Indonesia 'Bot ini meneruskan pesanmu ke sesi Claude Code miliknya...' tanpa kata pairing; /help dan /status juga baru.
+
+## Handoff
+Di plugin/server.ts, /start, /help, /status kini dibalas hanya untuk pengirim di allowFrom di chat pribadi (commandAllowed memakai contextAllowed), apa pun dmPolicy-nya. Teks Indonesia tanpa pairing; /status menyebut ID/username pengirim. dmCommandGate dihapus. Deskripsi menu all_private_chats diganti Indonesia. Alur pairing pesan biasa dan skill access tidak diubah. Jangan sampai orang non-allowFrom mendapat balasan perintah. Tes: plugin/test/commands.test.ts. CLAUDE.md tidak diubah (hindari tabrakan dengan 261112225308).

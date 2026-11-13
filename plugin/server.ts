@@ -428,19 +428,6 @@ function gate(ctx: Context): GateResult {
   return { action: 'drop' }
 }
 
-// Like gate() but for bot commands: no pairing side effects, just allow/drop.
-function dmCommandGate(ctx: Context): { access: Access; senderId: string } | null {
-  if (ctx.chat?.type !== 'private') return null
-  if (!ctx.from) return null
-  const senderId = String(ctx.from.id)
-  const access = loadAccess()
-  const pruned = pruneExpired(access)
-  if (pruned) saveAccess(access)
-  if (access.dmPolicy === 'disabled') return null
-  if (access.dmPolicy === 'allowlist' && !access.allowFrom.includes(senderId)) return null
-  return { access, senderId }
-}
-
 function isMentioned(ctx: Context, extraPatterns?: string[]): boolean {
   const entities = ctx.message?.entities ?? ctx.message?.caption_entities ?? []
   const text = ctx.message?.text ?? ctx.message?.caption ?? ''
@@ -818,54 +805,39 @@ setInterval(() => {
   if (process.stdin.destroyed || process.stdin.readableEnded) shutdown('stdin-tertutup')
 }, 5000).unref()
 
-// Commands are DM-only. Responding in groups would: (1) leak pairing codes via
-// /status to other group members, (2) confirm bot presence in non-allowlisted
-// groups, (3) spam channels the operator never approved. Silent drop matches
-// the gate's behavior for unrecognized groups.
+// Commands are DM-only. Responding in groups would confirm bot presence in
+// non-allowlisted groups and spam channels the operator never approved.
+// bot-squad (tiket 261112225309): /start, /help, /status hanya dibalas untuk
+// pengirim di allowFrom di chat pribadi, apa pun dmPolicy-nya (sama dengan
+// /context); selain itu tidak dibalas sama sekali. Tidak ada alur pairing.
+function commandAllowed(ctx: Context): boolean {
+  return contextAllowed(ctx.chat?.type, ctx.from?.id, loadAccess())
+}
 
 bot.command('start', async ctx => {
-  if (!dmCommandGate(ctx)) return
+  if (!commandAllowed(ctx)) return
   await ctx.reply(
-    `This bot bridges Telegram to a Claude Code session.\n\n` +
-    `To pair:\n` +
-    `1. DM me anything — you'll get a 6-char code\n` +
-    `2. In Claude Code: /bot-squad:access pair <code>\n\n` +
-    `After that, DMs here reach that session.`
+    `Bot ini meneruskan pesanmu ke sesi Claude Code miliknya.\n\n` +
+    `Kirim pesan biasa di sini, lalu balasan Claude datang ke chat ini. ` +
+    `Ketik /help untuk daftar perintah.`
   )
 })
 
 bot.command('help', async ctx => {
-  if (!dmCommandGate(ctx)) return
+  if (!commandAllowed(ctx)) return
   await ctx.reply(
-    `Messages you send here route to a paired Claude Code session. ` +
-    `Text and photos are forwarded; replies and reactions come back.\n\n` +
-    `/start — pairing instructions\n` +
-    `/status — check your pairing state\n` +
-    `/context — session context and usage limits`
+    `Pesan yang kamu kirim di sini diteruskan ke sesi Claude Code bot ini. ` +
+    `Teks dan foto diteruskan; balasan dan reaksi kembali ke chat ini.\n\n` +
+    `/start — pengantar singkat\n` +
+    `/status — cek apakah kamu diizinkan\n` +
+    `/context — sisa konteks sesi dan kuota`
   )
 })
 
 bot.command('status', async ctx => {
-  const gated = dmCommandGate(ctx)
-  if (!gated) return
-  const { access, senderId } = gated
-
-  if (access.allowFrom.includes(senderId)) {
-    const name = ctx.from!.username ? `@${ctx.from!.username}` : senderId
-    await ctx.reply(`Paired as ${name}.`)
-    return
-  }
-
-  for (const [code, p] of Object.entries(access.pending)) {
-    if (p.senderId === senderId) {
-      await ctx.reply(
-        `Pending pairing — run in Claude Code:\n\n/bot-squad:access pair ${code}`
-      )
-      return
-    }
-  }
-
-  await ctx.reply(`Not paired. Send me a message to get a pairing code.`)
+  if (!commandAllowed(ctx)) return
+  const name = ctx.from!.username ? `@${ctx.from!.username} (${ctx.from!.id})` : String(ctx.from!.id)
+  await ctx.reply(`Kamu diizinkan memakai bot ini, sebagai ${name}.`)
 })
 
 // bot-squad (tiket 261112230304): /context dijawab dari <state>/status.json
@@ -1186,10 +1158,10 @@ void (async () => {
           process.stderr.write(`bot-squad channel: polling as @${info.username}\n`)
           void bot.api.setMyCommands(
             [
-              { command: 'start', description: 'Welcome and setup guide' },
-              { command: 'help', description: 'What this bot can do' },
-              { command: 'status', description: 'Check your pairing status' },
-              { command: 'context', description: 'Session context and usage limits' },
+              { command: 'start', description: 'Pengantar singkat' },
+              { command: 'help', description: 'Apa yang bisa dilakukan bot ini' },
+              { command: 'status', description: 'Cek apakah kamu diizinkan' },
+              { command: 'context', description: 'Sisa konteks sesi dan kuota' },
             ],
             { scope: { type: 'all_private_chats' } },
           ).catch(() => {})
