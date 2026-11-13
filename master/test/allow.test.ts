@@ -405,6 +405,8 @@ describe("server plugin sungguhan mengikuti /allow dan /revoke", () => {
   function botTelegram() {
     const queues = new Map<string, unknown[]>(Object.values(TOKENS).map((t) => [t, []]));
     const server = Bun.serve({
+      // 127.0.0.1, bukan semua alamat: lihat komentar di fake-telegram.ts.
+      hostname: "127.0.0.1",
       port: 0,
       async fetch(req) {
         const m = /^\/bot([^/]+)\/(\w+)$/.exec(new URL(req.url).pathname);

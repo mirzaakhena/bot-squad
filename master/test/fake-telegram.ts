@@ -91,6 +91,12 @@ export function startFakeTelegram(
     },
   };
   const server = Bun.serve({
+    // Wajib 127.0.0.1, bukan bawaan Bun (semua alamat, *:port). macOS mau
+    // memberi port 0 yang sama dengan pendengar 127.0.0.1:port milik proses
+    // lain (sesi Claude Code, Chrome), dan permintaan ke 127.0.0.1 lalu sampai
+    // ke proses itu: 404 "not found", jawaban kosong, atau koneksi diputus.
+    // Inilah kegagalan acak tiket 261113194401.
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
       const url = new URL(req.url);

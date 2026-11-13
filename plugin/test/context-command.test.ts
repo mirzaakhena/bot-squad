@@ -31,6 +31,8 @@ function fakeTelegram() {
   const sent: Sent[] = [];
   const commands: unknown[] = [];
   const server = Bun.serve({
+    // 127.0.0.1, bukan semua alamat: lihat komentar di master/test/fake-telegram.ts.
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
       const m = /^\/bot([^/]+)\/(\w+)$/.exec(new URL(req.url).pathname);
