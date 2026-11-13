@@ -107,7 +107,14 @@ afterEach(async () => {
   bystanders = [];
   if (TMUX) tmux("kill-server");
   // Hanya server tiruan milik folder sementara ini yang boleh dibersihkan.
-  if (home) for (const pid of servers(NAME)) process.kill(pid, "SIGKILL");
+  // Server sopan bisa keluar sendiri di antara ps dan kill (ESRCH).
+  if (home) {
+    for (const pid of servers(NAME)) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {}
+    }
+  }
   tg.stop();
   rmSync(home, { recursive: true, force: true });
 });

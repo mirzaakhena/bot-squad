@@ -4,7 +4,8 @@ import { isOwnerUpdate, senderIdForLog } from "./access.ts";
 import { describeError, type Logger } from "./log.ts";
 import { NAME_RULE, parseRegisterArgs, registerBot, USAGE } from "./register.ts";
 import { readRegistry, setBotStatus, type BotStatus, type WriteHooks } from "./registry.ts";
-import type { LaunchResult } from "./launch.ts";
+import { isAlive, realTmux, type LaunchResult } from "./launch.ts";
+import { listReport, type ProbeDeps } from "./list.ts";
 import { busyText, createBotLocks, type BotLocks } from "./busy.ts";
 import { isClean, type StopResult } from "./stop.ts";
 import { sendWithRetry, type RetryPolicy } from "./retry.ts";
@@ -14,6 +15,7 @@ export const COMMANDS = [
   { command: "start", description: "Tampilkan daftar perintah" },
   { command: "help", description: "Tampilkan daftar perintah" },
   { command: "register", description: "Daftarkan bot baru: /register <nama> <token>" },
+  { command: "list", description: "Daftar bot beserta keadaan nyatanya" },
   { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
   { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama>" },
 ] as const;
@@ -56,6 +58,8 @@ export type MasterBotOptions = {
   onLaunch?: (done: Promise<void>) => void;
   /** Dibatalkan saat master-bot berhenti: percobaan kirim ulang laporan dihentikan. */
   signal?: AbortSignal;
+  /** Cek keadaan nyata untuk /list; default tmux dan cek pid asli. Diganti di tes. */
+  probe?: Omit<ProbeDeps, "dataDir">;
   /** Jeda kirim ulang laporan penyalaan; diganti di tes. */
   reportRetry?: RetryPolicy;
 };
@@ -153,6 +157,13 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   });
 
   bot.command(["start", "help"], (ctx) => ctx.reply(helpText()));
+
+  // /list hanya membaca: registry, folder bots/, sesi tmux, dan bot.pid.
+  bot.command("list", async (ctx) => {
+    const probe = opts.probe ?? { tmux: realTmux, isAlive };
+    const text = await listReport({ dataDir: opts.dataDir, ...probe, log: opts.log });
+    await ctx.reply(text, { parse_mode: "HTML" });
+  });
 
   /** Mengirim satu laporan ke pemilik, dengan kirim ulang saat Telegram terganggu. */
   const sendReport = async (what: string, name: string, text: string) => {

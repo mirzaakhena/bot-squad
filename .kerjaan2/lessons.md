@@ -30,3 +30,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - bot.init grammY mencoba ulang tanpa henti saat Telegram tak terjangkau, dan master-bot tidak bereaksi pada SIGTERM selama itu; proxy tiruan harus memutus koneksi (jawaban 403 proxy dianggap jawaban server)
 - Soket tmux di scratchpad melebihi batas panjang path (File name too long); pakai tmux -S ./s dengan cd ke folder soket
 - Statusline dari --settings mengalahkan statusLine project/local workspace dan berjalan dengan cwd workspace serta env sesi (Claude Code 2.1.323)
+- Tes dengan tmux -S <dir>/tmux-<uid>/default yang membuat sesi sebelum proses lain menyalakan server harus membuat folder tmux-<uid> (0700) sendiri, kalau tidak new-session gagal kode 1

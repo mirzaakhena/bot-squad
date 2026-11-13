@@ -86,6 +86,7 @@ async function serve(
     launch: (name) => launchBot(name, launchDeps),
     stop: (name) => stopBot(name, stopDeps),
     locks: createBotLocks(),
+    probe: { tmux: launchDeps.tmux, isAlive: launchDeps.isAlive },
     onLaunch: (done) => {
       launches.add(done);
       void done.finally(() => launches.delete(done));
