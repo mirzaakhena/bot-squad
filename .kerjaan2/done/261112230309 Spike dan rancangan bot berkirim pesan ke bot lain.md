@@ -46,13 +46,13 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 ## Done when
 
-- [ ] Spike dijalankan di sesi uji yang dinyalakan seperti bot bot-squad (argumen dari `claudeArgv`), antar sesi uji sendiri saja, dan CLAUDE.md mencatat hasilnya: apakah mekanisme bawaan Claude Code bisa mengirim pesan ke sesi lain berdasarkan session-id dan apakah penerima bisa membalas ke pengirim, dengan bukti (kutipan layar atau transkrip) dan versi Claude Code yang diuji.
-- [ ] CLAUDE.md mencatat apa yang dibutuhkan agar mekanisme itu aktif di sesi bot (flag, pengaturan, env), atau bukti bahwa ia tidak aktif atau tidak bisa memakai session-id sebagai alamat.
-- [ ] CLAUDE.md mencatat cara mendapatkan session-id terkini sebuah bot dari namanya, dengan bukti bahwa hasilnya berubah dengan benar setelah sesi uji dinyalakan ulang dan setelah memulai percakapan baru (`/clear`).
-- [ ] CLAUDE.md memuat rancangan fitur untuk tahap 2 (261113230601): alamat hanya nama bot, pencarian session-id setiap kali, jawaban ke pengirim untuk nama tak terdaftar dan bot mati (tanpa pesan hilang diam-diam), aturan izin (semua bot terdaftar saling boleh, pengirim di luar bot terdaftar ditolak dan bagaimana itu ditegakkan), dan pencegah pesan berputar.
-- [ ] CLAUDE.md mencatat batasan keamanan rancangan itu, termasuk bahwa semua bot berjalan bebas izin dan apakah sesi Claude yang bukan bot (sesi pemilik) bisa mengirim ke atau menerima dari bot lewat mekanisme yang sama.
-- [ ] Kalau mekanisme bawaan tidak bisa dipakai, CLAUDE.md mencatat sebabnya beserta perbandingan dengan alternatif kotak surat berkas per bot (pola mirza-bots), tanpa memilih sendiri.
-- [ ] Hanya CLAUDE.md yang berubah di repo; langkah spike tercatat cukup rinci untuk diulang.
+- [x] CLAUDE.md mencatat temuan tentang mekanisme bawaan Claude Code untuk berkirim pesan antarsesi (cara pengalamatan, apakah session-id bisa menjadi alamat, apakah penerima bisa membalas), dari pemeriksaan statis tanpa uji kirim (keputusan pemilik Q5), setiap klaim diberi tanda belum dibuktikan dan sumbernya (berkas, string program, dokumentasi), serta versi Claude Code yang diperiksa.
+- [x] CLAUDE.md mencatat apa yang dibutuhkan agar mekanisme itu aktif di sesi bot (flag, pengaturan, env), atau bukti bahwa ia tidak aktif atau tidak bisa memakai session-id sebagai alamat.
+- [x] CLAUDE.md mencatat cara mendapatkan alamat sesi terkini (session-id dan/atau alamat kirimnya) sebuah bot dari namanya, beserta alasan mengapa hasilnya tetap benar setelah bot dinyalakan ulang dan setelah percakapan baru (`/clear`), ditandai belum dibuktikan.
+- [x] CLAUDE.md memuat rancangan fitur untuk tahap 2 (261113230601): alamat hanya nama bot, pencarian session-id setiap kali, jawaban ke pengirim untuk nama tak terdaftar dan bot mati (tanpa pesan hilang diam-diam), aturan izin (semua bot terdaftar saling boleh, pengirim di luar bot terdaftar ditolak dan bagaimana itu ditegakkan), dan pencegah pesan berputar.
+- [x] CLAUDE.md mencatat batasan keamanan rancangan itu, termasuk bahwa semua bot berjalan bebas izin dan apakah sesi Claude yang bukan bot (sesi pemilik) bisa mengirim ke atau menerima dari bot lewat mekanisme yang sama.
+- [x] Kalau mekanisme bawaan tidak bisa dipakai, CLAUDE.md mencatat sebabnya beserta perbandingan dengan alternatif kotak surat berkas per bot (pola mirza-bots), tanpa memilih sendiri.
+- [x] Hanya CLAUDE.md yang berubah di repo; langkah uji yang belum dijalankan (termasuk kendala login dengan HOME sementara) tercatat cukup rinci supaya bisa dibuktikan di tahap 2.
 - [ ] (owner) Pemilik menyetujui rancangan (atau memilih alternatif) sebelum 261113230601 dikerjakan.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
@@ -66,6 +66,8 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → A: flag/setting/env hanya per sesi uji; dilarang menulis ~/.claude/settings.json, ~/.claude.json asli, managed settings; kalau butuh perubahan global, berhenti dan bawa ke pemilik. (owner, 2026-11-13)
 - Q4 [answered] HOME mana untuk sesi Claude uji (butuh login dan trust)? Opsi A (rekomendasi): HOME sementara berisi SALINAN ~/.claude.json dan ~/.claude/settings.json (tanpa symlink, cek find -type l); login dari Keychain macOS; trust ditulis launch.ts ke salinan. Kalau Claude meminta login/onboarding di HOME sementara, berhenti dan laporkan, jangan pakai HOME asli. Opsi B: HOME asli untuk claude, hanya BOT_SQUAD_HOME sementara (lebih mudah, tetapi launch.ts menulis trust folder uji ke ~/.claude.json asli yang dipakai sesi pemilik). Opsi C: CLAUDE_CONFIG_DIR sementara dengan HOME asli (belum pernah diuji di proyek ini).
   → A: HOME sementara berisi salinan ~/.claude.json dan ~/.claude/settings.json tanpa symlink; login dari Keychain; kalau diminta login/onboarding, berhenti dan lapor. (owner, 2026-11-13)
+- Q5 [answered] Spike terhenti (aturan Q4): dengan HOME sementara Claude 2.1.323 tampil 'Not logged in', karena Keychain login tidak terlihat dari HOME uji. Terpakai 1 start, 0 giliran; semua sesi uji sudah dibersihkan. Pilihan: A (rekomendasi) pemilik membuat token sekali dengan 'claude setup-token', disimpan 0600 di luar repo, diberikan sebagai env CLAUDE_CODE_OAUTH_TOKEN hanya ke sesi uji; HOME sementara tetap, tanpa perubahan global. B: sesi uji memakai HOME asli; launch.ts lalu menulis trust ke ~/.claude.json asli (dilarang Q3) dan sesi uji terlihat oleh sesi pemilik dan bot-01..03. C: rancangan dari temuan statis saja, tanpa uji kirim.
+  → Rancangan tanpa uji: rancangan ditulis dari temuan statis saja, tanpa membuktikan kirim pesan. (owner, 2026-11-13)
 
 ## Assumptions
 - A1 [unseen] Kalau mekanisme bawaan tidak bisa dipakai, worker tidak membuat prototipe kotak surat berkas; cukup perbandingan tertulis di CLAUDE.md lalu dibawa ke pemilik
@@ -76,3 +78,27 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - Lane strict: walau hasilnya hanya CLAUDE.md, spike menjalankan sesi Claude bebas izin yang bisa menjangkau sesi pemilik lewat mekanisme lintas sesi, dan rancangan keamanannya menjadi dasar tahap 2
 - Tidak solo dan tidak menunggu: hanya mengubah CLAUDE.md (bagian baru) dan tidak membaca hasil tiket lain; papan kosong
 - Dipecah: tiket ini spike + rancangan (berakhir di diskusi pemilik); implementasi di 261113230601
+- 2026-11-13 the owner changed what this ticket asks for: Pemilik Q5: Rancangan tanpa uji: rancangan ditulis dari temuan statis saja, tanpa membuktikan kirim pesan.
+- Red-proof: tidak ada guard kode yang ditambahkan (hanya dokumentasi CLAUDE.md, keputusan Q5 tanpa uji), jadi tidak ada yang bisa dipatahkan, all red tidak berlaku
+
+## Manual checks
+- M1 [waiting] (item 8) 1. Buka CLAUDE.md bagian 'Bot berkirim pesan ke bot lain'.
+  2. Baca rancangan tahap 2, batasan keamanan, dan tabel alternatif.
+  3. Pilih: rancangan soket (cari_bot + SendMessage), varian B (plugin menulis ke soket), atau kotak surat berkas; juga cara membuktikan (token setup-token atau HOME asli).
+  4. Jawaban dicatat di tiket 261113230601 sebelum dikerjakan.
+
+## Handoff
+Hanya CLAUDE.md: bagian baru 'Bot berkirim pesan ke bot lain' sebelum 'Concern'. Isinya temuan statis Claude Code 2.1.323 (SendMessage/ListAgents, soket /tmp/cc-socks/<pid>.sock, registri ~/.claude/sessions/<pid>.json, session-id bukan alamat lokal), cara nama bot ke alamat uds lewat pane tmux dan registri, rancangan tahap 2 (cari_bot, error eksplisit, izin semua bot, kepala hop), batasan keamanan, tabel alternatif kotak surat, dan langkah uji yang belum dijalankan termasuk kendala login HOME sementara. Semua klaim bertanda BD (belum dibuktikan) sesuai Q5; jangan hapus tanda itu sebelum ada uji sungguhan. 261113230601 bergantung pada persetujuan pemilik atas bagian ini.
+
+## Review
+- 2026-11-13 strict, round 1, at 5118e70: passed.
+  1: strings biner 2.1.323 dicek ulang: ListAgents, cc-socks, to = nama sesi atau uds:/bridge:, sid: di balik tengu_session_stable_address (default false), amplop from/from-session/hop-chain, verifiedPeerPid, notice held beda mode izin; semua bertanda BD dengan sumber
+  2: biner memuat '[uds-messaging] Skipped: gate off / restricted session / remote thin client'; registri sesi bot-01..03 (field tmux bot-0N) punya messagingSocketPath
+  3: tmux list-sessions pane_pid bot-01 41638, bot-02 16186, bot-03 21326 = pid berkas registri; kode Qn({sessionId:U,...}) saat session switch ada di biner; alasan restart dan /clear tertulis, bertanda BD
+  4: 'Rancangan tahap 2': alamat nama saja, cari_bot setiap kirim tanpa cache, tiga error eksplisit dilapor ke pemilik, izin semua bot + cek_pengirim (diakui bisa dipalsukan, opsi hook), kepala hop/balasan, varian B
+  5: 'Batasan keamanan': bypass, satu user Unix dan kunci .key terbaca, sesi pemilik dan bot saling terlihat dua arah (dibenarkan registri: bot-0N bersama sesi kerjaan2/bot-squad/mirbot)
+  6: mekanisme belum terbukti tak bisa dipakai; tabel banding kotak surat ada, pilihan diserahkan ke pemilik
+  7: diff main...HEAD --name-only hanya CLAUDE.md (commit 5118e70); langkah uji, kendala login, pembersihan rinci. Tanpa kode, uji patah-kode tidak berlaku; repo tak punya skrip/CI selain bun test
+  8: (owner) M1 bisa diikuti dari awal dan berakhir pada pilihan yang dicatat di 261113230601
+  note: biner memotong putaran sendiri (hop-loop/hop-runaway, duplicate, rate-limited, queue-full) dan bisa 'hold every message'; rancangan hanya menyebut hop-chain, pertimbangkan di tahap 2
+  note: BD 'tmux menyisipkan shell' bisa ditutup statis (pane_pid = pid registri); template inject memakai env CLAUDE_CODE_MESSAGING_TOKEN, relevan untuk varian B dan batasan keamanan
