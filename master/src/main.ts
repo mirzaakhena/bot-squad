@@ -9,6 +9,7 @@ import { syncCommandMenu } from "./menu.ts";
 import { acquireMasterLock, type LockDeps } from "./lock.ts";
 import { resolveApiRoot } from "./api-root.ts";
 import { reviveAndReport } from "./revive.ts";
+import { installTelegramCutoff, STOP_GRACE_MS } from "./cutoff.ts";
 
 export type RunOptions = ConfigSource & {
   /** Penulis log; default stderr. */
@@ -118,18 +119,53 @@ async function serve(
   };
 
   if (opts.signal?.aborted) return 0;
+  // Setiap panggilan Telegram bisa diputus saat berhenti (tiket 261112235501):
+  // tanpa ini, bot.init mencoba ulang tanpa henti dan getUpdates terakhir di
+  // bot.stop() bisa menggantung sampai batas client grammY (500 detik).
+  const cutoff = installTelegramCutoff(bot.api);
+  /** Polling sudah dimulai (onStart); sebelum itu Telegram belum terjangkau penuh. */
+  let polling = false;
+  let phase = "getMe";
   // bot.stop() memanggil getUpdates sekali lagi; kegagalannya harus ditangkap
   // di sini, karena error jaringan grammY memuat URL yang berisi token.
   let stopping: Promise<void> | undefined;
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<void>((r) => (onAbort = r));
+  /** Panggilan yang masih menunggu saat berhenti diminta, sebelum diputus. */
+  let waitingAtStop: { method: string; since: number; at: number } | undefined;
   const stop = () => {
+    const w = cutoff.oldestPending();
+    if (w) waitingAtStop = { ...w, at: Date.now() };
+    // Sebelum polling: tidak ada yang perlu dikonfirmasi ke Telegram, putus
+    // sekarang. Sesudahnya: getUpdates konfirmasi diberi waktu singkat.
+    if (polling) cutoff.cutAfter(STOP_GRACE_MS);
+    else cutoff.cut();
     stopping = bot.stop().catch((err) => log(`peringatan saat berhenti: ${describeError(err)}`));
+    onAbort();
   };
   opts.signal?.addEventListener("abort", stop, { once: true });
 
+  /** Pesan saat berhenti sebelum polling berjalan: Telegram belum terjangkau. */
+  const notReached = () => {
+    const parts = [`master-bot: dihentikan sebelum Telegram terjangkau (tahap: ${phase}); belum ada pesan yang dilayani.`];
+    const waiting = waitingAtStop;
+    if (waiting) {
+      parts.push(`Panggilan ${waiting.method} belum dijawab Telegram setelah ${Math.round((waiting.at - waiting.since) / 1000)} detik.`);
+    }
+    const last = cutoff.lastFailure();
+    if (last) parts.push(`Kegagalan terakhir: ${last}`);
+    parts.push("Periksa koneksi server ke api.telegram.org.");
+    write(redact(parts.join("\n"), [config.token]));
+    return 0;
+  };
+
+  let started: Promise<void> | undefined;
   try {
-    await bot.init();
-    await syncCommandMenu(bot.api, config.ownerId, log);
-    if (opts.signal?.aborted) return 0;
+    await bot.init(opts.signal);
+    phase = "menu perintah";
+    await syncCommandMenu(bot.api, config.ownerId, log, opts.signal);
+    if (opts.signal?.aborted) return notReached();
+    phase = "mulai polling";
     // Penyalaan otomatis (tiket 261112225304) berjalan di latar belakang,
     // supaya master-bot langsung melayani perintah.
     track(
@@ -143,19 +179,52 @@ async function serve(
         signal: opts.signal,
       }),
     );
-    await bot.start({
-      onStart: (me) => log(`berjalan sebagai @${me.username}, hanya melayani pemilik ${config.ownerId}`),
+    started = bot.start({
+      onStart: (me) => {
+        polling = true;
+        log(`berjalan sebagai @${me.username}, hanya melayani pemilik ${config.ownerId}`);
+      },
     });
-    await stopping;
-    await settleLaunches(launches, log);
+    await Promise.race([started, aborted]);
+    if (opts.signal?.aborted) {
+      // Kegagalan bot.start setelah berhenti diminta bukan error (mis.
+      // deleteWebhook yang diputus); ditelan supaya tidak jadi unhandled.
+      started.catch(() => {});
+      if (!polling) {
+        await Promise.all([within(Promise.allSettled([started, stopping]), STOP_GRACE_MS), settleLaunches(launches, log)]);
+        return notReached();
+      }
+      // Polling dan getUpdates terakhir diberi batas yang sama dengan
+      // pemutus; penyalaan ditunggu bersamaan, jadi total tetap < 5 detik.
+      await Promise.all([
+        within(Promise.allSettled([started, stopping]), STOP_GRACE_MS + 500),
+        settleLaunches(launches, log),
+      ]);
+    } else {
+      await started;
+      await stopping;
+      await settleLaunches(launches, log);
+    }
     log("berhenti");
     return 0;
   } catch (err) {
+    if (opts.signal?.aborted && !polling) {
+      started?.catch(() => {});
+      await settleLaunches(launches, log);
+      return notReached();
+    }
     write(redact(`master-bot: ${explain(err)}`, [config.token]));
     return 1;
   } finally {
     opts.signal?.removeEventListener("abort", stop);
   }
+}
+
+/** Menunggu `p` paling lama `ms`; yang belum selesai ditinggal. */
+async function within(p: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([p, new Promise((r) => (timer = setTimeout(r, ms)))]);
+  clearTimeout(timer);
 }
 
 /**

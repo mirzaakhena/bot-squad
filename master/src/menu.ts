@@ -12,13 +12,13 @@ import { describeError, type Logger } from "./log.ts";
  * Kegagalan selain 401/409 hanya menjadi peringatan dan langkah berikutnya
  * tetap dicoba; 401/409 dilempar supaya master-bot berhenti.
  */
-export async function syncCommandMenu(api: Api, ownerId: number, log: Logger): Promise<void> {
+export async function syncCommandMenu(api: Api, ownerId: number, log: Logger, signal?: AbortSignal): Promise<void> {
   const commands = COMMANDS.map((c) => ({ ...c }));
   const steps: Array<{ label: string; call: () => Promise<unknown> }> = [];
   const set = (label: string, scope: BotCommandScope) =>
-    steps.push({ label, call: () => api.setMyCommands(commands, { scope }) });
+    steps.push({ label, call: () => api.setMyCommands(commands, { scope }, signal) });
   const del = (label: string, scope: BotCommandScope) =>
-    steps.push({ label, call: () => api.deleteMyCommands({ scope }) });
+    steps.push({ label, call: () => api.deleteMyCommands({ scope }, signal) });
 
   set("default", { type: "default" });
   set("all_private_chats", { type: "all_private_chats" });
@@ -27,10 +27,13 @@ export async function syncCommandMenu(api: Api, ownerId: number, log: Logger): P
   del("all_chat_administrators", { type: "all_chat_administrators" });
 
   for (const step of steps) {
+    // Berhenti diminta: langkah sisanya tidak dicoba (tiket 261112235501).
+    if (signal?.aborted) return;
     try {
       await step.call();
     } catch (err) {
       if (err instanceof GrammyError && (err.error_code === 401 || err.error_code === 409)) throw err;
+      if (signal?.aborted) return;
       log(`peringatan: menu perintah (${step.label}) gagal diperbarui: ${describeError(err)}`);
     }
   }
