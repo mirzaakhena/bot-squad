@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { botPaths, type Tmux } from "./launch.ts";
 import { probeBot, type Liveness } from "./list.ts";
@@ -44,6 +44,8 @@ const MASK = "<token disembunyikan>";
  * minimal 20 karakter (lebih longgar dari log.ts, sama dengan /list).
  */
 const TOKEN_LIKE = /\d+:[A-Za-z0-9_-]+/g;
+/** Potongan rahasia yang diketahui sepanjang ini atau lebih ikut disensor. */
+export const FRAGMENT_MIN = 8;
 /** Panjang bagian token Telegram setelah ':'. */
 const TOKEN_TAIL = 35;
 /** Nilai variabel token di baris mana pun: KEY=nilai, KEY: nilai, "KEY": "nilai". */
@@ -66,6 +68,17 @@ export function envValues(file: string): string[] {
     if (v.length >= 8) out.push(v);
   }
   return out;
+}
+
+/** Nilai .env semua folder bots/<nama>/state selain bot ini. */
+function otherBotSecrets(dataDir: string, self: string): string[] {
+  let names: string[];
+  try {
+    names = readdirSync(botPaths(dataDir, self).botsDir);
+  } catch {
+    return [];
+  }
+  return names.filter((n) => n !== self).flatMap((n) => envValues(join(botPaths(dataDir, n).state, ".env")));
 }
 
 /**
@@ -96,6 +109,17 @@ export function maskScreen(lines: readonly string[], secrets: readonly string[])
   }
   for (const v of variants) {
     for (let at = joined.indexOf(v); at !== -1; at = joined.indexOf(v, at + 1)) hide(at, at + v.length);
+  }
+  // Potongan rahasia yang diketahui: layar bisa hanya memuat sebagian token
+  // (baris teratas adalah lanjutan wrap dari scrollback, awalan sebelum
+  // elipsis, token yang dipisah bingkai). Setiap potongan sepanjang
+  // FRAGMENT_MIN atau lebih tertutup oleh jendela-jendela FRAGMENT_MIN-nya.
+  const grams = new Set<string>();
+  for (const v of variants) {
+    for (let i = 0; i + FRAGMENT_MIN <= v.length; i++) grams.add(v.slice(i, i + FRAGMENT_MIN));
+  }
+  for (let i = 0; i + FRAGMENT_MIN <= joined.length; i++) {
+    if (grams.has(joined.slice(i, i + FRAGMENT_MIN))) hide(i, i + FRAGMENT_MIN);
   }
   for (const m of joined.matchAll(TOKEN_LIKE)) {
     const a = m.index!;
@@ -180,7 +204,9 @@ export async function logsReport(name: string, username: string, wanted: number,
   }
   if (pane === null) return `Layar ${who} tidak bisa dibaca: sesi tmux-nya baru saja hilang atau tmux error.`;
 
-  const secrets = [d.masterToken, ...envValues(join(botPaths(d.dataDir, name).state, ".env"))];
+  // Token bot ini, token master-bot, dan token bot lain (layar bisa
+  // menampilkan .env bot lain, misalnya lewat cat).
+  const secrets = [d.masterToken, ...envValues(join(botPaths(d.dataDir, name).state, ".env")), ...otherBotSecrets(d.dataDir, name)];
   const all = pane.split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim() !== "");
   const lines = maskScreen(all, secrets).slice(-wanted);
 

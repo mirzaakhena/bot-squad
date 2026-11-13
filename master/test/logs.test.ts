@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMasterBot } from "../src/bot.ts";
-import { envValues, LOGS_USAGE, logsReport, maskScreen, parseLogsArgs, TELEGRAM_MAX_CHARS } from "../src/logs.ts";
+import { envValues, FRAGMENT_MIN, LOGS_USAGE, logsReport, maskScreen, parseLogsArgs, TELEGRAM_MAX_CHARS } from "../src/logs.ts";
 import { registryPath } from "../src/registry.ts";
 import { ME, startFakeTelegram } from "./fake-telegram.ts";
 import { OWNER, ownerDm } from "./updates.ts";
@@ -129,6 +129,47 @@ describe("sensor layar", () => {
     expect(out.join("")).not.toContain("UnknownToken2");
   });
 
+  describe("potongan token yang diketahui, tanpa pasangannya di layar", () => {
+    const T = BOT_TOKEN;
+    const hidden = (out: string[]) => {
+      const all = out.join("\n");
+      // Tidak ada potongan token sepanjang FRAGMENT_MIN yang tersisa.
+      for (let i = 0; i + FRAGMENT_MIN <= T.length; i++) expect(all).not.toContain(T.slice(i, i + FRAGMENT_MIN));
+    };
+    test("(a) baris teratas adalah lanjutan wrap tanpa awalnya", () => {
+      for (const cut of [8, 15, 20, 30, 38]) {
+        const out = maskScreen([T.slice(cut), "selesai"], [T]);
+        hidden(out);
+        expect(out).toEqual(["<token disembunyikan>", "selesai"]);
+      }
+      const mid = maskScreen([`${T.slice(25)} di dalamnya`], [T]);
+      expect(mid).toEqual(["<token disembunyikan> di dalamnya"]);
+    });
+    test("(b) awalan sebelum elipsis, termasuk awalan pendek setelah ':'", () => {
+      for (const len of [8, 10, 20, 30]) {
+        const out = maskScreen([`lihat ${T.slice(0, len)}…`], [T]);
+        hidden(out);
+        expect(out).toEqual(["lihat <token disembunyikan>…"]);
+      }
+    });
+    test("(c) token dipisah bingkai kotak", () => {
+      for (const cut of [10, 20, 30]) {
+        const out = maskScreen([`│ ${T.slice(0, cut)} │`, `│ ${T.slice(cut)} │`], [T]);
+        hidden(out);
+        expect(out).toEqual(["│ <token disembunyikan> │", "│ <token disembunyikan> │"]);
+      }
+    });
+    test("potongan bentuk ter-encode URL dan potongan token master-bot", () => {
+      const enc = encodeURIComponent(T);
+      const out = maskScreen([`url ${enc.slice(5, 30)}`, `m ${MASTER.slice(12)}`], [T, MASTER]);
+      expect(out).toEqual(["url <token disembunyikan>", "m <token disembunyikan>"]);
+    });
+    test("teks biasa yang tidak sama dengan potongan token tetap utuh", () => {
+      const lines = ["Fake bot test", "aaaaaaa pendek", "LogsCom", "✻ Thinking… (esc to interrupt)"];
+      expect(maskScreen(lines, [T, MASTER])).toEqual(lines);
+    });
+  });
+
   test("nilai .env: semua nilai yang cukup panjang, tanpa tanda kutip", () => {
     const f = join(home, "env");
     writeFileSync(f, `TELEGRAM_BOT_TOKEN="${BOT_TOKEN}"\nLAIN=rahasia-lain-panjang\nPENDEK=1\n# komentar\n`);
@@ -208,6 +249,21 @@ describe("logsReport", () => {
       expect(text).not.toContain("isi-env-yang-rahasia");
     }
     expect(pre(await logsReport("bot-01", "satu_bot", 20, d))).toContain("TELEGRAM_BOT_TOKEN=<token disembunyikan>");
+  });
+
+  test("potongan token di tepi atas layar, dan token .env bot lain, tidak ikut", async () => {
+    botFolder("bot-01", 4242);
+    const OTHER = "6002345:AAOtherBotTokenShownOnScreen_bbbbbbbbbbb";
+    botFolder("bot-02", undefined, `TELEGRAM_BOT_TOKEN=${OTHER}\n`);
+    const pane = [BOT_TOKEN.slice(18) + " di dalamnya", `cat ../bot-02: ${OTHER.slice(0, 25)}…`, `lain ${OTHER.slice(25)}`, "selesai"].join("\n");
+    const { d } = deps(world({ "bot-01": pane }, [4242]));
+    const text = await logsReport("bot-01", "satu_bot", 20, d);
+    expect(pre(text)).toEqual([
+      "<token disembunyikan> di dalamnya",
+      "cat ../bot-02: <token disembunyikan>…",
+      "lain <token disembunyikan>",
+      "selesai",
+    ]);
   });
 
   test("bot tidak hidup: dijelaskan, tanpa membaca layar", async () => {

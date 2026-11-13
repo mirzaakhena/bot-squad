@@ -69,6 +69,12 @@ describe.skipIf(!TMUX)("/logs di proses master-bot sungguhan", () => {
       ].join("\n"),
     );
     expect(tmux("new-session", "-d", "-s", "bot-hidup", "-x", "200", "-y", "80", "sh", script).exitCode).toBe(0);
+    // Layar sempit: token terbungkus dan awalnya terdorong keluar dari tepi
+    // atas layar, jadi yang terlihat hanya potongan token tanpa '<angka>:'.
+    botFolder("bot-sempit", sleeper.pid);
+    const narrow = join(home, "sempit.sh");
+    writeFileSync(narrow, `printf 'teks panjang dengan token ${BOT_TOKEN} di dalamnya\\na\\nb\\n'\nsleep 300\n`);
+    expect(tmux("new-session", "-d", "-s", "bot-sempit", "-x", "40", "-y", "5", "sh", narrow).exitCode).toBe(0);
     const before = sessions();
 
     let regBefore = "";
@@ -100,6 +106,7 @@ describe.skipIf(!TMUX)("/logs di proses master-bot sungguhan", () => {
           bots: {
             "bot-hidup": { telegramId: 1, username: "hidup_bot", status: "active", createdAt: "x" },
             "bot-mati": { telegramId: 2, username: "mati_bot", status: "active", createdAt: "x" },
+            "bot-sempit": { telegramId: 3, username: "sempit_bot", status: "active", createdAt: "x" },
           },
         }),
       );
@@ -112,12 +119,20 @@ describe.skipIf(!TMUX)("/logs di proses master-bot sungguhan", () => {
       await until(() => texts().length >= 3, "balasan /logs ketiga");
       tg.push(ownerDm("/logs bot-hidup 51"));
       await until(() => texts().length >= 4, "balasan /logs keempat");
+      tg.push(ownerDm("/logs bot-sempit"));
+      await until(() => texts().length >= 5, "balasan /logs bot-sempit");
     } finally {
       proc.kill("SIGTERM");
       await proc.exited;
     }
 
-    const [def, four, dead, bad] = texts();
+    const [def, four, dead, bad, narrowText] = texts();
+    // Layar bot-sempit memang hanya memuat potongan token (prasyarat tes).
+    const pane = tmux("capture-pane", "-p", "-t", "=bot-sempit:").stdout.toString();
+    expect(pane).not.toContain(BOT_TOKEN.split(":")[0]! + ":");
+    expect(pane).toContain(BOT_TOKEN.slice(-8));
+    expect(narrowText).toContain("&lt;token disembunyikan&gt;");
+    for (let i = 0; i + 8 <= BOT_TOKEN.length; i++) expect(narrowText).not.toContain(BOT_TOKEN.slice(i, i + 8));
     expect(def).toStartWith("Layar @hidup_bot ('bot-hidup'), 20 baris terakhir:\n<pre>");
     expect(def).not.toContain("\n\n</pre>");
     expect(def).toContain("<pre>baris 14\nbaris 15");
