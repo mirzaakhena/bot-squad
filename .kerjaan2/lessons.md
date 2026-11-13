@@ -36,3 +36,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - bot.stop() grammY memanggil getUpdates tanpa signal; satu-satunya cara memutusnya adalah transformer bot.api.config.use yang menambah AbortSignal (lihat master/src/cutoff.ts)
 - Plugin mengirim permintaan izin claude/channel/permission ke SEMUA allowFrom, jadi orang yang di-/allow juga menerima dan bisa menjawab prompt izin bot itu
 - k2 test menjalankan skrip hanya lewat path absolut; ./skrip.sh dicari relatif ke worktree
+- Sensor layar: token yang diketahui bisa tampil sebagai POTONGAN tanpa '<angka>:' (baris atas pane lanjutan wrap dari scrollback, awalan sebelum elipsis); sensor potongan token yang diketahui juga

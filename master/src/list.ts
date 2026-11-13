@@ -3,6 +3,7 @@ import { botPaths, type Tmux } from "./launch.ts";
 import { describeError, redact, type Logger } from "./log.ts";
 import { NAME_RULE } from "./register.ts";
 import { readRegistry, RegistryError, type BotRecord } from "./registry.ts";
+import { accessCount, readAccess } from "./allow.ts";
 
 /**
  * /list (tiket 261112225301): daftar bot terdaftar beserta keadaan nyatanya.
@@ -97,6 +98,13 @@ export function unregisteredFolders(dataDir: string, registered: Record<string, 
     .sort();
 }
 
+/** Jumlah orang yang punya akses ke bot (Q1, tiket 261112225307); hanya membaca access.json. */
+export function accessLine(dataDir: string, name: string): string {
+  const read = readAccess(dataDir, name);
+  if (!read.ok) return "akses: tidak bisa dibaca (lihat /access " + name + ")";
+  return `akses: ${accessCount(read.access)} orang`;
+}
+
 const ANY_TOKEN = /\d+:[A-Za-z0-9_-]{20,}/g;
 
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -144,6 +152,7 @@ export async function listReport(d: ProbeDeps & { log: Logger }): Promise<string
       } else if (rec.status === "failed" && (live === "alive" || live === "plugin-dead")) {
         line += "\n   sesi dibiarkan untuk diperiksa";
       }
+      if (NAME_RULE.test(name)) line += `\n   ${accessLine(d.dataDir, name)}`;
       lines.push(line);
     }
     if (bad > 0) lines.push(`${bad} bot tidak cocok antara status tercatat dan keadaan nyata.`);
