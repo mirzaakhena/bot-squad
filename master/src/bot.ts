@@ -6,6 +6,7 @@ import { NAME_RULE, parseRegisterArgs, registerBot, USAGE } from "./register.ts"
 import { readRegistry, setBotStatus, type BotStatus, type WriteHooks } from "./registry.ts";
 import { isAlive, realTmux, type LaunchResult } from "./launch.ts";
 import { listReport, type ProbeDeps } from "./list.ts";
+import { LOGS_USAGE, logsReport, parseLogsArgs } from "./logs.ts";
 import { busyText, createBotLocks, type BotLocks } from "./busy.ts";
 import { isClean, type StopResult } from "./stop.ts";
 import { sendWithRetry, type RetryPolicy } from "./retry.ts";
@@ -18,6 +19,7 @@ export const COMMANDS = [
   { command: "list", description: "Daftar bot beserta keadaan nyatanya" },
   { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
   { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama>" },
+  { command: "logs", description: "Baris terakhir layar satu bot: /logs <nama> [n]" },
 ] as const;
 
 export function helpText(): string {
@@ -60,6 +62,8 @@ export type MasterBotOptions = {
   signal?: AbortSignal;
   /** Cek keadaan nyata untuk /list; default tmux dan cek pid asli. Diganti di tes. */
   probe?: Omit<ProbeDeps, "dataDir">;
+  /** Membaca layar sesi tmux untuk /logs; default realTmux.capture. Diganti di tes. */
+  capture?: (name: string) => Promise<string | null>;
   /** Jeda kirim ulang laporan penyalaan; diganti di tes. */
   reportRetry?: RetryPolicy;
 };
@@ -162,6 +166,26 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   bot.command("list", async (ctx) => {
     const probe = opts.probe ?? { tmux: realTmux, isAlive };
     const text = await listReport({ dataDir: opts.dataDir, ...probe, log: opts.log });
+    await ctx.reply(text, { parse_mode: "HTML" });
+  });
+
+  // /logs hanya membaca layar (tanpa BotLocks): tidak bentrok dengan penyalaan.
+  bot.command("logs", async (ctx) => {
+    const args = parseLogsArgs(ctx.match);
+    const found = args ? lookup(args.name, LOGS_USAGE, "Tidak ada layar yang ditampilkan.") : { reply: LOGS_USAGE };
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    const probe = opts.probe ?? { tmux: realTmux, isAlive };
+    const capture = opts.capture ?? realTmux.capture;
+    const text = await logsReport(found.name, found.username, args!.lines, {
+      dataDir: opts.dataDir,
+      tmux: { hasSession: (n) => probe.tmux.hasSession(n), capture },
+      isAlive: probe.isAlive,
+      masterToken: opts.token,
+      log: opts.log,
+    });
     await ctx.reply(text, { parse_mode: "HTML" });
   });
 
