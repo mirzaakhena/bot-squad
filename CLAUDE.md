@@ -211,6 +211,17 @@ Pemilik mengetik `/context` di chat bot dan langsung mendapat sisa konteks sesi 
 - **Payload nyata** (Claude Code 2.1.323, ditangkap dari sesi uji di tmux tanpa plugin dan tanpa token): sebelum giliran pertama `context_window.used_percentage` bernilai `null` dan `rate_limits` tidak ada. Sesudahnya ada `used_percentage`, `total_input_tokens`, `context_window_size`, dan `rate_limits.seven_day.{used_percentage,resets_at}` (`resets_at` detik epoch); `five_hour` tidak muncul di akun ini saat itu. Statusline dari `--settings` mengalahkan `statusLine` project/local workspace, dan perintahnya berjalan dengan cwd workspace dan environment sesi.
 - Tes: `plugin/test/context.test.ts`, `plugin/test/statusline-bridge.test.ts`, `plugin/test/context-command.test.ts` (server sungguhan, dilewati tanpa `plugin/node_modules`), `master/test/statusline.test.ts`.
 
+## /start, /help, /status di chat bot (tiket 261112225309)
+
+Tiga perintah bawaan plugin (`plugin/server.ts`) dijawab plugin sendiri dengan teks Bahasa Indonesia, tanpa instruksi atau kode pairing, dan tidak dikirim ke Claude. `/start` dan `/help` menjelaskan bahwa pesan (teks dan foto) diteruskan ke sesi Claude Code bot itu dan balasannya kembali ke chat; `/help` juga mendaftar `/start`, `/status`, `/context`. `/status` menjawab bahwa pengirim diizinkan, lengkap dengan username dan ID-nya.
+
+- **Siapa**: hanya pengirim di `allowFrom` bot itu, di chat pribadi, apa pun `dmPolicy`-nya (aturan yang sama dengan `/context`, `contextAllowed`). Orang lain, juga saat `dmPolicy` `pairing` dan di grup, tidak dibalas sama sekali.
+- Tes: `plugin/test/commands.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
+
+## Prinsip: perintah terpilih, bukan semua slash Claude Code
+
+bot-squad hanya mendukung beberapa perintah chat bot yang dipilih pemilik karena penting dan sering dipakai (saat ini `/start`, `/help`, `/status`, `/context`). Slash command Claude Code lain (misalnya `/compact`, `/model`) **tidak** diteruskan ke sesi bot, juga tidak dengan tombol konfirmasi (tiket 261112230305 dibatalkan oleh pemilik, 2026-11-13). Perintah baru yang mengetik ke sesi Claude (interrupt, new, rename, branch/switch) ditambahkan satu per satu sebagai perintah khusus, menunggu rancangan mekanismenya (tiket 261112230302).
+
 ## Membaca kuota akun Claude (riset tiket 261112225308, Claude Code 2.1.323)
 
 Tujuannya `/quota` di master-bot. Kesimpulan: **layak** (tiket backlog 261113192501), dengan sumber utama `rate_limits` di `status.json` bot dan umur datanya ditampilkan (keputusan pemilik Q3: data terakhir plus umurnya cukup; tidak harus segar saat diminta). Riset ini tidak membaca kredensial akun Claude (keputusan pemilik Q1). Diuji dengan satu sesi Claude (akun Ultra, model haiku, workspace di scratchpad, server tmux terpisah, tanpa plugin bot-squad, dua giliran pendek) yang statusline-nya merekam setiap payload.
@@ -247,21 +258,25 @@ Fakta `rate_limits` yang teramati dan terdokumentasi:
 8. **Workspace di dalam repo git lain**: Claude memuat `CLAUDE.md` dan `.claude/` dari folder induk. Workspace bot jangan diletakkan di dalam proyek lain.
 9. **Pengaturan user tidak berlaku di bot**: karena `--setting-sources project,local`, model dan effort default dari `~/.claude/settings.json` tidak dipakai. Kalau perlu, berikan lewat `--settings` atau `--model`.
 
-## Status saat ini (2026-11-12)
+## Status saat ini (2026-11-13)
 
-- [x] Plugin upstream disalin ke `plugin/`
-- [x] `git init` di `bot-squad/` (branch `main`), belum ada commit
-- [x] Plugin `kerjaan2` (papan tiket) terpasang dengan scope local untuk project ini
-- [ ] Commit baseline `plugin/` yang belum diubah
-- [ ] Rancang alur `/register <nama> <token>` dari awal sampai bot menyala, lalu didiskusikan dengan pemilik sebelum menulis kode
-- [x] Rebrand `plugin/` menjadi `bot-squad`
-- [x] Kerangka `master/`: konfigurasi, hanya melayani pemilik, `/start` dan `/help`
-- [x] `/register`: validasi, folder bot, dan registry (belum menyalakan bot)
+Selesai:
+
+- [x] Plugin upstream disalin ke `plugin/` dan di-rebrand menjadi `bot-squad`
+- [x] Repo git di `bot-squad/` (branch `main`), sudah banyak commit; pekerjaan dikelola lewat papan tiket plugin `kerjaan2` (`.kerjaan2/`)
+- [x] Kerangka `master/`: konfigurasi, hanya melayani pemilik, kunci satu master-bot per folder data
+- [x] Perintah master-bot: `/start`, `/help`, `/register`, `/list`, `/stop`, `/restart`, `/logs`, `/allow`, `/revoke`, `/access`, `/delete`
 - [x] `/register` langsung menyalakan bot dan melaporkan aktif atau gagal
-- [x] `/stop` dan `/restart` untuk satu bot
 - [x] Bot yang seharusnya hidup dinyalakan ulang saat master-bot menyala
-- [x] `/list` dan `/logs`
-- [ ] Perintah master-bot berikutnya
+- [x] Log tiap bot (`plugin.log`), `/context` di chat bot, dan perintah bawaan `/start`, `/help`, `/status` di chat bot
+- [x] Riset sumber kuota akun Claude (tiket 261112225308)
+
+Direncanakan (backlog):
+
+- [ ] `/quota` di master-bot (tiket 261113192501)
+- [ ] Perintah chat bot yang mengetik ke sesi Claude (interrupt, new, rename, branch/switch): ditunda menunggu rancangan mekanismenya (tiket 261112230302); lihat prinsip perintah terpilih di atas
+- [ ] Perbaikan lain di backlog: pesan pertama ke bot baru yang kadang terlambat (261112223103), bot yang sedang dihapus tidak dinyalakan lagi setelah master-bot crash (261113190701), tes master-bot yang kadang gagal acak (261113194401), penjaga balasan Claude (261112230307), bot berkirim pesan ke bot lain (261112230309)
+- [ ] Master-bot sendiri belum dinyalakan otomatis setelah reboot
 
 ## Cara bekerja di proyek ini
 
