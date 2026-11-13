@@ -1,3 +1,2 @@
 goal: Bot dikelola sepenuhnya dari master-bot: /list, /stop dan /restart, dan penyalaan ulang otomatis saat master menyala
 order:
-  - 261112225304   # Master menghidupkan kembali bot yang seharusnya hidup saat menyala

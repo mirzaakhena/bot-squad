@@ -32,3 +32,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Statusline dari --settings mengalahkan statusLine project/local workspace dan berjalan dengan cwd workspace serta env sesi (Claude Code 2.1.323)
 - Tes dengan tmux -S <dir>/tmux-<uid>/default yang membuat sesi sebelum proses lain menyalakan server harus membuat folder tmux-<uid> (0700) sendiri, kalau tidak new-session gagal kode 1
 - bun test berbagi modul antar berkas: Map/Set tingkat modul (mis. kunci per bot) bocor antar tes; buat state seperti itu per createMasterBot, bukan variabel modul
+- main.ts menyalakan bot active/registered dari registry saat start; tes proses yang bukan soal penyalaan otomatis harus menulis registry setelah getUpdates pertama

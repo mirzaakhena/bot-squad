@@ -19,12 +19,12 @@ Saat master-bot menyala, ia mencocokkan daftar bot dengan sesi yang benar-benar 
 
 ## Done when
 
-- [ ] Saat master-bot menyala, setiap bot berstatus active atau registered yang tidak berjalan dinyalakan ulang.
-- [ ] Bot berstatus failed tidak dinyalakan otomatis; ringkasan menyebutnya dengan petunjuk /restart <nama>.
-- [ ] Bot yang sengaja dihentikan pemilik dan bot yang sudah berjalan tidak disentuh.
-- [ ] Setiap kali master-bot menyala dan registry berisi minimal satu bot, pemilik menerima satu pesan ringkasan: bot mana yang dinyalakan ulang, mana yang gagal, dan mana yang dibiarkan. Registry kosong tidak mengirim pesan.
-- [ ] Bot yang gagal dinyalakan ulang tidak menghalangi bot lain.
-- [ ] Dibuktikan dengan tes otomatis.
+- [x] Saat master-bot menyala, setiap bot berstatus active atau registered yang tidak berjalan dinyalakan ulang.
+- [x] Bot berstatus failed tidak dinyalakan otomatis; ringkasan menyebutnya dengan petunjuk /restart <nama>.
+- [x] Bot yang sengaja dihentikan pemilik dan bot yang sudah berjalan tidak disentuh.
+- [x] Setiap kali master-bot menyala dan registry berisi minimal satu bot, pemilik menerima satu pesan ringkasan: bot mana yang dinyalakan ulang, mana yang gagal, dan mana yang dibiarkan. Registry kosong tidak mengirim pesan.
+- [x] Bot yang gagal dinyalakan ulang tidak menghalangi bot lain.
+- [x] Dibuktikan dengan tes otomatis.
 - [ ] (owner) Pemilik mematikan semua sesi bot, menyalakan ulang master-bot, dan bot-bot itu hidup kembali.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
@@ -49,3 +49,27 @@ Saat master-bot menyala, ia mencocokkan daftar bot dengan sesi yang benar-benar 
 ## Decisions
 - Lane standard: menyalakan bot lewat launchBot yang sudah teruji; tidak membuat cara mematikan baru
 - Menunggu 261112225302: memakai status 'stopped' dan kunci per bot (sibuk) yang dibuat di sana, supaya penyalaan otomatis tidak bertabrakan dengan /stop atau /restart.
+- Registry rusak saat menyala tetap mengirim satu pesan berisi sebabnya tanpa menyalakan bot: pemilik perlu tahu kenapa tidak ada yang hidup kembali; Done when hanya melarang pesan untuk registry kosong.
+
+## Manual checks
+- M1 [waiting] (item 7) 1. Pastikan master-bot berjalan dan minimal satu bot terdaftar berstatus aktif (cek dengan /list).
+  2. Hentikan master-bot (Ctrl+C).
+  3. Matikan semua sesi bot: tmux kill-session -t '=<nama>' untuk tiap bot (atau reboot server).
+  4. Jalankan lagi: bun run --cwd master start.
+  5. Dalam beberapa detik pemilik menerima satu pesan 'master-bot menyala. Keadaan N bot terdaftar:' dengan bot-bot itu di bagian 'Dinyalakan ulang'.
+  6. tmux ls menampilkan sesinya lagi, /list menunjukkan 'aktif · nyata: hidup', dan bot membalas chat. Bot yang dihentikan dengan /stop tetap mati dan disebut 'dihentikan pemilik'.
+
+## Handoff
+Baru: master/src/revive.ts (reviveBots, reviveReport, reviveAndReport), dipanggil di serve() main.ts setelah syncCommandMenu dan sebelum bot.start, di latar belakang dan didaftarkan ke set launches supaya ikut ditunggu saat berhenti. main.ts kini membuat satu BotLocks dan satu probe yang dipakai bersama createMasterBot dan penyalaan otomatis; jangan membuat kunci kedua. Aturan: active/registered dinyalakan lewat launchBot (yang sudah berjalan menjadi already-running, status tidak diubah); failed/stopped/status lain hanya diperiksa dengan runningReason dan dibiarkan. Registry dibaca sekali secara sinkron di awal; tes yang butuh registry tanpa penyalaan otomatis harus menulisnya setelah master polling (lihat list-process.test.ts). Ringkasan satu pesan lewat sendWithRetry, tidak dikirim kalau registry kosong atau master berhenti.
+
+## Review
+- 2026-11-13 standard, round 1, at 818c086: passed.
+  1: revive-process (k2 test, salinan, HOME/tmux terpisah): a-aktif/b-terdaftar dapat sesi baru, tercatat active; setelah kill-server dua bot active hidup lagi. Mutasi failed/stopped ke SHOULD_RUN menggagalkan 6 tes.
+  2: revive-process: d-gagal tidak dinyalakan, tetap failed, ringkasan 'Coba lagi dengan /restart d-gagal'; tertangkap mutasi di atas.
+  3: revive-process: e-stop tidak dinyalakan; pid pane f-hidup/g-stop-hidup/sesi-pribadi tetap; x-liar tak disentuh. Tes tambahan reviewer: selama penyalaan otomatis /restart dan /stop dijawab 'sedang dinyalakan', satu sesi, status active (kunci bersama).
+  4: revive-process: satu ringkasan per start (dua start, dua pesan) dengan tiga bagian; registry kosong tanpa sendMessage (proses dan unit).
+  5: revive-process: c-rusak tercatat failed, a/b tetap hidup; tes unit bot yang melempar error tidak menghalangi bot lain.
+  6: revive.test.ts (20) dan revive-process.test.ts (3) lulus. Suite penuh tidak diulang sesuai brief; repo tak punya skrip/CI lain.
+  7: (owner) M1 bisa diikuti dari awal dan diakhiri dengan hasil yang terlihat.
+  note: who() di revive.ts tidak meng-escape e.name; nama tulisan tangan di registry yang berisi < atau & bisa membuat ringkasan HTML ditolak 400. Lewat /register tidak mungkin.
+  note: kalau bot.start gagal (409) setelah penyalaan otomatis dimulai, proses keluar tanpa memutus penyalaan; polanya sama dengan /register.

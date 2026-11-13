@@ -58,16 +58,6 @@ describe.skipIf(!TMUX)("/list di proses master-bot sungguhan", () => {
     const dead = Bun.spawn(["true"]);
     await dead.exited;
 
-    writeFileSync(
-      registryPath(home),
-      JSON.stringify({
-        bots: {
-          "bot-hidup": { telegramId: 1, username: "hidup_bot", status: "active", createdAt: "x" },
-          "bot-mati": { telegramId: 2, username: "mati_bot", status: "active", createdAt: "x" },
-          "bot-stop": { telegramId: 3, username: "stop_bot", status: "stopped", createdAt: "x" },
-        },
-      }),
-    );
     botFolder("bot-hidup", sleeper.pid);
     botFolder("bot-mati", dead.pid);
     botFolder("bot-stop");
@@ -77,8 +67,8 @@ describe.skipIf(!TMUX)("/list di proses master-bot sungguhan", () => {
       expect(tmux("new-session", "-d", "-s", s, "sleep", "300").exitCode).toBe(0);
     }
     const before = sessions();
-    const regBefore = readFileSync(registryPath(home), "utf8");
 
+    let regBefore = "";
     const proc = Bun.spawn([process.execPath, MAIN], {
       env: {
         PATH: [dirname(TMUX!), dirname(process.execPath), "/usr/bin", "/bin"].join(":"),
@@ -99,6 +89,20 @@ describe.skipIf(!TMUX)("/list di proses master-bot sungguhan", () => {
         }
       };
       await until(() => tg.calls.some((c) => c.method === "getUpdates"), "master-bot polling");
+      // Registry ditulis setelah master-bot menyala: penyalaan otomatis
+      // (tiket 261112225304) membaca registry saat start, dan tes ini hanya
+      // menguji /list, yang tidak boleh mengubah apa pun.
+      writeFileSync(
+        registryPath(home),
+        JSON.stringify({
+          bots: {
+            "bot-hidup": { telegramId: 1, username: "hidup_bot", status: "active", createdAt: "x" },
+            "bot-mati": { telegramId: 2, username: "mati_bot", status: "active", createdAt: "x" },
+            "bot-stop": { telegramId: 3, username: "stop_bot", status: "stopped", createdAt: "x" },
+          },
+        }),
+      );
+      regBefore = readFileSync(registryPath(home), "utf8");
       tg.push(ownerDm("/list"));
       await until(() => tg.calls.some((c) => c.method === "sendMessage"), "balasan /list");
     } finally {

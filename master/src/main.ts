@@ -8,6 +8,7 @@ import { createBotLocks } from "./busy.ts";
 import { syncCommandMenu } from "./menu.ts";
 import { acquireMasterLock, type LockDeps } from "./lock.ts";
 import { resolveApiRoot } from "./api-root.ts";
+import { reviveAndReport } from "./revive.ts";
 
 export type RunOptions = ConfigSource & {
   /** Penulis log; default stderr. */
@@ -76,6 +77,13 @@ async function serve(
   // Penyalaan, /stop dan /restart yang masih berjalan; ditunggu sebentar
   // saat berhenti supaya status dan log-nya tertulis (tiket 261112223102).
   const launches = new Set<Promise<void>>();
+  const track = (done: Promise<void>) => {
+    launches.add(done);
+    void done.finally(() => launches.delete(done));
+  };
+  // Satu kunci per bot untuk /register, /stop, /restart, dan penyalaan otomatis.
+  const locks = createBotLocks();
+  const probe = { tmux: launchDeps.tmux, isAlive: launchDeps.isAlive };
   const bot = createMasterBot({
     token: config.token,
     ownerId: config.ownerId,
@@ -85,12 +93,9 @@ async function serve(
     signal: opts.signal,
     launch: (name) => launchBot(name, launchDeps),
     stop: (name) => stopBot(name, stopDeps),
-    locks: createBotLocks(),
-    probe: { tmux: launchDeps.tmux, isAlive: launchDeps.isAlive },
-    onLaunch: (done) => {
-      launches.add(done);
-      void done.finally(() => launches.delete(done));
-    },
+    locks,
+    probe,
+    onLaunch: track,
   });
 
   const explain = (err: unknown): string => {
@@ -125,6 +130,19 @@ async function serve(
     await bot.init();
     await syncCommandMenu(bot.api, config.ownerId, log);
     if (opts.signal?.aborted) return 0;
+    // Penyalaan otomatis (tiket 261112225304) berjalan di latar belakang,
+    // supaya master-bot langsung melayani perintah.
+    track(
+      reviveAndReport({
+        dataDir: dir,
+        launch: (name) => launchBot(name, launchDeps),
+        probe,
+        locks,
+        log,
+        send: (text, signal) => bot.api.sendMessage(config.ownerId, text, { parse_mode: "HTML" }, signal),
+        signal: opts.signal,
+      }),
+    );
     await bot.start({
       onStart: (me) => log(`berjalan sebagai @${me.username}, hanya melayani pemilik ${config.ownerId}`),
     });
