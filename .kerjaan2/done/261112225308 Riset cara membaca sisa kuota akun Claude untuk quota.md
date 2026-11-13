@@ -19,8 +19,8 @@ Cari cara yang andal untuk membaca pemakaian dan sisa kuota akun Claude dari ser
 
 ## Done when
 
-- [ ] CLAUDE.md mencatat sumber data kuota yang ditemukan, cara membacanya, seberapa andal, dan batasannya, atau menyatakan belum ada cara yang andal beserta apa saja yang sudah dicoba.
-- [ ] Kalau ada cara yang andal, ada tiket baru di backlog untuk perintah /quota.
+- [x] CLAUDE.md mencatat sumber data kuota yang ditemukan, cara membacanya, seberapa andal, dan batasannya, atau menyatakan belum ada cara yang andal beserta apa saja yang sudah dicoba.
+- [x] Kalau ada cara yang andal, ada tiket baru di backlog untuk perintah /quota.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
@@ -39,7 +39,19 @@ Cari cara yang andal untuk membaca pemakaian dan sisa kuota akun Claude dari ser
 - A2 [unseen] Aturan uji wajib: jangan membaca/menulis ~/.bot-squad (termasuk status.json bot yang sedang jalan); uji dengan HOME/BOT_SQUAD_HOME sementara berisi SALINAN tanpa symlink; server tmux terpisah lewat TMUX_TMPDIR/-S (socket boleh di /tmp/k2-261112225308-*, hapus sesudahnya); master-bot, uji-03, uji-01 di server tmux default tidak disentuh; tanpa token asli; berkas sementara di scratchpad subfolder 261112225308; jangan membaca kredensial/token akun Claude pemilik (~/.claude/.credentials*, keychain) kecuali sesuai jawaban Q1; kalau pengaman izin menolak, laporkan dan jangan cari jalan memutar
   Why: Aturan pemilik
   If wrong: -
+- A3 [unseen] Tiket backlog /quota tidak bisa dibuat worker (k2 new dan k2 followup ditolak untuk worker); isinya diusulkan di laporan agar dibuat foreman: /quota membaca status.json semua bot (hanya baca), memakai captured_at_ms terbaru, menampilkan 7d/5h terpakai, reset, umur data, bot sumber, dan pesan jelas kalau tidak ada data
+  Why: Riset menyimpulkan layak; pembuatan tiket bukan wewenang worker
+  If wrong: Foreman membuat tiket dengan k2 new lalu baris 2 dicentang
 
 ## Decisions
 - Lane standard: riset tanpa kode, tetapi menyentuh akun Claude pemilik; hasilnya keputusan /quota
 - Tidak solo, tidak menunggu: riset tanpa kode; data /context (261112230304) sudah ada di main
+
+## Handoff
+Riset saja, tanpa kode. CLAUDE.md mendapat bagian 'Membaca kuota akun Claude': sumber yang dipakai untuk /quota adalah rate_limits di <state>/status.json tiap bot (ditulis bridge /context), dibaca saja oleh master, memilih captured_at_ms terbaru dan menampilkan umurnya (Q3). Angkanya berlaku untuk seluruh akun, hanya berubah saat ada panggilan API, bisa ~1 poin di bawah /usage, tanpa rincian per model. Layar /usage, cachedUsageUtilization di ~/.claude.json (tak terdokumentasi) dan endpoint OAuth (tidak diuji, Q1) ditolak. Concern 4 menunjuk ke bagian ini. Tiket backlog /quota belum dibuat karena worker tidak boleh k2 new; usulan isinya di A3.
+
+## Review
+- 2026-11-13 standard, round 1, at efad022: passed.
+  1: Bagian 'Membaca kuota akun Claude' cocok dengan docs statusline (rate_limits, plan, absen per jendela) dan costs (/usage 60 menit), context.ts (captured_at_ms), kunci cachedUsageUtilization di ~/.claude.json, versi 2.1.323. Angka uji 36/37% dinilai dari catatan worker saja.
+  2: Tiket backlog 261113192501 ada, Done when dapat diuji (terbaru antar bot, tanpa data, hanya baca, tanpa kredensial, tes), dirujuk di CLAUDE.md.
+  note: rate_limits.spend_limit (gateway) tidak disebut, tidak relevan. Tidak ada AGENTS.md; tidak ada cek repo selain bun test yang sudah lulus.

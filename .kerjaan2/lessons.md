@@ -39,3 +39,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Sensor layar: token yang diketahui bisa tampil sebagai POTONGAN tanpa '<angka>:' (baris atas pane lanjutan wrap dari scrollback, awalan sebelum elipsis); sensor potongan token yang diketahui juga
 - Soket tmux di scratchpad terlalu panjang dan hasSession diam-diam false (stop tampak bersih); uji tmux nyata dengan TMUX_TMPDIR=mktemp -d /tmp/k2-<tiket>-XXXX dan cek sesinya ada
 - Tombol konfirmasi untuk aksi yang merusak harus mengikat identitas sasaran (mis. telegramId), bukan hanya nama: nama bisa dihapus lalu didaftarkan ulang selama tombol masih berlaku.
+- rate_limits di payload statusline tidak berubah saat sesi menganggur walau refreshInterval jalan; captured_at_ms status.json = waktu gambar ulang, bukan waktu angka diperbarui
