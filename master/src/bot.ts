@@ -7,6 +7,7 @@ import { readRegistry, setBotStatus, type BotStatus, type WriteHooks } from "./r
 import { isAlive, realTmux, type LaunchResult } from "./launch.ts";
 import { listReport, type ProbeDeps } from "./list.ts";
 import { LOGS_USAGE, logsReport, parseLogsArgs } from "./logs.ts";
+import { quotaReport } from "./quota.ts";
 import { busyText, createBotLocks, type BotLocks } from "./busy.ts";
 import { isClean, type StopResult } from "./stop.ts";
 import { sendWithRetry, type RetryPolicy } from "./retry.ts";
@@ -34,6 +35,7 @@ export const COMMANDS = [
   { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
   { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama>" },
   { command: "logs", description: "Baris terakhir layar satu bot: /logs <nama> [n]" },
+  { command: "quota", description: "Sisa kuota akun Claude (5 jam/7 hari)" },
   { command: "allow", description: "Izinkan orang lain memakai satu bot: /allow <nama> <user_id>" },
   { command: "revoke", description: "Cabut akses orang lain ke satu bot: /revoke <nama> <user_id>" },
   { command: "access", description: "Siapa saja yang punya akses ke satu bot: /access <nama>" },
@@ -260,6 +262,12 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       masterToken: opts.token,
       log: opts.log,
     });
+    await ctx.reply(text, { parse_mode: "HTML" });
+  });
+
+  // /quota hanya membaca registry.json dan status.json bot terdaftar (tanpa BotLocks).
+  bot.command("quota", async (ctx) => {
+    const text = quotaReport({ dataDir: opts.dataDir, log: opts.log, now: (opts.now ?? Date.now)() });
     await ctx.reply(text, { parse_mode: "HTML" });
   });
 
