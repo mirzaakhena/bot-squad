@@ -9,6 +9,8 @@ import { listReport, type ProbeDeps } from "./list.ts";
 import { busyText, createBotLocks, type BotLocks } from "./busy.ts";
 import { isClean, type StopResult } from "./stop.ts";
 import { sendWithRetry, type RetryPolicy } from "./retry.ts";
+import { randomBytes } from "node:crypto";
+import { archiveBot, type ArchiveResult } from "./delete.ts";
 
 /** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
 export const COMMANDS = [
@@ -18,6 +20,7 @@ export const COMMANDS = [
   { command: "list", description: "Daftar bot beserta keadaan nyatanya" },
   { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
   { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama>" },
+  { command: "delete", description: "Hapus satu bot (dengan konfirmasi): /delete <nama>" },
 ] as const;
 
 export function helpText(): string {
@@ -62,7 +65,16 @@ export type MasterBotOptions = {
   probe?: Omit<ProbeDeps, "dataDir">;
   /** Jeda kirim ulang laporan penyalaan; diganti di tes. */
   reportRetry?: RetryPolicy;
+  /** Jam untuk masa berlaku tombol /delete dan cap waktu arsip; diganti di tes. */
+  now?: () => number;
+  /** Masa berlaku tombol konfirmasi /delete; default DELETE_CONFIRM_MS. */
+  deleteConfirmMs?: number;
+  /** Kait tes /delete: dipanggil tepat sebelum folder bot dipindah ke arsip. */
+  beforeArchive?: (from: string, to: string) => void;
 };
+
+/** Tombol konfirmasi /delete berlaku 5 menit dan hanya sekali pakai (A1). */
+export const DELETE_CONFIRM_MS = 5 * 60_000;
 
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -138,6 +150,51 @@ export function restartBlockedReport(name: string, username: string, r: StopResu
 
 export const STOP_USAGE = "Cara pakai: /stop <nama>\nNama hanya huruf kecil, angka, dan '-'.";
 export const RESTART_USAGE = "Cara pakai: /restart <nama>\nNama hanya huruf kecil, angka, dan '-'.";
+export const DELETE_USAGE = "Cara pakai: /delete <nama>\nNama hanya huruf kecil, angka, dan '-'.";
+export const DELETE_EXPIRED = "Konfirmasi ini sudah kedaluwarsa atau sudah dipakai. Tidak ada yang diubah. Kirim /delete <nama> lagi kalau masih perlu.";
+
+/** Pertanyaan konfirmasi /delete (HTML). */
+export function deleteQuestion(name: string, username: string): string {
+  return (
+    `Hapus bot @${escapeHtml(username)} ('${name}')?\n\n` +
+    `Bot dimatikan, dihapus dari daftar bot, dan seluruh foldernya (workspace dan state) dipindah ke arsip. ` +
+    `Token bot dihapus dan tidak ikut diarsipkan. Langkah ini tidak bisa dibatalkan dari master-bot.\n\n` +
+    `Tombol berlaku 5 menit.`
+  );
+}
+
+/** Laporan hasil /delete (HTML). */
+export function deleteReport(name: string, username: string, stop: StopResult, res: ArchiveResult): string {
+  const who = `@${escapeHtml(username)} ('${name}')`;
+  if (!isClean(stop)) {
+    return (
+      `Bot ${who} tidak dihapus: bot tidak bisa dimatikan bersih (${leftoverLines(name, stop).join("; ")}). ` +
+      `Daftar bot dan folder tidak diubah. Periksa manual di server, lalu coba /delete ${name} lagi.`
+    );
+  }
+  if (!res.ok) {
+    const parts = [`Bot ${who} gagal dihapus: ${escapeHtml(res.reason)}.`];
+    if (res.archivedTo) {
+      parts.push(`Folder sudah dipindah ke arsip: <code>${escapeHtml(res.archivedTo)}</code>, tetapi '${name}' masih ada di daftar bot. Coba /delete ${name} lagi.`);
+    } else if (res.tokenRemoved) {
+      parts.push(`Token di state/.env sudah dihapus, jadi bot ini tidak bisa dinyalakan lagi. Folder masih di tempatnya dan '${name}' masih terdaftar. Coba /delete ${name} lagi.`);
+    } else {
+      parts.push(`Tidak ada yang diubah.`);
+    }
+    parts.push("Lihat log master-bot.");
+    return parts.join("\n\n");
+  }
+  const parts = [`Bot ${who} dihapus dari daftar bot.`];
+  parts.push(
+    res.archivedTo
+      ? `Folder bot (workspace dan state) diarsipkan di:\n<code>${escapeHtml(res.archivedTo)}</code>\nToken tidak ikut diarsipkan. Arsip tidak pernah dihapus otomatis.`
+      : `Folder bot memang sudah tidak ada di disk, jadi tidak ada yang diarsipkan.`,
+  );
+  const forced = stop.killed.filter((k) => !stop.pidsLeft.includes(k.pid));
+  if (forced.length > 0) parts.push(`Server plugin yang tidak keluar sendiri dimatikan paksa: ${forced.map((k) => `pid ${k.pid} (${k.signal})`).join(", ")}.`);
+  parts.push(`Token di @BotFather masih berlaku; cabut di sana kalau tidak dipakai lagi. Nama '${name}' bisa didaftarkan lagi dengan /register.`);
+  return parts.join("\n\n");
+}
 
 const DELETE_FAILED =
   "Peringatan: pesan yang berisi token gagal dihapus dari chat. Hapus pesan itu sendiri.";
@@ -313,6 +370,106 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       });
     }
   });
+
+  // /delete (tiket 261112225306): tidak ada yang berubah sebelum pemilik
+  // menekan tombol Hapus. Setiap tombol sekali pakai dan berlaku terbatas.
+  const now = opts.now ?? Date.now;
+  const confirmMs = opts.deleteConfirmMs ?? DELETE_CONFIRM_MS;
+  const pendingDeletes = new Map<string, { name: string; expires: number }>();
+
+  bot.command("delete", async (ctx) => {
+    const found = lookup(ctx.match, DELETE_USAGE, "Tidak ada yang dihapus.");
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    const { name, username } = found;
+    const busy = locks.busyWith(name);
+    if (busy) {
+      await ctx.reply(busyText(name, busy));
+      return;
+    }
+    for (const [id, p] of pendingDeletes) if (p.expires <= now()) pendingDeletes.delete(id);
+    const id = randomBytes(8).toString("hex");
+    pendingDeletes.set(id, { name, expires: now() + confirmMs });
+    await ctx.reply(deleteQuestion(name, username), {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "Hapus", callback_data: `del:yes:${id}` },
+          { text: "Batal", callback_data: `del:no:${id}` },
+        ]],
+      },
+    });
+  });
+
+  bot.callbackQuery(/^del:(yes|no):([0-9a-f]{16})$/, async (ctx) => {
+    const [, answer, id] = ctx.match as RegExpMatchArray;
+    const p = pendingDeletes.get(id!);
+    // Sekali pakai: diambil dari daftar apa pun jawabannya.
+    pendingDeletes.delete(id!);
+    const clearButtons = async () => {
+      try {
+        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      } catch (err) {
+        opts.log(`tombol /delete gagal dihapus: ${describeError(err)}`);
+      }
+    };
+    if (!p || p.expires <= now()) {
+      await ctx.answerCallbackQuery({ text: "Kedaluwarsa" });
+      await clearButtons();
+      await ctx.reply(DELETE_EXPIRED);
+      return;
+    }
+    const { name } = p;
+    await ctx.answerCallbackQuery();
+    await clearButtons();
+    if (answer !== "yes") {
+      await ctx.reply(`Penghapusan '${name}' dibatalkan. Tidak ada yang diubah.`);
+      return;
+    }
+    // Dicek ulang: bot bisa sudah dihapus lewat konfirmasi lain.
+    const again = lookup(name, DELETE_USAGE, "Tidak ada yang dihapus.");
+    if ("reply" in again) {
+      await ctx.reply(again.reply);
+      return;
+    }
+    const { username } = again;
+    const release = locks.claim(name, "dihapus");
+    if (!release) {
+      await ctx.reply(busyText(name, locks.busyWith(name)!));
+      return;
+    }
+    try {
+      await ctx.reply(`Menghapus '${name}'...`);
+    } finally {
+      inBackground(release, async () => {
+        const stop = await safeStop(name);
+        let res: ArchiveResult = { ok: false, reason: "dibatalkan: bot tidak bersih dimatikan", tokenRemoved: false, archivedTo: null };
+        if (isClean(stop)) {
+          try {
+            res = await archiveBot(name, {
+              dataDir: opts.dataDir,
+              now: () => new Date(now()),
+              registryHooks: opts.registryHooks,
+              beforeMove: opts.beforeArchive,
+            });
+          } catch (err) {
+            res = { ok: false, reason: "error di master-bot saat mengarsipkan", tokenRemoved: false, archivedTo: null };
+            opts.log(`/delete '${name}' error: ${describeError(err)}`);
+          }
+          opts.log(res.ok ? `/delete '${name}': dihapus, arsip ${res.archivedTo ?? "(tidak ada folder)"}` : `/delete '${name}' gagal: ${res.reason}`);
+        } else {
+          opts.log(`/delete '${name}' batal: bot tidak bersih dimatikan`);
+        }
+        await sendReport("penghapusan", name, deleteReport(name, username, stop, res));
+      });
+    }
+  });
+
+  // Tombol lain yang tidak dikenali (mis. dari versi lama): dijawab supaya
+  // tidak berputar terus, tanpa mengubah apa pun.
+  bot.on("callback_query:data", (ctx) => ctx.answerCallbackQuery({ text: "Kedaluwarsa" }));
 
   bot.command("register", async (ctx) => {
     const match = typeof ctx.match === "string" ? ctx.match : "";
