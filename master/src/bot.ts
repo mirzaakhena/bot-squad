@@ -10,6 +10,18 @@ import { LOGS_USAGE, logsReport, parseLogsArgs } from "./logs.ts";
 import { busyText, createBotLocks, type BotLocks } from "./busy.ts";
 import { isClean, type StopResult } from "./stop.ts";
 import { sendWithRetry, type RetryPolicy } from "./retry.ts";
+import {
+  ACCESS_USAGE,
+  accessText,
+  ALLOW_USAGE,
+  allowWarning,
+  changeAccess,
+  isUserId,
+  policyNote,
+  readAccess,
+  REVOKE_USAGE,
+  type AccessWriteHooks,
+} from "./allow.ts";
 
 /** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
 export const COMMANDS = [
@@ -20,6 +32,9 @@ export const COMMANDS = [
   { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
   { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama>" },
   { command: "logs", description: "Baris terakhir layar satu bot: /logs <nama> [n]" },
+  { command: "allow", description: "Izinkan orang lain memakai satu bot: /allow <nama> <user_id>" },
+  { command: "revoke", description: "Cabut akses orang lain ke satu bot: /revoke <nama> <user_id>" },
+  { command: "access", description: "Siapa saja yang punya akses ke satu bot: /access <nama>" },
 ] as const;
 
 export function helpText(): string {
@@ -66,6 +81,8 @@ export type MasterBotOptions = {
   capture?: (name: string) => Promise<string | null>;
   /** Jeda kirim ulang laporan penyalaan; diganti di tes. */
   reportRetry?: RetryPolicy;
+  /** Kait untuk tes penulisan access.json (/allow, /revoke). */
+  accessHooks?: AccessWriteHooks;
 };
 
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -260,7 +277,11 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   const lookup = (match: unknown, usage: string, nothing: string): { name: string; username: string } | { reply: string } => {
     const words = (typeof match === "string" ? match : "").trim().split(/\s+/).filter(Boolean);
     if (words.length !== 1 || !NAME_RULE.test(words[0]!)) return { reply: usage };
-    const name = words[0]!;
+    return lookupName(words[0]!, nothing);
+  };
+
+  /** Bot terdaftar beserta username-nya, atau balasan penolakan. Nama sudah lolos NAME_RULE. */
+  const lookupName = (name: string, nothing: string): { name: string; username: string } | { reply: string } => {
     let bots;
     try {
       bots = readRegistry(opts.dataDir).bots;
@@ -336,6 +357,78 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
         await launchAndReport(name, username);
       });
     }
+  });
+
+  // /allow dan /revoke (tiket 261112225307): hanya allowFrom di access.json
+  // bot yang disebut yang berubah. Master-bot tetap hanya melayani pemilik.
+  const accessCommand = (op: "allow" | "revoke") => async (ctx: { match: unknown; reply: (t: string) => Promise<unknown> }) => {
+    const usage = op === "allow" ? ALLOW_USAGE : REVOKE_USAGE;
+    const words = (typeof ctx.match === "string" ? ctx.match : "").trim().split(/\s+/).filter(Boolean);
+    if (words.length !== 2 || !NAME_RULE.test(words[0]!) || !isUserId(words[1]!)) {
+      await ctx.reply(usage);
+      return;
+    }
+    const userId = words[1]!;
+    const found = lookupName(words[0]!, "Tidak ada yang diubah.");
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    const { name, username } = found;
+    const who = `@${username} ('${name}')`;
+    const res = await changeAccess(opts.dataDir, name, userId, op, opts.ownerId, opts.accessHooks);
+    let text: string;
+    switch (res.kind) {
+      case "owner":
+        text = "Ditolak: itu ID pemilik. Pemilik tidak bisa mencabut aksesnya sendiri dari bot. Tidak ada yang diubah.";
+        break;
+      case "error":
+        opts.log(`/${op} '${name}': ${res.reason}`);
+        text = `${res.reason}. Tidak ada yang diubah.`;
+        break;
+      case "already":
+        text = `${userId} sudah punya akses ke ${who}. Tidak ada yang diubah.`;
+        break;
+      case "absent":
+        text = `${userId} memang tidak punya akses ke ${who}. Tidak ada yang diubah.`;
+        break;
+      case "added": {
+        opts.log(`/allow '${name}': akses ditambahkan untuk ${userId}`);
+        const parts = [
+          `Akses diberikan: ${userId} sekarang bisa mengobrol dengan ${who}, berlaku langsung tanpa restart. ` +
+            `Minta dia mengirim pesan lebih dulu ke @${username}. Bot lain dan master-bot tetap menolaknya.`,
+          allowWarning(name, userId),
+        ];
+        const note = policyNote(res.access);
+        if (note) parts.push(note);
+        text = parts.join("\n\n");
+        break;
+      }
+      case "removed":
+        opts.log(`/revoke '${name}': akses dicabut dari ${userId}`);
+        text = `Akses dicabut: pesan ${userId} ke ${who} mulai sekarang diabaikan.`;
+        break;
+    }
+    await ctx.reply(text);
+  };
+  bot.command("allow", accessCommand("allow"));
+  bot.command("revoke", accessCommand("revoke"));
+
+  // /access hanya membaca access.json bot itu.
+  bot.command("access", async (ctx) => {
+    const found = lookup(ctx.match, ACCESS_USAGE, "");
+    if ("reply" in found) {
+      await ctx.reply(found.reply.trim());
+      return;
+    }
+    const { name, username } = found;
+    const read = readAccess(opts.dataDir, name);
+    if (!read.ok) {
+      opts.log(`/access '${name}': ${read.reason}`);
+      await ctx.reply(`${read.reason}.`);
+      return;
+    }
+    await ctx.reply(accessText(name, username, read.access, opts.ownerId));
   });
 
   bot.command("register", async (ctx) => {

@@ -1,3 +1,2 @@
 goal: Master-bot selalu bisa dihentikan, lalu perintah master-bot yang tidak mengetik ke sesi Claude (/logs, /allow-/revoke-/access, /delete)
 order:
-  - 261112225306   # Perintah delete menghapus bot dengan konfirmasi
