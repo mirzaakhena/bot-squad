@@ -38,10 +38,10 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 ## Done when
 
-- [ ] Penyebab setiap kegagalan acak yang bisa direproduksi ditemukan dan dicatat di tiket.
-- [ ] Seluruh tes proyek lulus 10 kali berturut-turut, dan 5 kali saat dua kumpulan tes berjalan bersamaan dari dua salinan repo; keluaran setiap putaran disimpan dan ringkasannya dicatat di tiket (Q1).
-- [ ] Perbaikannya tidak melemahkan apa yang diuji: tidak ada tes yang dihapus, dilewati, atau batas waktunya dilonggarkan tanpa alasan tercatat.
-- [ ] Kalau ada penyebab yang tidak bisa direproduksi, langkah untuk menangkapnya lain kali tercatat di CLAUDE.md.
+- [x] Penyebab setiap kegagalan acak yang bisa direproduksi ditemukan dan dicatat di tiket.
+- [x] Seluruh tes proyek lulus 10 kali berturut-turut, dan 5 kali saat dua kumpulan tes berjalan bersamaan dari dua salinan repo; keluaran setiap putaran disimpan dan ringkasannya dicatat di tiket (Q1).
+- [x] Perbaikannya tidak melemahkan apa yang diuji: tidak ada tes yang dihapus, dilewati, atau batas waktunya dilonggarkan tanpa alasan tercatat.
+- [x] Kalau ada penyebab yang tidak bisa direproduksi, langkah untuk menangkapnya lain kali tercatat di CLAUDE.md.
 
 ## Out of scope
 
@@ -63,3 +63,15 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 ## Decisions
 - Lane standard: hanya tes dan bantuan tes; tidak mengubah perilaku master-bot atau plugin
+- Semua server tiruan di tes diikat ke hostname 127.0.0.1, bukan memperpanjang waktu tunggu atau mengulang tes; tes penjaga master/test/test-servers.test.ts menolak Bun.serve/Bun.listen tanpa hostname.
+
+## Handoff
+Kegagalan acak tes berasal dari Telegram tiruan yang mendengar semua alamat (Bun.serve tanpa hostname). macOS membagi port berurutan untuk seluruh mesin dan mau memberi port yang sudah didengar proses lain di 127.0.0.1 (sesi Claude Code, Chrome); permintaan tes ke 127.0.0.1 lalu sampai ke proses itu. Perbaikan: hostname 127.0.0.1 di fake-telegram.ts, allow.test.ts, dan tiga tes plugin; penjaga test-servers.test.ts gagal kalau ada Bun.serve/Bun.listen di master/test atau plugin/test tanpa hostname. Jangan arahkan tes ke [::1] pada server tiruan ini; api-root.test.ts punya server ::1 sendiri. Perilaku master-bot dan plugin tidak diubah.
+
+## Review
+- 2026-11-13 standard, round 1, at 5245abd: passed.
+  1: Skrip dua proses: Bun.serve tanpa hostname bisa bind port yang sudah didengar proses lain di 127.0.0.1 dan fetch dijawab proses lain; dengan hostname 127.0.0.1 bind gagal EADDRINUSE. Penyebab tercatat di tiket; log basepair-01 worker gagal 2+1 sebelum perbaikan.
+  2: runs/ worker: seq-01..10 dan pair-01..05 a/b exit 0, 644 lulus, 0 gagal. Saya ulang satu putaran berpasangan dari dua salinan HEAD (HOME/BOT_SQUAD_HOME/TMUX_TMPDIR sementara): keduanya 673 lulus, 0 gagal, 0 dilewati.
+  3: diff main...HEAD hanya menambah hostname di 5 server tiruan + tes penjaga; tidak ada tes dihapus/skip/batas waktu diubah. Penjaga dirusak di salinan (hostname dihapus di fake-telegram.ts dan up() plugin-log): gagal menyebut kedua lokasi.
+  4: CLAUDE.md (Menjalankan master-bot) memuat aturan hostname, gejala, dan langkah menangkap kegagalan berikutnya (simpan keluaran, dua salinan bersamaan, lsof). Dinilai dengan membaca.
+  note: penjaga hanya mengenali pola literal Bun.serve({ / Bun.listen({; opsi dalam variabel atau node:http tidak terdeteksi. Saat ini tidak ada yang seperti itu di tes.

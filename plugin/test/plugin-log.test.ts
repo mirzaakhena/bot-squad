@@ -47,14 +47,15 @@ function fakeTelegram() {
     } else r = ok(true);
     return Response.json(r.body, { status: r.status ?? 200 });
   };
-  let server = Bun.serve({ port: 0, fetch: handler });
+  // 127.0.0.1, bukan semua alamat: lihat komentar di master/test/fake-telegram.ts.
+  let server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handler });
   const port = server.port;
   return {
     apiRoot: `http://127.0.0.1:${port}`,
     push: (u: unknown) => pending.push(u),
     failNext: (...r: Reply[]) => failures.push(...r),
     down: () => server.stop(true),
-    up: () => (server = Bun.serve({ port, fetch: handler })),
+    up: () => (server = Bun.serve({ hostname: "127.0.0.1", port, fetch: handler })),
     stop: () => server.stop(true),
   };
 }

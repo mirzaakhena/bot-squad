@@ -41,3 +41,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Tombol konfirmasi untuk aksi yang merusak harus mengikat identitas sasaran (mis. telegramId), bukan hanya nama: nama bisa dihapus lalu didaftarkan ulang selama tombol masih berlaku.
 - rate_limits di payload statusline tidak berubah saat sesi menganggur walau refreshInterval jalan; captured_at_ms status.json = waktu gambar ulang, bukan waktu angka diperbarui
 - Untuk menahan master-bot sungguhan di tengah langkah henti (mis. agar bisa di-SIGKILL), pakai server plugin tiruan yang mengabaikan SIGTERM: stop menunggu ~10 detik sebelum SIGKILL (contoh master/test/delete-process.test.ts).
+- Server tiruan di tes harus Bun.serve({ hostname: '127.0.0.1', port: 0 }); tanpa hostname macOS bisa memberi port yang sudah didengar proses lain di 127.0.0.1 dan tes gagal acak
