@@ -423,20 +423,87 @@ describe("/delete setelah dikonfirmasi", () => {
     }
   });
 
-  test("dua pertanyaan untuk bot yang sama: tombol kedua menjawab 'tidak terdaftar' setelah yang pertama", async () => {
+  test("tombol lama setelah nama dihapus lalu didaftarkan ulang: bot baru tidak disentuh", async () => {
     seed({ "dl-a": "active" });
     const { bot, calls, settle } = makeBot();
     await bot.handleUpdate(ownerDm("/delete dl-a"));
-    const first = button("Hapus");
+    const old = button("Hapus");
     await bot.handleUpdate(ownerDm("/delete dl-a"));
-    const second = button("Hapus");
-    expect(second).not.toBe(first);
-    await bot.handleUpdate(press(first));
+    await bot.handleUpdate(press(button("Hapus")));
     await settle();
-    await bot.handleUpdate(press(second));
+    await bot.handleUpdate(ownerDm(`/register dl-a ${NEWTOKEN}`));
+    await settle();
+    const before = snapshot();
+    const n = texts().length;
+    await bot.handleUpdate(press(old));
+    await settle();
+    expect(calls).toEqual([
+      ["stop", "dl-a"],
+      ["launch", "dl-a"],
+    ]);
+    expect(texts().slice(n)).toEqual([DELETE_EXPIRED]);
+    expect(snapshot()).toEqual(before);
+    expect(readRegistry(home).bots["dl-a"]!.username).toBe("dl_baru_bot");
+    expect(readFileSync(join(home, "bots", "dl-a", "state", ".env"), "utf8")).toBe(`TELEGRAM_BOT_TOKEN=${NEWTOKEN}\n`);
+  });
+
+  test("setelah bot dihapus, tombol lain untuk bot itu kedaluwarsa", async () => {
+    seed({ "dl-a": "active" });
+    const { bot, calls, settle } = makeBot();
+    await bot.handleUpdate(ownerDm("/delete dl-a"));
+    const other = button("Hapus");
+    await bot.handleUpdate(ownerDm("/delete dl-a"));
+    await bot.handleUpdate(press(button("Hapus")));
+    await settle();
+    await bot.handleUpdate(press(other));
     await settle();
     expect(calls).toEqual([["stop", "dl-a"]]);
+    expect(texts()[texts().length - 1]).toBe(DELETE_EXPIRED);
+  });
+
+  for (const [label, change] of [
+    ["telegramId lain (token bot lain)", { telegramId: 9999 }],
+    ["createdAt lain (token sama didaftarkan ulang)", { createdAt: "2026-11-13T05:00:00.000Z" }],
+  ] as const) {
+    test(`entri registry diganti saat tombol masih berlaku (${label}): tidak ada yang berubah`, async () => {
+      seed({ "dl-a": "active" });
+      const { bot, calls, settle } = makeBot();
+      await bot.handleUpdate(ownerDm("/delete dl-a"));
+      const reg = readRegistry(home);
+      reg.bots["dl-a"] = { ...reg.bots["dl-a"]!, ...change };
+      writeRegistry(home, reg);
+      const before = snapshot();
+      await bot.handleUpdate(press(button("Hapus")));
+      await settle();
+      expect(calls).toEqual([]);
+      expect(texts()[texts().length - 1]).toBe(DELETE_EXPIRED);
+      expect(snapshot()).toEqual(before);
+    });
+
+    test(`archiveBot dengan identitas yang tidak cocok (${label}): tidak ada yang berubah`, async () => {
+      seed({ "dl-a": "active" });
+      const reg = readRegistry(home);
+      const expect0 = { telegramId: reg.bots["dl-a"]!.telegramId, createdAt: reg.bots["dl-a"]!.createdAt };
+      reg.bots["dl-a"] = { ...reg.bots["dl-a"]!, ...change };
+      writeRegistry(home, reg);
+      const before = snapshot();
+      const r = await archiveBot("dl-a", { dataDir: home, expect: expect0 });
+      expect(r.ok).toBe(false);
+      expect(snapshot()).toEqual(before);
+    });
+  }
+
+  test("entri hilang dari registry saat tombol masih berlaku: 'tidak terdaftar', tidak ada yang berubah", async () => {
+    seed({ "dl-a": "active" });
+    const { bot, calls, settle } = makeBot();
+    await bot.handleUpdate(ownerDm("/delete dl-a"));
+    writeRegistry(home, { bots: {} });
+    const before = snapshot();
+    await bot.handleUpdate(press(button("Hapus")));
+    await settle();
+    expect(calls).toEqual([]);
     expect(texts()[texts().length - 1]).toContain("Bot 'dl-a' tidak terdaftar.");
+    expect(snapshot()).toEqual(before);
   });
 });
 

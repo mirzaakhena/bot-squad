@@ -45,6 +45,11 @@ export type ArchiveDeps = {
   dataDir: string;
   now?: () => Date;
   registryHooks?: WriteHooks;
+  /**
+   * Identitas entri registry yang dikonfirmasi pemilik. Kalau entri sekarang
+   * berbeda (nama itu didaftarkan ulang), tidak ada yang diubah.
+   */
+  expect?: { telegramId: unknown; createdAt: unknown };
   /** Kait tes: dipanggil tepat sebelum rename folder. */
   beforeMove?: (from: string, to: string) => void;
 };
@@ -79,6 +84,10 @@ export function archiveBot(name: string, deps: ArchiveDeps): Promise<ArchiveResu
       return { ok: false, reason: err instanceof Error ? err.message : "registry.json tidak bisa dibaca", tokenRemoved: false, archivedTo: null };
     }
     if (!Object.hasOwn(reg.bots, name)) return { ok: false, reason: "bot tidak terdaftar", tokenRemoved: false, archivedTo: null };
+    const rec = reg.bots[name]!;
+    if (deps.expect && (rec.telegramId !== deps.expect.telegramId || rec.createdAt !== deps.expect.createdAt)) {
+      return { ok: false, reason: "nama itu kini milik bot lain yang belum dikonfirmasi untuk dihapus", tokenRemoved: false, archivedTo: null };
+    }
 
     const botDir = join(deps.dataDir, "bots", name);
     let archivedTo: string | null = null;

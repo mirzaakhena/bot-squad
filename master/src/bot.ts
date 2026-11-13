@@ -492,7 +492,20 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   // menekan tombol Hapus. Setiap tombol sekali pakai dan berlaku terbatas.
   const now = opts.now ?? Date.now;
   const confirmMs = opts.deleteConfirmMs ?? DELETE_CONFIRM_MS;
-  const pendingDeletes = new Map<string, { name: string; expires: number }>();
+  // Tombol terikat pada bot yang ditanyakan (telegramId + createdAt), bukan
+  // hanya nama: nama bisa dihapus lalu didaftarkan ulang selama tombol berlaku.
+  type Pending = { name: string; telegramId: unknown; createdAt: unknown; expires: number };
+  const pendingDeletes = new Map<string, Pending>();
+  /** Identitas entri registry bot itu sekarang, atau null kalau tidak terbaca/tidak ada. */
+  const identityOf = (name: string): { telegramId: unknown; createdAt: unknown } | null => {
+    try {
+      const bots = readRegistry(opts.dataDir).bots;
+      if (!Object.hasOwn(bots, name)) return null;
+      return { telegramId: bots[name]!.telegramId, createdAt: bots[name]!.createdAt };
+    } catch {
+      return null;
+    }
+  };
 
   bot.command("delete", async (ctx) => {
     const found = lookup(ctx.match, DELETE_USAGE, "Tidak ada yang dihapus.");
@@ -507,8 +520,11 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       return;
     }
     for (const [id, p] of pendingDeletes) if (p.expires <= now()) pendingDeletes.delete(id);
+    // lookup sudah memastikan bot terdaftar. Kalau registry berubah di antara
+    // keduanya, identitas kosong tidak pernah cocok saat tombol ditekan.
+    const identity = identityOf(name) ?? { telegramId: null, createdAt: null };
     const id = randomBytes(8).toString("hex");
-    pendingDeletes.set(id, { name, expires: now() + confirmMs });
+    pendingDeletes.set(id, { name, ...identity, expires: now() + confirmMs });
     await ctx.reply(deleteQuestion(name, username), {
       parse_mode: "HTML",
       reply_markup: {
@@ -552,6 +568,13 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       return;
     }
     const { username } = again;
+    const current = identityOf(name);
+    if (!current || current.telegramId !== p.telegramId || current.createdAt !== p.createdAt) {
+      // Bot yang ditanyakan sudah dihapus dan nama itu kini milik bot lain.
+      opts.log(`/delete '${name}' ditolak: tombol untuk bot lama, nama itu kini didaftarkan ulang`);
+      await ctx.reply(DELETE_EXPIRED);
+      return;
+    }
     const release = locks.claim(name, "dihapus");
     if (!release) {
       await ctx.reply(busyText(name, locks.busyWith(name)!));
@@ -570,11 +593,14 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
               now: () => new Date(now()),
               registryHooks: opts.registryHooks,
               beforeMove: opts.beforeArchive,
+              expect: { telegramId: p.telegramId, createdAt: p.createdAt },
             });
           } catch (err) {
             res = { ok: false, reason: "error di master-bot saat mengarsipkan", tokenRemoved: false, archivedTo: null };
             opts.log(`/delete '${name}' error: ${describeError(err)}`);
           }
+          // Tombol lain untuk bot yang sudah dihapus tidak boleh berlaku lagi.
+          if (res.ok) for (const [k, q] of pendingDeletes) if (q.name === name) pendingDeletes.delete(k);
           opts.log(res.ok ? `/delete '${name}': dihapus, arsip ${res.archivedTo ?? "(tidak ada folder)"}` : `/delete '${name}' gagal: ${res.reason}`);
         } else {
           opts.log(`/delete '${name}' batal: bot tidak bersih dimatikan`);
