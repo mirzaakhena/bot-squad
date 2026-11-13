@@ -268,6 +268,10 @@ describe("/list lewat master-bot", () => {
         launched++;
         return { kind: "active", pid: 1 };
       },
+      stop: async () => {
+        launched++;
+        return { wasRunning: false, killed: [], sessionLeft: false, pidsLeft: [] };
+      },
       probe: probeDeps(w).deps,
     });
     return { bot, launched: () => launched };

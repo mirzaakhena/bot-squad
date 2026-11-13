@@ -179,6 +179,7 @@ function setup(s: Setup) {
       launched = true;
       return s.launch ? s.launch(name) : { kind: "active", pid: 1 };
     },
+    stop: () => Promise.reject(new Error("tidak dipakai di tes kirim ulang")),
     onLaunch: (p) => pending.push(p),
     signal: s.signal,
     reportRetry: { sleep: s.sleep ?? sleep },

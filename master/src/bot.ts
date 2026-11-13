@@ -2,10 +2,12 @@ import { Bot, type ApiClientOptions } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { isOwnerUpdate, senderIdForLog } from "./access.ts";
 import { describeError, type Logger } from "./log.ts";
-import { parseRegisterArgs, registerBot, USAGE } from "./register.ts";
-import { setBotStatus, type WriteHooks } from "./registry.ts";
+import { NAME_RULE, parseRegisterArgs, registerBot, USAGE } from "./register.ts";
+import { readRegistry, setBotStatus, type BotStatus, type WriteHooks } from "./registry.ts";
 import { isAlive, realTmux, type LaunchResult } from "./launch.ts";
 import { listReport, type ProbeDeps } from "./list.ts";
+import { busyText, createBotLocks, type BotLocks } from "./busy.ts";
+import { isClean, type StopResult } from "./stop.ts";
 import { sendWithRetry, type RetryPolicy } from "./retry.ts";
 
 /** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
@@ -14,6 +16,8 @@ export const COMMANDS = [
   { command: "help", description: "Tampilkan daftar perintah" },
   { command: "register", description: "Daftarkan bot baru: /register <nama> <token>" },
   { command: "list", description: "Daftar bot beserta keadaan nyatanya" },
+  { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
+  { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama>" },
 ] as const;
 
 export function helpText(): string {
@@ -40,7 +44,17 @@ export type MasterBotOptions = {
   registryHooks?: WriteHooks;
   /** Menyalakan bot yang baru terdaftar (asli: launchBot dengan realLaunchDeps). */
   launch: (name: string) => Promise<LaunchResult>;
-  /** Dipanggil dengan proses penyalaan di latar belakang; dipakai tes untuk menunggunya. */
+  /**
+   * Kunci "sedang diproses" per bot; default kunci baru untuk master-bot ini.
+   * Pekerjaan lain yang menyalakan atau menghentikan bot harus memakai yang sama.
+   */
+  locks?: BotLocks;
+  /** Mematikan satu bot (asli: stopBot dengan realStopDeps). */
+  stop: (name: string) => Promise<StopResult>;
+  /**
+   * Dipanggil dengan setiap pekerjaan di latar belakang (penyalaan, /stop,
+   * /restart); dipakai tes dan main.ts untuk menunggunya.
+   */
   onLaunch?: (done: Promise<void>) => void;
   /** Dibatalkan saat master-bot berhenti: percobaan kirim ulang laporan dihentikan. */
   signal?: AbortSignal;
@@ -74,19 +88,63 @@ export function launchReport(name: string, username: string, res: LaunchResult, 
       ? `Lihat langsung di server: <code>tmux attach -t ${name}</code>`
       : "Sesi tmux-nya sudah tidak ada.",
   );
+  const retry = `Coba lagi dengan /restart ${name}`;
+  parts.push(statusRecorded ? `Status tercatat 'failed'. ${retry}.` : `${STATUS_NOT_RECORDED} ${retry}.`);
+  return parts.join("\n\n");
+}
+
+/** Bagian peringatan /stop: apa yang masih hidup dan harus dicek manual. */
+function leftoverLines(name: string, r: StopResult): string[] {
+  const out: string[] = [];
+  if (r.sessionLeft) out.push(`sesi tmux '${name}' masih hidup`);
+  if (r.pidsLeft.length > 0) out.push(`server plugin masih hidup: pid ${r.pidsLeft.join(", ")}`);
+  if (r.error !== undefined) out.push(`tmux atau daftar proses tidak bisa diperiksa (${escapeHtml(r.error)})`);
+  return out;
+}
+
+/** Pesan hasil /stop untuk pemilik (HTML). */
+export function stopReport(name: string, username: string, r: StopResult, statusRecorded = true): string {
+  const who = `@${escapeHtml(username)} ('${name}')`;
+  const parts = [r.wasRunning ? `Bot ${who} dihentikan.` : `Bot ${who} memang sudah tidak berjalan.`];
+  const forced = r.killed.filter((k) => !r.pidsLeft.includes(k.pid));
+  if (forced.length > 0) {
+    parts.push(`Server plugin yang tidak keluar sendiri dimatikan paksa: ${forced.map((k) => `pid ${k.pid} (${k.signal})`).join(", ")}.`);
+  }
+  const left = leftoverLines(name, r);
+  if (left.length > 0) {
+    parts.push(`Peringatan: '${name}' tidak bersih dihentikan: ${left.join("; ")}. Periksa manual di server.`);
+  }
+  if (r.unrecognizedPid !== undefined) {
+    parts.push(
+      `Catatan: bot.pid menunjuk pid ${r.unrecognizedPid} yang masih hidup tetapi tidak dikenali sebagai server plugin '${name}', jadi tidak dimatikan. Periksa manual di server.`,
+    );
+  }
   parts.push(
     statusRecorded
-      ? "Status tercatat 'failed'. Percobaan ulang menunggu perintah berikutnya (belum tersedia)."
-      : `${STATUS_NOT_RECORDED} Percobaan ulang menunggu perintah berikutnya (belum tersedia).`,
+      ? `Status tercatat 'stopped'. Nyalakan lagi dengan /restart ${name}.`
+      : `${STATUS_NOT_RECORDED} Nyalakan lagi dengan /restart ${name}.`,
   );
   return parts.join("\n\n");
 }
+
+/** Pesan /restart yang batal karena bot lama tidak bisa dimatikan bersih (HTML). */
+export function restartBlockedReport(name: string, username: string, r: StopResult): string {
+  const who = `@${escapeHtml(username)} ('${name}')`;
+  return (
+    `Bot ${who} tidak dinyalakan ulang: bot lama tidak bisa dimatikan bersih (${leftoverLines(name, r).join("; ")}). ` +
+    `Satu bot tidak boleh berjalan dua kali. Periksa manual di server. Status tidak diubah.`
+  );
+}
+
+export const STOP_USAGE = "Cara pakai: /stop <nama>\nNama hanya huruf kecil, angka, dan '-'.";
+export const RESTART_USAGE = "Cara pakai: /restart <nama>\nNama hanya huruf kecil, angka, dan '-'.";
 
 const DELETE_FAILED =
   "Peringatan: pesan yang berisi token gagal dihapus dari chat. Hapus pesan itu sendiri.";
 
 export function createMasterBot(opts: MasterBotOptions): Bot {
   const bot = new Bot(opts.token, { client: opts.client, botInfo: opts.botInfo });
+  const locks = opts.locks ?? createBotLocks();
 
   // Penjaga akses: harus middleware pertama. Update yang bukan dari pemilik di
   // chat pribadi dibuang tanpa balasan, dan log tidak memuat isi pesan.
@@ -107,53 +165,154 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     await ctx.reply(text, { parse_mode: "HTML" });
   });
 
-  // Penyalaan berjalan di latar belakang supaya master-bot tetap melayani
-  // perintah lain selama menunggu (bisa sampai 90 detik).
-  const launchInBackground = (name: string, username: string) => {
-    const done = (async () => {
-      let res: LaunchResult;
-      try {
-        res = await opts.launch(name);
-      } catch (err) {
-        res = { kind: "failed", reason: "error di master-bot saat menyalakan", sessionAlive: false };
-        opts.log(`penyalaan '${name}' error: ${describeError(err)}`);
-      }
-      let statusRecorded = true;
-      if (res.kind !== "already-running") {
-        try {
-          statusRecorded = await setBotStatus(opts.dataDir, name, res.kind === "active" ? "active" : "failed", opts.registryHooks);
-          if (!statusRecorded) opts.log(`status '${name}' gagal dicatat: tidak ada di registry`);
-        } catch (err) {
-          statusRecorded = false;
-          opts.log(`status '${name}' gagal dicatat: ${describeError(err)}`);
-        }
-      }
-      opts.log(`penyalaan '${name}': ${res.kind}${res.kind === "active" ? "" : ` (${res.reason})`}`);
-      if (res.kind === "failed" && res.interrupted) {
+  /** Mengirim satu laporan ke pemilik, dengan kirim ulang saat Telegram terganggu. */
+  const sendReport = async (what: string, name: string, text: string) => {
+    const out = await sendWithRetry(
+      (signal) => bot.api.sendMessage(opts.ownerId, text, { parse_mode: "HTML" }, signal),
+      opts.signal,
+      opts.reportRetry,
+      ({ attempt, waitMs, reason }) =>
         opts.log(
-          `penyalaan '${name}' terputus: master-bot berhenti; status ${statusRecorded ? "ditulis 'failed'" : "gagal ditulis"}`,
-        );
-      }
-      // Gangguan sementara (jaringan, 5xx, 429) dicoba ulang dengan jeda
-      // bertambah; error lain dan berhentinya master-bot langsung dicatat.
-      const text = launchReport(name, username, res, statusRecorded);
-      const out = await sendWithRetry(
-        (signal) => bot.api.sendMessage(opts.ownerId, text, { parse_mode: "HTML" }, signal),
-        opts.signal,
-        opts.reportRetry,
-        ({ attempt, waitMs, reason }) =>
-          opts.log(
-            `laporan penyalaan '${name}' gagal dikirim (percobaan ${attempt}): ${reason}; dicoba lagi dalam ${Math.round(waitMs / 1000)} detik`,
-          ),
-      );
-      if (out.ok) {
-        if (out.attempts > 1) opts.log(`laporan penyalaan '${name}' terkirim pada percobaan ${out.attempts}`);
-      } else {
-        opts.log(`laporan penyalaan '${name}' tidak terkirim: ${out.reason}`);
+          `laporan ${what} '${name}' gagal dikirim (percobaan ${attempt}): ${reason}; dicoba lagi dalam ${Math.round(waitMs / 1000)} detik`,
+        ),
+    );
+    if (out.ok) {
+      if (out.attempts > 1) opts.log(`laporan ${what} '${name}' terkirim pada percobaan ${out.attempts}`);
+    } else {
+      opts.log(`laporan ${what} '${name}' tidak terkirim: ${out.reason}`);
+    }
+  };
+
+  /** Menulis status; false (dengan log) kalau gagal. */
+  const recordStatus = async (name: string, status: BotStatus): Promise<boolean> => {
+    try {
+      const ok = await setBotStatus(opts.dataDir, name, status, opts.registryHooks);
+      if (!ok) opts.log(`status '${name}' gagal dicatat: tidak ada di registry`);
+      return ok;
+    } catch (err) {
+      opts.log(`status '${name}' gagal dicatat: ${describeError(err)}`);
+      return false;
+    }
+  };
+
+  /** Pekerjaan latar belakang; kunci bot dilepas setelah selesai. */
+  const inBackground = (release: () => void, work: () => Promise<void>) => {
+    const done = (async () => {
+      try {
+        await work();
+      } finally {
+        release();
       }
     })();
     opts.onLaunch?.(done);
   };
+
+  // Penyalaan berjalan di latar belakang supaya master-bot tetap melayani
+  // perintah lain selama menunggu (bisa sampai 90 detik).
+  const launchAndReport = async (name: string, username: string) => {
+    let res: LaunchResult;
+    try {
+      res = await opts.launch(name);
+    } catch (err) {
+      res = { kind: "failed", reason: "error di master-bot saat menyalakan", sessionAlive: false };
+      opts.log(`penyalaan '${name}' error: ${describeError(err)}`);
+    }
+    let statusRecorded = true;
+    if (res.kind !== "already-running") {
+      statusRecorded = await recordStatus(name, res.kind === "active" ? "active" : "failed");
+    }
+    opts.log(`penyalaan '${name}': ${res.kind}${res.kind === "active" ? "" : ` (${res.reason})`}`);
+    if (res.kind === "failed" && res.interrupted) {
+      opts.log(
+        `penyalaan '${name}' terputus: master-bot berhenti; status ${statusRecorded ? "ditulis 'failed'" : "gagal ditulis"}`,
+      );
+    }
+    // Gangguan sementara (jaringan, 5xx, 429) dicoba ulang dengan jeda
+    // bertambah; error lain dan berhentinya master-bot langsung dicatat.
+    await sendReport("penyalaan", name, launchReport(name, username, res, statusRecorded));
+  };
+
+  /** Hasil cek nama untuk /stop dan /restart: bot terdaftar beserta username-nya, atau balasan penolakan. */
+  const lookup = (match: unknown, usage: string, nothing: string): { name: string; username: string } | { reply: string } => {
+    const words = (typeof match === "string" ? match : "").trim().split(/\s+/).filter(Boolean);
+    if (words.length !== 1 || !NAME_RULE.test(words[0]!)) return { reply: usage };
+    const name = words[0]!;
+    let bots;
+    try {
+      bots = readRegistry(opts.dataDir).bots;
+    } catch (err) {
+      opts.log(`registry tidak bisa dibaca: ${describeError(err)}`);
+      return { reply: `${err instanceof Error ? err.message : "registry.json tidak bisa dibaca"}. ${nothing}` };
+    }
+    if (!Object.hasOwn(bots, name)) return { reply: `Bot '${name}' tidak terdaftar. ${nothing}` };
+    return { name, username: String(bots[name]!.username) };
+  };
+
+  const safeStop = async (name: string): Promise<StopResult> => {
+    try {
+      return await opts.stop(name);
+    } catch (err) {
+      opts.log(`/stop '${name}' error: ${describeError(err)}`);
+      return { wasRunning: false, killed: [], sessionLeft: false, pidsLeft: [], error: "error di master-bot saat menghentikan" };
+    }
+  };
+
+  bot.command("stop", async (ctx) => {
+    const found = lookup(ctx.match, STOP_USAGE, "Tidak ada yang dihentikan.");
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    const { name, username } = found;
+    const release = locks.claim(name, "dihentikan");
+    if (!release) {
+      await ctx.reply(busyText(name, locks.busyWith(name)!));
+      return;
+    }
+    try {
+      await ctx.reply(`Menghentikan '${name}'...`);
+    } finally {
+      inBackground(release, async () => {
+        // Niat pemilik dicatat lebih dulu (Q2): apa pun hasil pembersihannya,
+        // bot ini tidak boleh dihidupkan otomatis.
+        const statusRecorded = await recordStatus(name, "stopped");
+        const res = await safeStop(name);
+        opts.log(
+          `/stop '${name}': ${isClean(res) ? "bersih" : "tidak bersih"}` +
+            (res.pidsLeft.length > 0 ? `; pid tersisa ${res.pidsLeft.join(", ")}` : "") +
+            (res.sessionLeft ? "; sesi tmux masih hidup" : ""),
+        );
+        await sendReport("penghentian", name, stopReport(name, username, res, statusRecorded));
+      });
+    }
+  });
+
+  bot.command("restart", async (ctx) => {
+    const found = lookup(ctx.match, RESTART_USAGE, "Tidak ada yang dinyalakan ulang.");
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    const { name, username } = found;
+    const release = locks.claim(name, "dinyalakan ulang");
+    if (!release) {
+      await ctx.reply(busyText(name, locks.busyWith(name)!));
+      return;
+    }
+    try {
+      await ctx.reply(`Menyalakan ulang '${name}'...`);
+    } finally {
+      inBackground(release, async () => {
+        const res = await safeStop(name);
+        if (!isClean(res)) {
+          opts.log(`/restart '${name}' batal: bot lama tidak bersih dimatikan`);
+          await sendReport("penyalaan", name, restartBlockedReport(name, username, res));
+          return;
+        }
+        await launchAndReport(name, username);
+      });
+    }
+  });
 
   bot.command("register", async (ctx) => {
     const match = typeof ctx.match === "string" ? ctx.match : "";
@@ -205,7 +364,12 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     try {
       await ctx.reply(text);
     } finally {
-      if (toLaunch) launchInBackground(toLaunch.name, toLaunch.username);
+      if (toLaunch) {
+        const { name, username } = toLaunch;
+        const release = locks.claim(name, "dinyalakan");
+        if (release) inBackground(release, () => launchAndReport(name, username));
+        else opts.log(`penyalaan '${name}' dilewati: ${busyText(name, locks.busyWith(name) ?? "dinyalakan")}`);
+      }
     }
   });
 
