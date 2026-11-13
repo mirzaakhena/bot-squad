@@ -1,5 +1,2 @@
 goal: Tes master-bot stabil, bot yang sedang dihapus tidak hidup lagi setelah crash, dan /quota di master-bot
 order:
-  - 261113194401   # Tes master-bot kadang gagal acak lalu lulus saat diulang
-  - 261113190701   # Bot yang sedang dihapus tidak dinyalakan lagi setelah master-bot crash
-  - 261113192501   # Perintah quota di master-bot menampilkan sisa kuota akun Claude
