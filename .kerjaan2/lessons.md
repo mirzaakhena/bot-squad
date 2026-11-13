@@ -37,3 +37,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Plugin mengirim permintaan izin claude/channel/permission ke SEMUA allowFrom, jadi orang yang di-/allow juga menerima dan bisa menjawab prompt izin bot itu
 - k2 test menjalankan skrip hanya lewat path absolut; ./skrip.sh dicari relatif ke worktree
 - Sensor layar: token yang diketahui bisa tampil sebagai POTONGAN tanpa '<angka>:' (baris atas pane lanjutan wrap dari scrollback, awalan sebelum elipsis); sensor potongan token yang diketahui juga
+- Soket tmux di scratchpad terlalu panjang dan hasSession diam-diam false (stop tampak bersih); uji tmux nyata dengan TMUX_TMPDIR=mktemp -d /tmp/k2-<tiket>-XXXX dan cek sesinya ada
