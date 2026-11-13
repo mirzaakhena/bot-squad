@@ -23,7 +23,7 @@ import {
   type AccessWriteHooks,
 } from "./allow.ts";
 import { randomBytes } from "node:crypto";
-import { archiveBot, type ArchiveResult } from "./delete.ts";
+import { archiveBot, markStoppedForDelete, type ArchiveResult } from "./delete.ts";
 
 /** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
 export const COMMANDS = [
@@ -184,13 +184,22 @@ export function deleteQuestion(name: string, username: string): string {
   );
 }
 
-/** Laporan hasil /delete (HTML). */
+/** Laporan /delete yang batal karena status 'stopped' gagal dicatat (HTML, Q1 tiket 261113190701). */
+export function deleteNotMarkedReport(name: string, username: string, reason: string): string {
+  return (
+    `Bot @${escapeHtml(username)} ('${name}') tidak dihapus: status 'stopped' gagal dicatat di daftar bot (${escapeHtml(reason)}). ` +
+    `Tidak ada yang diubah: bot tidak dihentikan, folder dan daftar bot tetap. Lihat log master-bot, lalu coba /delete ${name} lagi.`
+  );
+}
+
+/** Laporan hasil /delete (HTML). Status 'stopped' sudah tercatat sebelum bot dihentikan. */
 export function deleteReport(name: string, username: string, stop: StopResult, res: ArchiveResult): string {
   const who = `@${escapeHtml(username)} ('${name}')`;
   if (!isClean(stop)) {
     return (
       `Bot ${who} tidak dihapus: bot tidak bisa dimatikan bersih (${leftoverLines(name, stop).join("; ")}). ` +
-      `Daftar bot dan folder tidak diubah. Periksa manual di server, lalu coba /delete ${name} lagi.`
+      `Folder dan entri di daftar bot tidak diubah, tetapi status tercatat 'stopped', jadi bot ini tidak dinyalakan otomatis. ` +
+      `Periksa manual di server, lalu nyalakan lagi dengan /restart ${name} atau coba hapus lagi dengan /delete ${name}.`
     );
   }
   if (!res.ok) {
@@ -200,7 +209,7 @@ export function deleteReport(name: string, username: string, stop: StopResult, r
     } else if (res.tokenRemoved) {
       parts.push(`Token di state/.env sudah dihapus, jadi bot ini tidak bisa dinyalakan lagi. Folder masih di tempatnya dan '${name}' masih terdaftar. Coba /delete ${name} lagi.`);
     } else {
-      parts.push(`Tidak ada yang diubah.`);
+      parts.push(`Folder dan entri di daftar bot tidak diubah; status tercatat 'stopped'. Nyalakan lagi dengan /restart ${name} atau coba /delete ${name} lagi.`);
     }
     parts.push("Lihat log master-bot.");
     return parts.join("\n\n");
@@ -584,6 +593,22 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       await ctx.reply(`Menghapus '${name}'...`);
     } finally {
       inBackground(release, async () => {
+        const expectId = { telegramId: p.telegramId, createdAt: p.createdAt };
+        // Niat menghapus dicatat lebih dulu (tiket 261113190701, Q1): kalau
+        // master-bot mati di tengah, bot ini tidak dinyalakan otomatis lagi.
+        // Gagal dicatat berarti batal sebelum apa pun disentuh.
+        let marked;
+        try {
+          marked = await markStoppedForDelete(name, { dataDir: opts.dataDir, registryHooks: opts.registryHooks, expect: expectId });
+        } catch (err) {
+          opts.log(`/delete '${name}' error: ${describeError(err)}`);
+          marked = { ok: false as const, reason: "error di master-bot saat mencatat status" };
+        }
+        if (!marked.ok) {
+          opts.log(`/delete '${name}' batal: status 'stopped' gagal dicatat: ${marked.reason}`);
+          await sendReport("penghapusan", name, deleteNotMarkedReport(name, username, marked.reason));
+          return;
+        }
         const stop = await safeStop(name);
         let res: ArchiveResult = { ok: false, reason: "dibatalkan: bot tidak bersih dimatikan", tokenRemoved: false, archivedTo: null };
         if (isClean(stop)) {
@@ -593,7 +618,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
               now: () => new Date(now()),
               registryHooks: opts.registryHooks,
               beforeMove: opts.beforeArchive,
-              expect: { telegramId: p.telegramId, createdAt: p.createdAt },
+              expect: expectId,
             });
           } catch (err) {
             res = { ok: false, reason: "error di master-bot saat mengarsipkan", tokenRemoved: false, archivedTo: null };
