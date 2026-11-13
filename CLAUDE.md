@@ -246,6 +246,93 @@ Fakta `rate_limits` yang teramati dan terdokumentasi:
 - Tidak ada rincian per model (`/usage` menampilkan juga `Current week (Fable) 28%`), tidak ada kredit tambahan, dan tidak ada angka token atau dolar.
 - Hanya ada di bot yang bridge-nya terpasang (`statusline.json` menyatakan terpasang). Bot yang dinyalakan sebelum fitur `/context` atau yang statusline-nya ditolak pagar tidak punya `status.json`. Kalau tidak ada satu pun bot dengan data, `/quota` harus bilang begitu, bukan menebak.
 
+## Bot berkirim pesan ke bot lain: temuan dan rancangan (tiket 261112230309, Claude Code 2.1.323, BELUM DIUJI)
+
+Status: **rancangan untuk didiskusikan, belum ada yang dibuktikan dengan uji kirim** (keputusan pemilik Q5, 2026-11-13). Uji sungguhan terhenti karena login (lihat "Langkah uji yang belum dijalankan"). Setiap klaim di bawah diberi tanda **[BD: sumber]** (belum dibuktikan). Sumbernya salah satu dari tiga: `strings` biner Claude Code 2.1.323 (`~/.local/share/claude/versions/2.1.323`), berkas registri sesi `~/.claude/sessions/<pid>.json` (hanya dibaca; berkas `.key` tidak dibaca), atau README mirza-bots. Implementasinya di tiket 261113230601, dan baru dikerjakan setelah rancangan ini disetujui pemilik.
+
+### Mekanisme bawaan Claude Code
+
+- Ada dua alat model: `ListAgents` (dulu `ListPeers`) dan `SendMessage`, ditambah `SendFile` untuk berkas. `ListAgents` menampilkan subagent, rekan tim, **sesi Claude lokal lain di mesin ini**, sesi cloud, dan sesi Remote Control. [BD: strings, deskripsi alat `ListAgents`]
+- Pengiriman lokal lewat soket unix per proses, `/tmp/cc-socks/<pid>.sock`. Setiap sesi interaktif mendaftarkan diri di `<config>/sessions/<pid>.json` (`<config>` = `~/.claude`, atau `$CLAUDE_CONFIG_DIR`). Isinya `pid`, `sessionId`, `cwd`, `procStart`, `tmux` (contoh `bot-02:@1.%1`), `messagingSocketPath`, `name` (turunan folder, contoh `workspace-86`, `nameSource: "derived"`), dan `status` (`idle`/`busy`). Di sebelahnya ada `<pid>.<hash>.key` berisi kunci autentikasi soket. [BD: isi `~/.claude/sessions/*.json` di mesin ini, strings `[concurrentSessions]`, `[uds-messaging]`]
+- **Alamat.** `to` di `SendMessage` menerima nama sesi persis seperti tampil di `ListAgents` (ditambah ` [ref]` kalau ada nama kembar), atau alamat eksplisit `uds:<soket>` / `bridge:<session id>`. `bridge:` hanya untuk sesi Remote Control/cloud. Jadi **session-id bukan alamat untuk sesi lokal**: yang dipakai nama sesi atau soketnya. Ada mode alamat `sid:<session id>` di balik flag GrowthBook `tengu_session_stable_address` (default mati). [BD: strings deskripsi `SendMessage`/`SendFile`, fungsi parser alamat `uds|bridge|did`, `var mD="sid:"`]
+- **Membalas.** Pesan sampai ke model penerima sebagai `<cross-session-message from="..." from-session="<sessionId>" from-name="..." ...>`, dengan aturan "untuk membalas, salin atribut `from` sebagai `to`". Jadi penerima bisa membalas ke pengirim. `from` ditulis oleh pengirim dan hanya dipakai untuk rute balasan. Identitas yang dijamin kernel (`verifiedPeerPid`, dari `LOCAL_PEERPID`) ada di metadata harness, bukan di teks yang dibaca model. [BD: strings format amplop dan deskripsi `verifiedPeerPid`]
+- **Ditahan kalau mode izin berbeda.** Sesi yang mode izinnya berbeda dengan pengirim menahan pesan untuk disetujui user-nya (atau membiarkannya kedaluwarsa), dan pengirim menerima `[Cross-session delivery notice]`. Semua bot memakai `bypassPermissions`, jadi antarbot diperkirakan langsung sampai. [BD: strings deskripsi `SendMessage` dan teks notice]
+- Pesan masuk diantrekan dan diproses pada putaran alat berikutnya di penerima. Sesi yang menganggur dibangunkan. `notify_when_idle` memberi satu pemberitahuan saat sesi tujuan selesai bekerja. [BD: strings deskripsi `SendMessage`]
+
+### Syarat aktif di sesi bot
+
+- Tidak perlu flag, pengaturan, atau env tambahan. Sesi bot-01..03 pemilik (dinyalakan dengan `claudeArgv`) sudah punya `messagingSocketPath` di registri. Satu sesi uji uji-a yang sempat menyala (HOME sementara, tanpa login) juga membuka `/tmp/cc-socks/<pid>.sock` dan mendaftar di `<HOME uji>/.claude/sessions/`. Bahwa pesan benar-benar terkirim dan diproses **belum diuji**. [BD: registri sesi; sesi uji uji-a 2026-11-13]
+- Fitur ini mati dalam keadaan berikut: flag GrowthBook untuk cross-session messaging mati ("gate off", bisa hidup belakangan lewat refresh), sesi `--restricted`, atau remote thin client. `--messaging-socket-path <path>` memindahkan soket. [BD: strings `[uds-messaging] Skipped: ...`]
+
+### Nama bot ke alamat sesi terkini
+
+Nama sesi Claude **tidak** dipakai sebagai alamat (keputusan pemilik). Pencarian dijalankan setiap kali akan mengirim:
+
+1. Nama harus ada di `registry.json`.
+2. Ambil pid proses `claude` bot itu dari pane tmux sesi `<nama>` di server tmux bot-squad: `tmux display -p -t '=<nama>:' '#{pane_pid}'`. Sesi tmux dibuka langsung dengan `claude`, jadi pid pane = pid claude. [BD: `launch.ts`; belum dicek apakah tmux menyisipkan shell]
+3. Baca `<config>/sessions/<pid>.json`. Catatan itu dianggap sah hanya kalau `pid` hidup, `procStart` cocok dengan proses itu (pid yang dipakai ulang tidak terambil), `cwd` sama dengan `bots/<nama>/workspace`, dan berkas soket `messagingSocketPath` ada.
+4. Hasilnya `uds:<messagingSocketPath>` sebagai alamat kirim dan `sessionId` sebagai informasi (juga berguna untuk 261112230308).
+
+Mengapa hasilnya tetap benar:
+
+- **Setelah dinyalakan ulang**: ada proses baru dengan pid dan soket baru, dan langkah 2 selalu membaca pane yang sekarang, jadi alamat lama tidak pernah dipakai. Catatan proses lama dihapus saat keluar, dan kalau proses crash, langkah 3 menolaknya karena pid mati atau `procStart` tidak cocok. [BD: strings `register`/`unregister`]
+- **Setelah `/clear`**: prosesnya sama, jadi soket dan alamat `uds:` tidak berubah. `sessionId` di berkas registri diperbarui lewat penanganan `onSessionSwitch` (`updatePidFile({sessionId})`). Nama turunan bisa ikut berubah kalau flag `tengu_session_stable_address` hidup, dan inilah alasan lain untuk tidak memakai nama sesi. [BD: strings kode `Hu((U,H)=>...Qn({sessionId:U...}))`]
+- Sumber cadangan untuk `sessionId`: `session_id` di `<state>/status.json` dari bridge statusline. Ia hanya diperbarui saat statusline digambar ulang, jadi bisa tertinggal sebentar setelah `/clear`. [BD]
+
+### Rancangan tahap 2 (261113230601)
+
+- **Alamat hanya nama bot.** Plugin bot-squad menambah satu alat MCP, misalnya `cari_bot(nama)`, yang menjalankan pencarian di atas setiap kali dipanggil dan tidak menyimpan hasilnya. Bot lalu memanggil `SendMessage({to: "uds:<soket>", message})`. Instruksi plugin melarang bot memakai `ListAgents` atau nama sesi untuk memilih tujuan.
+- **Jawaban yang selalu ada (tidak ada pesan hilang diam-diam).** `cari_bot` mengembalikan error yang jelas:
+  - `Bot '<x>' tidak terdaftar` untuk nama di luar registry atau nama yang tidak lolos aturan nama;
+  - `Bot '<x>' tidak berjalan (status: ...)` kalau sesi tmux tidak ada, pid mati, atau catatan/soket tidak sah;
+  - `Bot '<x>' tidak bisa menerima pesan antarsesi` kalau tidak ada `messagingSocketPath`.
+
+  Instruksi plugin: setiap error dilaporkan ke pemilik lewat Telegram, tidak dicoba diam-diam. Kalau `SendMessage` gagal karena bot dinyalakan ulang di antara pencarian dan pengiriman, `cari_bot` dipanggil sekali lagi. Notice "held/denied" juga dilaporkan.
+- **Izin.** Semua bot terdaftar boleh mengirim ke semua bot terdaftar. Pengirim di luar bot terdaftar ditolak di sisi penerima: alat `cek_pengirim(from)` memetakan soket di `from` ke pid, lalu memeriksa bahwa pid itu adalah pane sesi tmux bot terdaftar di server tmux bot-squad. Instruksi plugin menyuruh bot mengabaikan pesan antarsesi yang tidak lolos cek dan melaporkannya ke pemilik. Penegakan ini **bergantung pada model dan pada `from` yang ditulis pengirim**, jadi bisa dipalsukan (lihat batasan). Penegakan yang lebih kuat perlu dicek dulu: hook `UserPromptSubmit` per sesi lewat `--settings` yang memblok amplop dari pengirim bukan bot. Belum diketahui apakah hook melihat amplop atau `verifiedPeerPid`. [BD]
+- **Pencegah pesan berputar** (diambil dari pola mirza-bots). Isi pesan memakai kepala `[bot-squad dari=<nama> hop=<n> balasan=<ya|tidak> minta-balasan=<ya|tidak>]`. Aturannya: balasan tidak boleh meminta balasan, dan hop paling banyak 5. Karena bot memanggil `SendMessage` sendiri, aturan ini hanya instruksi. Kalau aturan harus **dijaga kode**, ada varian B: alat plugin `kirim_ke_bot(nama, pesan, ...)` yang memvalidasi kepala, lalu menulis sendiri ke soket tujuan memakai protokol soket (`{"type":"auth",...}` lalu `{"type":"user",...}`, kunci dari `<pid>.<hash>.key`). Dengan begitu aturan hop dan balasan menjadi validasi, tetapi bergantung pada protokol internal yang tidak terdokumentasi. Harness juga punya atribut `hop-chain` sendiri. [BD: strings `Inject messages (auth line REQUIRED)`, README mirza-bots "Bicara ke bot lain"]
+- Pesan antarbot tidak pernah dikirim ke Telegram, kecuali bot memang perlu keputusan pemilik (pola mirza-bots).
+
+### Batasan keamanan
+
+- Semua bot berjalan `--dangerously-skip-permissions`. Pesan dari bot lain dibaca sebagai input, jadi bot mana pun yang terdaftar bisa menyuruh bot lain menjalankan apa saja. Ini konsekuensi pilihan izin awal pemilik.
+- Semua bot dan sesi pemilik berjalan sebagai user Unix yang sama. Kunci soket di `~/.claude/sessions/*.key` bisa dibaca proses mana pun milik user itu, jadi isolasi sungguhan antarbot atau antara bot dan pemilik tidak mungkin dengan mekanisme ini. [BD]
+- **Sesi pemilik dan bot saling terlihat.** bot-01..03 tercatat di registri yang sama dengan sesi pemilik (foreman, kerjaan2, dll.), jadi `ListAgents` di bot menampilkan sesi pemilik, dan sebaliknya. Bot bisa mengirim ke sesi pemilik tanpa lewat `cari_bot`. [BD: isi `~/.claude/sessions`]
+  - Penahanan karena mode izin berbeda kemungkinan melindungi sesi pemilik yang tidak memakai bypass: pesan menunggu persetujuan di terminal pemilik.
+  - Sesi pemilik yang memakai bypass menerima pesan langsung.
+  - Pesan dari sesi pemilik ke bot kemungkinan ditahan di layar tmux bot yang tidak ditatap siapa pun. [BD]
+- Cara memisahkan yang belum diuji: `CLAUDE_CONFIG_DIR` terpisah untuk bot (registri sesi sendiri, tetapi kemungkinan kehilangan login Keychain, seperti HOME sementara), atau `--restricted` (mematikan pesan antarsesi sepenuhnya, termasuk antarbot).
+
+### Alternatif: kotak surat berkas per bot (pola mirza-bots), tidak dipilih di sini
+
+| | Mekanisme bawaan (soket) | Kotak surat berkas |
+| :- | :- | :- |
+| Bot tujuan mati | Ditolak saat pencarian; pengirim harus mencoba lagi nanti | Pesan menunggu di `inbox/` sampai bot hidup |
+| Jalur masuk ke Claude | Bawaan harness, membangunkan sesi yang menganggur | Butuh plugin memindai folder dan meneruskan sebagai notifikasi channel |
+| Aturan hop/balasan dan izin | Instruksi, kecuali varian B | Dijaga kode plugin pengirim dan penerima |
+| Ketergantungan | Fitur Claude Code di balik flag GrowthBook, format internal | Hanya kode bot-squad |
+| Sesi pemilik ikut terjangkau | Ya (registri bersama) | Tidak, kecuali sengaja menulis ke folder |
+
+Pilihan antara keduanya diserahkan ke pemilik.
+
+### Langkah uji yang belum dijalankan (untuk membuktikan di tahap 2)
+
+- **Kendala login**: dengan HOME sementara, Claude 2.1.323 tampil `Not logged in · Run /login`, karena Keychain login macOS tidak ada di daftar pencarian (`HOME=<uji> security list-keychains` hanya menampilkan System.keychain). Uji dihentikan sesuai Q4 setelah 1 kali start dan 0 giliran AI. Pilihan yang dibawa ke pemilik:
+  - token `claude setup-token` sebagai env `CLAUDE_CODE_OAUTH_TOKEN` hanya di sesi uji;
+  - HOME asli, yang melanggar Q3 karena trust ditulis ke `~/.claude.json` asli.
+- **Persiapan**:
+  - HOME sementara berisi salinan `~/.claude.json` dan `~/.claude/settings.json`, tanpa symlink. `statusLine` pemilik dihapus dari salinan, karena perintahnya menulis ke data pemilik.
+  - `BOT_SQUAD_HOME` sementara berisi `master/.env` (`OWNER_TELEGRAM_ID` palsu), serta `bots/uji-a` dan `bots/uji-b` dengan `state/.env` bertoken palsu yang sama.
+  - Telegram tiruan (`startFakeTelegram` dari `master/test/fake-telegram.ts`), dipakai lewat `BOT_SQUAD_TELEGRAM_API_ROOT`.
+  - `TMUX_TMPDIR=$(mktemp -d /tmp/k2-<tiket>-XXXX)`, lalu `scripts/start-bot.sh uji-a` dan `uji-b`. Env diwariskan ke server tmux uji.
+- **Uji** (maks. 2 sesi, 8 start, 10 giliran):
+  1. Di uji-a, `ListAgents`: pastikan hanya uji-b yang terlihat (registri HOME uji).
+  2. uji-a mengirim ke `<sessionId uji-b>` dan `bridge:<sessionId>`; diharapkan ditolak.
+  3. uji-a mengirim ke `uds:<soket uji-b>` dengan permintaan membalas ke `from`; diharapkan uji-b membalas dan uji-a menerimanya.
+  4. `/clear` di uji-b: `sessionId` di registri berubah, soket tetap; kirim ulang ke alamat yang sama.
+  5. Nyalakan ulang uji-b: pid, soket, dan `sessionId` baru; alamat lama ditolak.
+  6. Catat amplop yang diterima (`from`, `from-session`) dari transkrip `~/.claude/projects/<workspace>/`.
+- **Bersihkan**: `tmux -S <dir>/tmux-<uid>/default kill-server`, cek dengan `ps` bahwa claude dan server plugin keluar dan soket hilang, lalu hapus folder tmux, HOME uji, dan BOT_SQUAD_HOME uji.
+
 ## Concern yang harus ditangani
 
 1. **Keamanan token**: pesan berisi token di chat master-bot sebaiknya langsung dihapus setelah dibaca. Simpan token dengan permission `0600`.
