@@ -5,7 +5,7 @@ lane: strict
 labels: []
 blocked_by: []
 related: []
-touches: [master/src/bot.ts, master/src/access-admin.ts, master/test/, CLAUDE.md]
+touches: [master/src/bot.ts, master/src/access-admin.ts, master/src/list.ts, master/test/, CLAUDE.md]
 created: 2026-11-12 22:53
 ---
 
@@ -30,15 +30,17 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - [ ] /allow <nama> <user_id> membuat orang itu bisa mengobrol dengan bot itu saja; bot lain dan master-bot tetap menolaknya.
 - [ ] /revoke <nama> <user_id> mencabut akses itu, dan pesan orang itu setelahnya diabaikan.
 - [ ] Pemilik tidak bisa mencabut aksesnya sendiri dari bot.
-- [ ] Ada cara melihat siapa saja yang punya akses ke sebuah bot.
-- [ ] Balasan /allow mengingatkan bahwa orang itu bisa menjalankan perintah apa pun di server lewat bot.
+- [ ] `/access <nama>` menampilkan daftar user_id yang punya akses ke bot itu dengan pemilik ditandai, dan `/list` menampilkan jumlah orang yang punya akses per bot (Q1).
+- [ ] Balasan /allow mengingatkan bahwa orang itu bisa menjalankan perintah apa pun di server lewat bot, dan juga bisa memakai perintah plugin di chat bot itu (`/context` menampilkan kuota akun Claude pemilik, `/status`), sama dengan pemilik (Q2); plugin tidak diubah.
 - [ ] Dibuktikan dengan tes otomatis.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Questions
-- Q1 [blocking] Cara melihat siapa saja yang punya akses ke sebuah bot? Opsi A (rekomendasi): perintah /access <nama> yang menampilkan daftar user_id di allowFrom bot itu, pemilik ditandai, dan blok yang sama ditambahkan singkat di /list (jumlah orang). Opsi B: hanya /access <nama>. Opsi C: hanya lewat /list (satu baris per bot dengan semua user_id).
-- Q2 [blocking] Orang yang diizinkan memakai bot juga bisa memakai perintah plugin di chat bot itu (/context menampilkan kuota akun Claude pemilik, /status). Opsi A (rekomendasi): ya, sama dengan pemilik, karena mereka toh bisa menjalankan apa saja di server lewat bot, jadi menyembunyikan kuota tidak melindungi apa pun; balasan /allow menyebutnya. Opsi B: /context dan /status hanya untuk pemilik (perlu ubah plugin/context.ts dan plugin/server.ts). Opsi C: tunda keputusan, tiket ini tidak menyentuh plugin dan perilaku sekarang (semua allowFrom) dicatat di CLAUDE.md.
+- Q1 [answered] Cara melihat siapa saja yang punya akses ke sebuah bot? Opsi A (rekomendasi): perintah /access <nama> yang menampilkan daftar user_id di allowFrom bot itu, pemilik ditandai, dan blok yang sama ditambahkan singkat di /list (jumlah orang). Opsi B: hanya /access <nama>. Opsi C: hanya lewat /list (satu baris per bot dengan semua user_id).
+  → /access + jumlah di /list (Recommended). (owner, 2026-11-13)
+- Q2 [answered] Orang yang diizinkan memakai bot juga bisa memakai perintah plugin di chat bot itu (/context menampilkan kuota akun Claude pemilik, /status). Opsi A (rekomendasi): ya, sama dengan pemilik, karena mereka toh bisa menjalankan apa saja di server lewat bot, jadi menyembunyikan kuota tidak melindungi apa pun; balasan /allow menyebutnya. Opsi B: /context dan /status hanya untuk pemilik (perlu ubah plugin/context.ts dan plugin/server.ts). Opsi C: tunda keputusan, tiket ini tidak menyentuh plugin dan perilaku sekarang (semua allowFrom) dicatat di CLAUDE.md.
+  → Sama dengan pemilik (Recommended). (owner, 2026-11-13)
 
 ## Assumptions
 - A1 [unseen] access.json ditulis atomik (berkas sementara + rename, 0600) dan semua kolom lain dipertahankan; berlaku tanpa restart karena plugin membaca access.json setiap pesan. Penting: plugin memindahkan access.json yang rusak dan kembali ke dmPolicy pairing, jadi penulisan setengah jadi tidak boleh terjadi
@@ -51,3 +53,4 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 ## Decisions
 - Lane strict: memberi orang lain akses ke bot yang berjalan bebas izin di server
 - Tidak solo dan tidak menunggu: ketiga tiket perintah master-bot (261112225303, 261112225306, 261112225307) sama-sama menambah COMMANDS dan handler di master/src/bot.ts serta CLAUDE.md, tetapi tidak saling membaca hasilnya; berjalan berdampingan, merge queue menyelesaikan bentrok
+- 2026-11-13 moved to todo: Disetujui pemilik setelah jawaban tercatat

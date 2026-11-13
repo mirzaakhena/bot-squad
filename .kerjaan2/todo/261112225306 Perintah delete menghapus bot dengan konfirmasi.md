@@ -5,7 +5,7 @@ lane: strict
 labels: []
 blocked_by: [261112225302]
 related: []
-touches: [master/src/bot.ts, master/src/delete.ts, master/src/stop.ts, master/src/registry.ts, master/src/busy.ts, master/test/, CLAUDE.md]
+touches: [master/src/bot.ts, master/src/delete.ts, master/src/stop.ts, master/src/registry.ts, master/src/busy.ts, master/src/config.ts, master/test/, CLAUDE.md]
 created: 2026-11-12 22:53
 ---
 
@@ -29,15 +29,16 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 - [ ] /delete <nama> meminta konfirmasi lewat tombol sebelum melakukan apa pun; tanpa konfirmasi tidak ada yang berubah.
 - [ ] Setelah dikonfirmasi, bot dimatikan, dihapus dari daftar bot, dan foldernya tidak lagi berada di tempat bot aktif.
-- [ ] Workspace bot diarsipkan, tidak dihapus permanen; balasan menyebut di mana arsipnya.
-- [ ] Token bot tidak ikut tersimpan di arsip.
+- [ ] Seluruh folder `bots/<nama>` (workspace dan state) dipindah utuh dalam satu langkah ke `$BOT_SQUAD_HOME/archive/<nama>-<YYYYMMDD-HHMMSS>/`, tidak dihapus permanen dan tidak pernah dihapus otomatis (Q1); balasan menyebut di mana arsipnya.
+- [ ] Token bot tidak ikut tersimpan di arsip (`state/.env` dihapus sebelum folder dipindah).
 - [ ] Nama itu bisa didaftarkan lagi setelah dihapus.
 - [ ] Dibuktikan dengan tes otomatis.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Questions
-- Q1 [blocking] Bentuk arsip /delete? Opsi A (rekomendasi): seluruh folder bots/<nama> dipindah (rename, satu langkah) ke ~/.bot-squad/archive/<nama>-<YYYYMMDD-HHMMSS>/ setelah state/.env dihapus; workspace, access.json, dan plugin.log ikut tersimpan, arsip tidak pernah dihapus otomatis. Opsi B: hanya workspace yang diarsipkan, folder state dihapus permanen. Opsi C: dikemas jadi satu berkas .tar.gz di archive/ lalu folder asli dihapus.
+- Q1 [answered] Bentuk arsip /delete? Opsi A (rekomendasi): seluruh folder bots/<nama> dipindah (rename, satu langkah) ke ~/.bot-squad/archive/<nama>-<YYYYMMDD-HHMMSS>/ setelah state/.env dihapus; workspace, access.json, dan plugin.log ikut tersimpan, arsip tidak pernah dihapus otomatis. Opsi B: hanya workspace yang diarsipkan, folder state dihapus permanen. Opsi C: dikemas jadi satu berkas .tar.gz di archive/ lalu folder asli dihapus.
+  → Pindah folder utuh (Recommended). (owner, 2026-11-13)
 
 ## Assumptions
 - A1 [unseen] Tombol konfirmasi berisi Hapus dan Batal, sekali pakai, berlaku 5 menit; tombol kedaluwarsa atau sudah dipakai dijawab 'kedaluwarsa' tanpa mengubah apa pun; hanya callback dari pemilik di chat pribadinya (isOwnerUpdate)
@@ -53,3 +54,4 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 ## Decisions
 - Lane strict: menghapus data bot dan entri registry, tidak bisa dibatalkan kalau salah
 - Tidak solo dan tidak menunggu: ketiga tiket perintah master-bot (261112225303, 261112225306, 261112225307) sama-sama menambah COMMANDS dan handler di master/src/bot.ts serta CLAUDE.md, tetapi tidak saling membaca hasilnya; berjalan berdampingan, merge queue menyelesaikan bentrok
+- 2026-11-13 moved to todo: Disetujui pemilik setelah jawaban tercatat
