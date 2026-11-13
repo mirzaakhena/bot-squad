@@ -3,6 +3,8 @@ import { createMasterBot } from "./bot.ts";
 import { ConfigError, dataDir, loadConfig, type ConfigSource } from "./config.ts";
 import { createLogger, describeError, redact } from "./log.ts";
 import { launchBot, realLaunchDeps } from "./launch.ts";
+import { realStopDeps, stopBot } from "./stop.ts";
+import { createBotLocks } from "./busy.ts";
 import { syncCommandMenu } from "./menu.ts";
 import { acquireMasterLock, type LockDeps } from "./lock.ts";
 import { resolveApiRoot } from "./api-root.ts";
@@ -70,8 +72,9 @@ async function serve(
   write: (line: string) => void,
 ): Promise<number> {
   const launchDeps = realLaunchDeps(dir, config.ownerId, log, opts.signal);
-  // Penyalaan yang masih berjalan; ditunggu sebentar saat berhenti supaya
-  // status dan log-nya tertulis (tiket 261112223102).
+  const stopDeps = realStopDeps(dir, log);
+  // Penyalaan, /stop dan /restart yang masih berjalan; ditunggu sebentar
+  // saat berhenti supaya status dan log-nya tertulis (tiket 261112223102).
   const launches = new Set<Promise<void>>();
   const bot = createMasterBot({
     token: config.token,
@@ -81,6 +84,8 @@ async function serve(
     dataDir: dir,
     signal: opts.signal,
     launch: (name) => launchBot(name, launchDeps),
+    stop: (name) => stopBot(name, stopDeps),
+    locks: createBotLocks(),
     onLaunch: (done) => {
       launches.add(done);
       void done.finally(() => launches.delete(done));

@@ -71,6 +71,7 @@ function makeBot() {
     // Penyalaan diuji di register-launch.test.ts; di sini tidak pernah selesai,
     // jadi status tetap "registered" dan hanya ada satu balasan.
     launch: () => new Promise(() => {}),
+    stop: () => Promise.reject(new Error("tidak dipakai di tes registrasi")),
   });
 }
 

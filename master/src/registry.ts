@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
  * registry.json: daftar bot terdaftar, sumber kebenaran master-bot.
  * Token tidak pernah disimpan di sini; token hanya ada di state/.env bot.
  */
-export type BotStatus = "registered" | "active" | "failed";
+/** "stopped": dihentikan sengaja lewat /stop, jadi tidak dihidupkan otomatis. */
+export type BotStatus = "registered" | "active" | "failed" | "stopped";
 
 export type BotRecord = {
   telegramId: number;

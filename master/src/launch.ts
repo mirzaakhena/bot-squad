@@ -140,7 +140,7 @@ export function botPaths(dataDir: string, name: string) {
   return { botsDir, state, workspace: join(botsDir, name, "workspace"), pidFile: join(state, "bot.pid") };
 }
 
-function readPid(file: string): number | null {
+export function readPid(file: string): number | null {
   try {
     const pid = parseInt(readFileSync(file, "utf8"), 10);
     return pid > 1 ? pid : null;
