@@ -249,8 +249,9 @@ describe("main.ts dengan MASTER_BOT_API_ROOT lokal", () => {
 describe("main.ts tanpa MASTER_BOT_API_ROOT", () => {
   // Token palsu di .env dan proxy tiruan: master-bot mencoba ke Telegram
   // sungguhan, proxy mencatat tujuannya lalu memutus koneksi. bot.init grammY
-  // terus mencoba ulang error jaringan (dan belum bisa dihentikan dengan
-  // SIGTERM selama itu), jadi proses dimatikan setelah tujuan terlihat.
+  // terus mencoba ulang error jaringan, jadi proses dimatikan setelah tujuan
+  // terlihat. (Berhenti dengan SIGTERM di keadaan ini diuji di
+  // unreachable.test.ts, tiket 261112235501.)
   for (const [name, value] of [
     ["tidak di-set", undefined],
     ["kosong", ""],

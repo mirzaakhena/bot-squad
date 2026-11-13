@@ -1,6 +1,3 @@
 goal: Master-bot selalu bisa dihentikan, lalu perintah master-bot yang tidak mengetik ke sesi Claude (/logs, /allow-/revoke-/access, /delete)
 order:
-  - 261112235501   # Master-bot tidak bisa dihentikan saat Telegram tak terjangkau
-  - 261112225303   # Perintah logs melihat layar sesi bot
-  - 261112225307   # Perintah allow dan revoke akses orang lain ke bot tertentu
   - 261112225306   # Perintah delete menghapus bot dengan konfirmasi
