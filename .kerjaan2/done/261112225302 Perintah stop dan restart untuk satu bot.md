@@ -26,7 +26,7 @@ Pemilik bisa mematikan satu bot dan menyalakannya ulang dari master-bot. Bot yan
 - [x] Dua perintah untuk bot yang sama pada saat bersamaan tidak membuat bot berjalan dua kali: /stop atau /restart untuk bot yang sedang dinyalakan atau dihentikan ditolak dengan pesan bahwa bot itu sedang diproses dan perlu dicoba lagi.
 - [x] Kalau /stop tidak bisa membersihkan semuanya (sesi atau server plugin masih hidup), status tetap dicatat dihentikan sengaja dan balasannya memuat peringatan dengan pid yang tersisa.
 - [x] Dibuktikan dengan tes otomatis.
-- [ ] (owner) Pemilik menghentikan lalu menyalakan ulang satu bot uji dari Telegram, dan bot itu membalas lagi.
+- [x] (owner) Pemilik menghentikan lalu menyalakan ulang satu bot uji dari Telegram, dan bot itu membalas lagi.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
@@ -37,33 +37,42 @@ Pemilik bisa mematikan satu bot dan menyalakannya ulang dari master-bot. Bot yan
   → (b) tetap dicatat "stopped", dengan peringatan yang menyebut pid yang tersisa. (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Cara mematikan: tmux kill-session '=<nama>', lalu menunggu sampai server plugin bot itu (bot.pid dan proses yang dikenali strays.ts untuk folder state itu) keluar, paling lama sekitar 10 detik; sisanya dimatikan dengan killStrays (SIGTERM, 2 detik, SIGKILL). Hanya proses yang dikenali lewat TELEGRAM_STATE_DIR + CLAUDE_PLUGIN_ROOT yang boleh dimatikan; bukti mati dari ps, bukan dari hilangnya bot.pid.
+- A1 [confirmed] Cara mematikan: tmux kill-session '=<nama>', lalu menunggu sampai server plugin bot itu (bot.pid dan proses yang dikenali strays.ts untuk folder state itu) keluar, paling lama sekitar 10 detik; sisanya dimatikan dengan killStrays (SIGTERM, 2 detik, SIGKILL). Hanya proses yang dikenali lewat TELEGRAM_STATE_DIR + CLAUDE_PLUGIN_ROOT yang boleh dimatikan; bukti mati dari ps, bukan dari hilangnya bot.pid.
   Why: CLAUDE.md: kill-session terbukti bersih, killStrays jaring pengaman, dan pelajaran soal bot.pid
   If wrong: Ubah urutan atau batas waktu di stop.ts
-- A2 [unseen] /stop untuk bot yang sudah tidak berjalan (failed, atau active yang ternyata mati) tetap mencatat 'stopped' dan membalas bahwa bot memang sudah tidak berjalan. /stop dan /restart tanpa nama atau dengan nama tak sah membalas cara pakai. Tidak ada konfirmasi sebelum /stop.
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] /stop untuk bot yang sudah tidak berjalan (failed, atau active yang ternyata mati) tetap mencatat 'stopped' dan membalas bahwa bot memang sudah tidak berjalan. /stop dan /restart tanpa nama atau dengan nama tak sah membalas cara pakai. Tidak ada konfirmasi sebelum /stop.
   Why: Pemilik satu-satunya pengguna dan tindakan ini bisa dibalik dengan /restart
   If wrong: Tambah konfirmasi atau ubah balasan
-- A3 [unseen] /restart membalas 'Menyalakan ulang <nama>...' lalu pesan kedua memakai launchReport dan sendWithRetry yang sama dengan /register, status ditulis active/failed lewat setBotStatus. Kalimat 'Percobaan ulang menunggu perintah berikutnya (belum tersedia)' di launchReport diganti petunjuk '/restart <nama>'. /stop dan /restart masuk COMMANDS.
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] /restart membalas 'Menyalakan ulang <nama>...' lalu pesan kedua memakai launchReport dan sendWithRetry yang sama dengan /register, status ditulis active/failed lewat setBotStatus. Kalimat 'Percobaan ulang menunggu perintah berikutnya (belum tersedia)' di launchReport diganti petunjuk '/restart <nama>'. /stop dan /restart masuk COMMANDS.
   Why: Done when meminta laporan seperti saat registrasi; kode laporan sudah ada di bot.ts
   If wrong: Ubah teks di bot.ts
-- A4 [unseen] Kunci 'sedang diproses' per bot dipegang di master untuk /register-launch, /stop, dan /restart (memperluas set starting di launch.ts atau setara), dan diekspor supaya 261112225304 bisa memakainya. Antar proses (start-bot.sh bersamaan) tetap dijaga cek sesi tmux yang sudah ada.
+  Confirmed by owner, 2026-11-13
+- A4 [confirmed] Kunci 'sedang diproses' per bot dipegang di master untuk /register-launch, /stop, dan /restart (memperluas set starting di launch.ts atau setara), dan diekspor supaya 261112225304 bisa memakainya. Antar proses (start-bot.sh bersamaan) tetap dijaga cek sesi tmux yang sudah ada.
   Why: Done when 'tidak berjalan dua kali'; 304 bergantung padanya
   If wrong: Pindahkan kunci ke modul lain
-- A5 [unseen] Kalau master-bot berhenti saat /restart sedang menyalakan, perilakunya sama dengan /register (tiket 261112223102): penyalaan diputus, status failed. /stop yang sedang berjalan diselesaikan dulu dalam batas tunggu 3 detik master.
+  Confirmed by owner, 2026-11-13
+- A5 [confirmed] Kalau master-bot berhenti saat /restart sedang menyalakan, perilakunya sama dengan /register (tiket 261112223102): penyalaan diputus, status failed. /stop yang sedang berjalan diselesaikan dulu dalam batas tunggu 3 detik master.
   Why: Signal sudah diteruskan ke launchBot
   If wrong: Ubah penanganan signal di stop.ts
-- A6 [unseen] /stop membalas dua pesan: 'Menghentikan <nama>...' lalu laporan hasil, karena penghentian bisa makan sampai sekitar 13 detik dan berjalan di latar belakang
+  Confirmed by owner, 2026-11-13
+- A6 [confirmed] /stop membalas dua pesan: 'Menghentikan <nama>...' lalu laporan hasil, karena penghentian bisa makan sampai sekitar 13 detik dan berjalan di latar belakang
   Why: Sama dengan pola /register dan /restart; master-bot tetap melayani perintah lain
   If wrong: Hapus balasan pertama di perintah stop di master/src/bot.ts
-- A7 [unseen] /restart yang tidak bisa mematikan bot lama dengan bersih (sesi atau server plugin masih hidup) tidak menyalakan bot baru dan tidak mengubah status; balasannya menyebut pid yang tersisa
+  Confirmed by owner, 2026-11-13
+- A7 [confirmed] /restart yang tidak bisa mematikan bot lama dengan bersih (sesi atau server plugin masih hidup) tidak menyalakan bot baru dan tidak mengubah status; balasannya menyebut pid yang tersisa
   Why: Menyalakan saat server lama masih polling berarti dua poller untuk satu token (409); status lama masih paling dekat dengan kenyataan
   If wrong: Ubah cabang isClean di perintah restart di master/src/bot.ts (mis. catat failed)
-- A8 [unseen] Kunci sedang diproses dipegang per master-bot (BotLocks dari createBotLocks di main.ts, diteruskan lewat opsi locks), bukan variabel modul; 261112225304 perlu memakai objek yang sama
+  Confirmed by owner, 2026-11-13
+- A8 [confirmed] Kunci sedang diproses dipegang per master-bot (BotLocks dari createBotLocks di main.ts, diteruskan lewat opsi locks), bukan variabel modul; 261112225304 perlu memakai objek yang sama
   Why: Variabel modul bocor antar tes dalam satu proses bun test; satu master-bot per proses tetap mendapat satu kunci
   If wrong: Jadikan createBotLocks() satu instance modul di busy.ts
-- A9 [unseen] Kalau bot.pid masih menunjuk proses hidup yang tidak dikenali sebagai server plugin bot itu, /stop hanya menyebutnya di laporan dan tidak pernah mematikannya
+  Confirmed by owner, 2026-11-13
+- A9 [confirmed] Kalau bot.pid masih menunjuk proses hidup yang tidak dikenali sebagai server plugin bot itu, /stop hanya menyebutnya di laporan dan tidak pernah mematikannya
   Why: Pid bisa dipakai ulang proses lain; hanya pengenalan strays yang boleh menentukan sasaran sinyal
   If wrong: Hapus catatan unrecognizedPid di stop.ts dan bot.ts
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane strict: mematikan proses dan sesi tmux; salah sasaran bisa mematikan bot lain atau plugin WhatsApp pemilik, dan status yang salah membuat bot tidak dihidupkan kembali
@@ -72,12 +81,13 @@ Pemilik bisa mematikan satu bot dan menyalakannya ulang dari master-bot. Bot yan
 - Status stopped ditulis sebelum sesi dimatikan, supaya niat pemilik tetap tercatat kalau master-bot berhenti di tengah /stop; /restart tidak menulis stopped di tengah jalan
 
 ## Manual checks
-- M1 [waiting] (item 8) 1. Di server, jalankan ulang master-bot dari main yang sudah memuat tiket ini (bun run master/src/main.ts) supaya menu memuat /stop dan /restart.
+- M1 [ok] (item 8) 1. Di server, jalankan ulang master-bot dari main yang sudah memuat tiket ini (bun run master/src/main.ts) supaya menu memuat /stop dan /restart.
   2. Di chat master-bot kirim /stop uji-01: muncul 'Menghentikan uji-01...' lalu 'Bot @... (uji-01) dihentikan.' dan 'Status tercatat stopped'.
   3. Di terminal: tmux ls tidak lagi memuat uji-01.
   4. Kirim pesan ke bot uji-01: tidak ada balasan.
   5. Di master-bot kirim /restart uji-01: muncul 'Menyalakan ulang uji-01...' lalu 'Bot @... (uji-01) aktif.'
   6. Kirim pesan ke bot uji-01: bot membalas lagi.
+  Checked by owner, 2026-11-13
 
 ## Handoff
 Menambah /stop dan /restart (master/src/bot.ts) dengan master/src/stop.ts (kill-session, tunggu server plugin keluar sendiri 10 detik, lalu killStrayServers) dan master/src/busy.ts (BotLocks per master-bot, dibuat di main.ts, diteruskan lewat opsi locks). Status baru 'stopped' di registry.ts, ditulis sebelum bot dimatikan. /register juga mengambil kunci saat menyalakan. Yang tidak boleh rusak: hanya proses yang dikenali strays.ts untuk folder state bot itu yang dikirimi sinyal, tmux selalu dengan '=<nama>', dan /restart tidak menyalakan kalau bot lama belum bersih. Pekerjaan lain yang menyalakan bot (mis. 261112225304) harus memakai BotLocks yang sama. createMasterBot sekarang wajib diberi stop.

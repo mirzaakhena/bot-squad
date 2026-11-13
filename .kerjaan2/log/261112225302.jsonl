@@ -34,3 +34,13 @@
 {"t":"2026-11-13 14:33:23","event":"agent","role":"reviewer","agent":"a811e7f0c4d44f46b","step":"review:1:0:0","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
 {"t":"2026-11-13 14:38:19","event":"verdict","result":"pass","round":1,"commit":"3ba5d2f","session":"21b47727-ed99-426b-8ee4-786eb16fba35","by":"reviewer:a811e7f0c4d44f46b"}
 {"t":"2026-11-13 14:38:34","event":"landed","branch":"k2/261112225302-perintah-stop-dan-restart","files":["CLAUDE.md","master/src/bot.ts","master/src/busy.ts","master/src/launch.ts","master/src/main.ts","master/src/registry.ts","master/src/stop.ts","master/test/access.test.ts","master/test/list.test.ts","master/test/menu.test.ts","master/test/register.test.ts","master/test/report-retry.test.ts","master/test/run.test.ts","master/test/stop-process.test.ts","master/test/stop-restart.test.ts","master/test/stop.test.ts","master/test/updates.ts"],"session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A2","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A3","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A4","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A5","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A6","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A7","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A8","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:36:33","event":"assumption-confirmed","key":"A9","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}
+{"t":"2026-11-13 16:56:02","event":"manual-ok","key":"M1","session":"21b47727-ed99-426b-8ee4-786eb16fba35"}

@@ -25,7 +25,7 @@ Saat master-bot menyala, ia mencocokkan daftar bot dengan sesi yang benar-benar 
 - [x] Setiap kali master-bot menyala dan registry berisi minimal satu bot, pemilik menerima satu pesan ringkasan: bot mana yang dinyalakan ulang, mana yang gagal, dan mana yang dibiarkan. Registry kosong tidak mengirim pesan.
 - [x] Bot yang gagal dinyalakan ulang tidak menghalangi bot lain.
 - [x] Dibuktikan dengan tes otomatis.
-- [ ] (owner) Pemilik mematikan semua sesi bot, menyalakan ulang master-bot, dan bot-bot itu hidup kembali.
+- [x] (owner) Pemilik mematikan semua sesi bot, menyalakan ulang master-bot, dan bot-bot itu hidup kembali.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
@@ -36,15 +36,18 @@ Saat master-bot menyala, ia mencocokkan daftar bot dengan sesi yang benar-benar 
   → (a) ringkasan dikirim setiap kali master menyala selama registry berisi minimal satu bot. (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Penyalaan otomatis dimulai di latar belakang setelah bot.init dan menu tersinkron, jadi master-bot langsung melayani perintah. Semua bot yang perlu dinyalakan diproses bersamaan lewat launchBot (pemasangan plugin sudah berkunci), dan kegagalan satu bot hanya masuk ringkasan.
+- A1 [confirmed] Penyalaan otomatis dimulai di latar belakang setelah bot.init dan menu tersinkron, jadi master-bot langsung melayani perintah. Semua bot yang perlu dinyalakan diproses bersamaan lewat launchBot (pemasangan plugin sudah berkunci), dan kegagalan satu bot hanya masuk ringkasan.
   Why: Spike 261112184702 membuktikan banyak bot bisa dinyalakan bersamaan; pola launchInBackground di bot.ts
   If wrong: Ganti menjadi satu per satu di revive.ts
-- A2 [unseen] Berjalan = runningReason di launch.ts (sesi tmux ada atau server plugin bot.pid hidup). Bot yang sudah berjalan, termasuk yang statusnya 'stopped' tetapi dinyalakan manual, tidak disentuh dan statusnya tidak diubah. Bot yang dinyalakan dicatat active/failed seperti /register. Folder bots/ yang tidak terdaftar tidak pernah disentuh.
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] Berjalan = runningReason di launch.ts (sesi tmux ada atau server plugin bot.pid hidup). Bot yang sudah berjalan, termasuk yang statusnya 'stopped' tetapi dinyalakan manual, tidak disentuh dan statusnya tidak diubah. Bot yang dinyalakan dicatat active/failed seperti /register. Folder bots/ yang tidak terdaftar tidak pernah disentuh.
   Why: Done when 'yang sudah berjalan tidak disentuh'; registry sumber kebenaran
   If wrong: Ubah aturan pilih di revive.ts
-- A3 [unseen] Ringkasan satu pesan, dikirim lewat sendWithRetry setelah semua penyalaan selesai: satu baris per bot (dinyalakan ulang / gagal + alasan singkat + petunjuk /restart atau tmux attach / dibiarkan + sebabnya), tanpa potongan layar dan tanpa token. Bot yang sedang diproses /restart atau /stop memakai kunci per bot dari 261112225302 dan dilewati dengan keterangan. Kalau master-bot berhenti di tengah, penyalaan diputus seperti /register dan ringkasan tidak dipaksakan.
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] Ringkasan satu pesan, dikirim lewat sendWithRetry setelah semua penyalaan selesai: satu baris per bot (dinyalakan ulang / gagal + alasan singkat + petunjuk /restart atau tmux attach / dibiarkan + sebabnya), tanpa potongan layar dan tanpa token. Bot yang sedang diproses /restart atau /stop memakai kunci per bot dari 261112225302 dan dilewati dengan keterangan. Kalau master-bot berhenti di tengah, penyalaan diputus seperti /register dan ringkasan tidak dipaksakan.
   Why: Done when 'satu pesan ringkasan'; pola laporan dan signal yang sudah ada
   If wrong: Ubah format di revive.ts
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: menyalakan bot lewat launchBot yang sudah teruji; tidak membuat cara mematikan baru
@@ -52,12 +55,13 @@ Saat master-bot menyala, ia mencocokkan daftar bot dengan sesi yang benar-benar 
 - Registry rusak saat menyala tetap mengirim satu pesan berisi sebabnya tanpa menyalakan bot: pemilik perlu tahu kenapa tidak ada yang hidup kembali; Done when hanya melarang pesan untuk registry kosong.
 
 ## Manual checks
-- M1 [waiting] (item 7) 1. Pastikan master-bot berjalan dan minimal satu bot terdaftar berstatus aktif (cek dengan /list).
+- M1 [ok] (item 7) 1. Pastikan master-bot berjalan dan minimal satu bot terdaftar berstatus aktif (cek dengan /list).
   2. Hentikan master-bot (Ctrl+C).
   3. Matikan semua sesi bot: tmux kill-session -t '=<nama>' untuk tiap bot (atau reboot server).
   4. Jalankan lagi: bun run --cwd master start.
   5. Dalam beberapa detik pemilik menerima satu pesan 'master-bot menyala. Keadaan N bot terdaftar:' dengan bot-bot itu di bagian 'Dinyalakan ulang'.
   6. tmux ls menampilkan sesinya lagi, /list menunjukkan 'aktif · nyata: hidup', dan bot membalas chat. Bot yang dihentikan dengan /stop tetap mati dan disebut 'dihentikan pemilik'.
+  Checked by owner, 2026-11-13
 
 ## Handoff
 Baru: master/src/revive.ts (reviveBots, reviveReport, reviveAndReport), dipanggil di serve() main.ts setelah syncCommandMenu dan sebelum bot.start, di latar belakang dan didaftarkan ke set launches supaya ikut ditunggu saat berhenti. main.ts kini membuat satu BotLocks dan satu probe yang dipakai bersama createMasterBot dan penyalaan otomatis; jangan membuat kunci kedua. Aturan: active/registered dinyalakan lewat launchBot (yang sudah berjalan menjadi already-running, status tidak diubah); failed/stopped/status lain hanya diperiksa dengan runningReason dan dibiarkan. Registry dibaca sekali secara sinkron di awal; tes yang butuh registry tanpa penyalaan otomatis harus menulisnya setelah master polling (lihat list-process.test.ts). Ringkasan satu pesan lewat sendWithRetry, tidak dikirim kalau registry kosong atau master berhenti.

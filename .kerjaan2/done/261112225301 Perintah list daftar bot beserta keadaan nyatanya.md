@@ -26,7 +26,7 @@ Pemilik bisa melihat semua bot terdaftar dari master-bot, lengkap dengan status 
 - [x] Kalau belum ada bot terdaftar, balasannya menjelaskan itu dan menyebut cara mendaftar.
 - [x] Token tidak pernah muncul di balasan.
 - [x] Dibuktikan dengan tes otomatis.
-- [ ] (owner) Pemilik mengirim /list dan melihat bot-botnya sesuai keadaan sebenarnya.
+- [x] (owner) Pemilik mengirim /list dan melihat bot-botnya sesuai keadaan sebenarnya.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
@@ -35,34 +35,41 @@ Pemilik bisa melihat semua bot terdaftar dari master-bot, lengkap dengan status 
   → (b) folder yang tidak terdaftar ditampilkan di bagian terpisah "tidak terdaftar, tidak dikelola master-bot", hanya dibaca. Tidak ada tiket adopsi. (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Nilai status 'dihentikan sengaja' di registry bernama 'stopped' (ditambahkan ke BotStatus juga oleh 261112225302). /list menampilkannya sebagai 'dihentikan'; nilai status lain yang tak dikenal ditampilkan apa adanya, tidak membuat /list error.
+- A1 [confirmed] Nilai status 'dihentikan sengaja' di registry bernama 'stopped' (ditambahkan ke BotStatus juga oleh 261112225302). /list menampilkannya sebagai 'dihentikan'; nilai status lain yang tak dikenal ditampilkan apa adanya, tidak membuat /list error.
   Why: Supaya 301 dan 302 bisa berjalan berdampingan tanpa saling menunggu
   If wrong: Ganti nama nilai di kedua tiket sebelum dikerjakan
-- A2 [unseen] 'Benar-benar hidup' dihitung dengan cek yang sama seperti launch.ts: sesi tmux '<nama>' ada, dan proses di state/bot.pid hidup. Tiga keadaan: hidup (keduanya), sesi ada tapi server plugin mati, mati (tidak ada sesi; bot.pid mati atau tidak ada). Hanya membaca: tidak ada sesi atau berkas yang diubah.
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] 'Benar-benar hidup' dihitung dengan cek yang sama seperti launch.ts: sesi tmux '<nama>' ada, dan proses di state/bot.pid hidup. Tiga keadaan: hidup (keduanya), sesi ada tapi server plugin mati, mati (tidak ada sesi; bot.pid mati atau tidak ada). Hanya membaca: tidak ada sesi atau berkas yang diubah.
   Why: runningReason/isAlive di launch.ts sudah menjadi definisi 'berjalan' di proyek ini
   If wrong: Ubah daftar keadaan di list.ts
-- A3 [unseen] Tidak cocok berarti: active/registered tetapi mati, atau stopped tetapi masih hidup. failed dengan sesi masih ada ditampilkan wajar ('sesi dibiarkan untuk diperiksa'), karena penyalaan gagal memang sengaja membiarkan sesinya.
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] Tidak cocok berarti: active/registered tetapi mati, atau stopped tetapi masih hidup. failed dengan sesi masih ada ditampilkan wajar ('sesi dibiarkan untuk diperiksa'), karena penyalaan gagal memang sengaja membiarkan sesinya.
   Why: CLAUDE.md: sesi yang gagal dibiarkan hidup supaya bisa dilihat
   If wrong: Ubah aturan tanda di list.ts
-- A4 [unseen] /list ditambahkan ke COMMANDS (menu dan /help). Balasan teks biasa atau HTML ber-escape, satu baris per bot urut nama; registry.json rusak dijawab dengan pesan jelas dan detailnya di log.
+  Confirmed by owner, 2026-11-13
+- A4 [confirmed] /list ditambahkan ke COMMANDS (menu dan /help). Balasan teks biasa atau HTML ber-escape, satu baris per bot urut nama; registry.json rusak dijawab dengan pesan jelas dan detailnya di log.
   Why: Pola perintah yang ada di bot.ts dan menu.ts
   If wrong: Ubah format di list.ts
-- A5 [unseen] Folder di bots/ yang namanya tidak lolos aturan nama bot (mis. huruf besar) dan berkas biasa tidak ditampilkan di bagian tidak terdaftar
+  Confirmed by owner, 2026-11-13
+- A5 [confirmed] Folder di bots/ yang namanya tidak lolos aturan nama bot (mis. huruf besar) dan berkas biasa tidak ditampilkan di bagian tidak terdaftar
   Why: Nama seperti itu tidak bisa menjadi sesi tmux yang dikelola bot-squad, jadi bukan bot
   If wrong: Hapus syarat NAME_RULE di unregisteredFolders (list.ts)
-- A6 [unseen] Keadaan keempat ditambahkan: sesi tmux tidak ada tetapi server plugin masih hidup (server yatim). Dianggap tidak cocok untuk active dan stopped
+  Confirmed by owner, 2026-11-13
+- A6 [confirmed] Keadaan keempat ditambahkan: sesi tmux tidak ada tetapi server plugin masih hidup (server yatim). Dianggap tidak cocok untuk active dan stopped
   Why: Server yatim tetap memakai token; menyebutnya mati akan menyesatkan
   If wrong: Gabungkan plugin-only ke dead di probeBot (list.ts)
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: hanya membaca registry dan keadaan tmux/proses, tidak mengubah apa pun; tetap standard karena menyentuh penjaga token di balasan
 - Berjalan berdampingan dengan 261112225302, tidak menunggu: /list hanya perlu nama status 'stopped' yang ditetapkan sekarang (A1), bukan kode 302. Keduanya menambah 'stopped' ke BotStatus dan perintah ke COMMANDS di bot.ts; tabrakan kecil itu diselesaikan merge queue.
 
 ## Manual checks
-- M1 [waiting] (item 8) 1. Jalankan master-bot: bun run --cwd master start di root repo.
+- M1 [ok] (item 8) 1. Jalankan master-bot: bun run --cwd master start di root repo.
   2. Di chat master-bot kirim /list.
   3. Lihat setiap bot terdaftar dengan @username, status tercatat, dan keadaan nyata; uji-01 dan uji-02 tampil di bagian 'Tidak terdaftar, tidak dikelola master-bot' dengan hidup/mati sesuai tmux ls.
   4. Matikan sesi satu bot aktif (tmux kill-session -t <nama>), kirim /list lagi: bot itu bertanda TIDAK COCOK.
+  Checked by owner, 2026-11-13
 
 ## Handoff
 Menambah /list (master/src/list.ts, disambung di bot.ts dan COMMANDS). Hanya membaca registry, folder bots/, tmux has-session, dan bot.pid; tidak boleh ada kill, start, atau tulis berkas di jalur ini (tes memotret folder data dan sesi tmux sebelum/sesudah). Keadaan nyata: hidup, sesi tanpa server plugin, server tanpa sesi, mati, tidak bisa diperiksa. Tanda TIDAK COCOK: active tidak hidup, registered mati, stopped masih berjalan; failed tidak pernah. Folder tidak terdaftar tampil di bagian terpisah; sesi tmux tanpa folder tidak pernah. createMasterBot menerima opsi probe (tmux, isAlive) untuk tes; main.ts memberi milik launchDeps. Balasan HTML, token apa pun (angka:20+ karakter) disensor. 302 menambah 'stopped' ke BotStatus; list.ts sudah mengenalnya tanpa bergantung pada tipe itu.
