@@ -69,6 +69,42 @@ function freeTarget(dataDir: string, name: string, now: Date): string {
   }
 }
 
+export type MarkResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Langkah pertama /delete (tiket 261113190701, Q1): status 'stopped' dicatat
+ * sebelum bot dihentikan, seperti /stop. Kalau master-bot mati di tengah
+ * penghapusan, penyalaan otomatis tidak menghidupkan bot ini lagi. Hanya
+ * entri yang dikonfirmasi pemilik (expect) yang diubah; kalau gagal, belum
+ * ada apa pun yang disentuh.
+ */
+export function markStoppedForDelete(
+  name: string,
+  deps: Pick<ArchiveDeps, "dataDir" | "registryHooks" | "expect">,
+): Promise<MarkResult> {
+  return serialized(async () => {
+    let reg;
+    try {
+      reg = readRegistry(deps.dataDir);
+    } catch (err) {
+      return { ok: false, reason: err instanceof Error ? err.message : "registry.json tidak bisa dibaca" };
+    }
+    if (!Object.hasOwn(reg.bots, name)) return { ok: false, reason: "bot tidak terdaftar" };
+    const rec = reg.bots[name]!;
+    if (deps.expect && (rec.telegramId !== deps.expect.telegramId || rec.createdAt !== deps.expect.createdAt)) {
+      return { ok: false, reason: "nama itu kini milik bot lain yang belum dikonfirmasi untuk dihapus" };
+    }
+    if (rec.status === "stopped") return { ok: true };
+    try {
+      reg.bots[name] = { ...rec, status: "stopped" };
+      writeRegistry(deps.dataDir, reg, deps.registryHooks);
+    } catch (err) {
+      return { ok: false, reason: `registry.json gagal ditulis (${short(err)})` };
+    }
+    return { ok: true };
+  });
+}
+
 /**
  * Mengarsipkan folder bot dan menghapusnya dari registry. Harus dipanggil
  * setelah bot benar-benar mati. Tidak pernah menghapus isi folder selain
