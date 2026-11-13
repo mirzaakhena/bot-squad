@@ -33,11 +33,11 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 ## Done when
 
-- [ ] Saat Telegram tidak terjangkau sejak master-bot menyala, Ctrl+C atau SIGTERM menghentikan master-bot paling lama 5 detik, dengan pesan yang menjelaskan bahwa Telegram belum terjangkau.
-- [ ] Saat Telegram putus setelah master-bot sempat berjalan (polling sudah jalan), Ctrl+C atau SIGTERM juga menghentikan master-bot paling lama 5 detik; panggilan Telegram terakhir saat berhenti tidak boleh menahannya.
-- [ ] Kunci "master-bot sudah berjalan" dilepas saat berhenti dengan kedua cara ini.
-- [ ] Token tidak muncul di keluaran mana pun.
-- [ ] Dibuktikan dengan tes otomatis memakai proses master sungguhan, tanpa token asli dan tanpa menghubungi Telegram sungguhan.
+- [x] Saat Telegram tidak terjangkau sejak master-bot menyala, Ctrl+C atau SIGTERM menghentikan master-bot paling lama 5 detik, dengan pesan yang menjelaskan bahwa Telegram belum terjangkau.
+- [x] Saat Telegram putus setelah master-bot sempat berjalan (polling sudah jalan), Ctrl+C atau SIGTERM juga menghentikan master-bot paling lama 5 detik; panggilan Telegram terakhir saat berhenti tidak boleh menahannya.
+- [x] Kunci "master-bot sudah berjalan" dilepas saat berhenti dengan kedua cara ini.
+- [x] Token tidak muncul di keluaran mana pun.
+- [x] Dibuktikan dengan tes otomatis memakai proses master sungguhan, tanpa token asli dan tanpa menghubungi Telegram sungguhan.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
@@ -60,3 +60,16 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - Lane standard: alur berhenti master-bot, tidak menyentuh data atau token, mudah dibatalkan
 - Tidak solo dan tidak menunggu: tidak ada tiket lain yang membaca hasilnya; berjalan berdampingan dengan 261112230302
 - 2026-11-13 moved to todo: Pemilik menjawab Q1 (termasuk putus di tengah); tidak ada pertanyaan tersisa
+- Pemutus dipasang sebagai transformer API, bukan signal per panggilan, karena getUpdates terakhir di bot.stop() grammY tidak menerima signal; satu mekanisme menutup semua panggilan.
+
+## Handoff
+master/src/cutoff.ts memasang transformer di bot.api yang menambahkan signal pemutus ke setiap panggilan Telegram dan mencatat kegagalan jaringan terakhir serta panggilan yang masih menunggu. main.ts: bot.init dan syncCommandMenu menerima signal; saat berhenti sebelum polling, pemutus langsung aktif dan master keluar kode 0 dengan pesan 'dihentikan sebelum Telegram terjangkau (tahap: ...)'. Setelah polling, getUpdates konfirmasi bot.stop() diberi STOP_GRACE_MS (2 detik) lalu diputus, bot.start tidak ditunggu lebih lama, penyalaan ditunggu bersamaan (3 detik). Jangan menambah panggilan Telegram yang tidak lewat bot.api atau yang menunggu tanpa batas di jalur berhenti; total harus tetap di bawah 5 detik.
+
+## Review
+- 2026-11-13 standard, round 1, at 67e814e: passed.
+  1: k2 test -- bun test master/test/unreachable.test.ts lulus 9/9; tes SIGINT/SIGTERM dengan port ditolak dan port diam (getMe) serta menu menggantung memeriksa kode 0, < 5 detik, pesan 'dihentikan sebelum Telegram terjangkau (tahap: ...)'. Tes yang sama terhadap kode main gagal (SIGTERM ditolak/diam/menu).
+  2: tes 'Telegram putus setelah polling berjalan' (semua panggilan menggantung, server hilang) lulus; varian menggantung gagal di kode main (8,6 detik), dan tes memastikan getUpdates limit=1 dari bot.stop() memang dikirim lalu diputus.
+  3: expectCleanExit di kesembilan tes memeriksa master.pid tidak ada setelah keluar, di jalur sebelum dan sesudah polling; lulus.
+  4: setiap tes memeriksa stdout+stderr tidak memuat bagian rahasia token palsu; pesan notReached melewati redact dengan config.token; lulus.
+  5: unreachable.test.ts menjalankan main.ts sungguhan dengan HOME/BOT_SQUAD_HOME mkdtemp tanpa symlink, token palsu, API root lokal, HTTPS_PROXY mati; dijalankan lewat k2 test, juga di salinan kode lama di scratchpad (sudah dihapus).
+  note: Tidak ada AGENTS.md; tidak ada skrip cek lain di repo selain bun test. Ctrl+C kedua (process.once) tetap mematikan proses dengan default handler; kunci basi diambil alih seperti sebelumnya (A3).

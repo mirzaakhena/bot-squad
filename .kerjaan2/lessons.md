@@ -33,3 +33,6 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Tes dengan tmux -S <dir>/tmux-<uid>/default yang membuat sesi sebelum proses lain menyalakan server harus membuat folder tmux-<uid> (0700) sendiri, kalau tidak new-session gagal kode 1
 - bun test berbagi modul antar berkas: Map/Set tingkat modul (mis. kunci per bot) bocor antar tes; buat state seperti itu per createMasterBot, bukan variabel modul
 - main.ts menyalakan bot active/registered dari registry saat start; tes proses yang bukan soal penyalaan otomatis harus menulis registry setelah getUpdates pertama
+- bot.stop() grammY memanggil getUpdates tanpa signal; satu-satunya cara memutusnya adalah transformer bot.api.config.use yang menambah AbortSignal (lihat master/src/cutoff.ts)
+- Plugin mengirim permintaan izin claude/channel/permission ke SEMUA allowFrom, jadi orang yang di-/allow juga menerima dan bisa menjawab prompt izin bot itu
+- k2 test menjalankan skrip hanya lewat path absolut; ./skrip.sh dicari relatif ke worktree
