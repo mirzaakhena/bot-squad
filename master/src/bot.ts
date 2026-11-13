@@ -4,7 +4,8 @@ import { isOwnerUpdate, senderIdForLog } from "./access.ts";
 import { describeError, type Logger } from "./log.ts";
 import { parseRegisterArgs, registerBot, USAGE } from "./register.ts";
 import { setBotStatus, type WriteHooks } from "./registry.ts";
-import type { LaunchResult } from "./launch.ts";
+import { isAlive, realTmux, type LaunchResult } from "./launch.ts";
+import { listReport, type ProbeDeps } from "./list.ts";
 import { sendWithRetry, type RetryPolicy } from "./retry.ts";
 
 /** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
@@ -12,6 +13,7 @@ export const COMMANDS = [
   { command: "start", description: "Tampilkan daftar perintah" },
   { command: "help", description: "Tampilkan daftar perintah" },
   { command: "register", description: "Daftarkan bot baru: /register <nama> <token>" },
+  { command: "list", description: "Daftar bot beserta keadaan nyatanya" },
 ] as const;
 
 export function helpText(): string {
@@ -42,6 +44,8 @@ export type MasterBotOptions = {
   onLaunch?: (done: Promise<void>) => void;
   /** Dibatalkan saat master-bot berhenti: percobaan kirim ulang laporan dihentikan. */
   signal?: AbortSignal;
+  /** Cek keadaan nyata untuk /list; default tmux dan cek pid asli. Diganti di tes. */
+  probe?: Omit<ProbeDeps, "dataDir">;
   /** Jeda kirim ulang laporan penyalaan; diganti di tes. */
   reportRetry?: RetryPolicy;
 };
@@ -95,6 +99,13 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   });
 
   bot.command(["start", "help"], (ctx) => ctx.reply(helpText()));
+
+  // /list hanya membaca: registry, folder bots/, sesi tmux, dan bot.pid.
+  bot.command("list", async (ctx) => {
+    const probe = opts.probe ?? { tmux: realTmux, isAlive };
+    const text = await listReport({ dataDir: opts.dataDir, ...probe, log: opts.log });
+    await ctx.reply(text, { parse_mode: "HTML" });
+  });
 
   // Penyalaan berjalan di latar belakang supaya master-bot tetap melayani
   // perintah lain selama menunggu (bisa sampai 90 detik).

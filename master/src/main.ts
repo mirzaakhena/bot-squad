@@ -81,6 +81,7 @@ async function serve(
     dataDir: dir,
     signal: opts.signal,
     launch: (name) => launchBot(name, launchDeps),
+    probe: { tmux: launchDeps.tmux, isAlive: launchDeps.isAlive },
     onLaunch: (done) => {
       launches.add(done);
       void done.finally(() => launches.delete(done));
