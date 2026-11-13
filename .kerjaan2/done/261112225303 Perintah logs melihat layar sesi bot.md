@@ -40,18 +40,22 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Default 20, maks 50 (opsi B): selalu muat dalam satu pesan. (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Hanya bot di registry yang dilayani (nama lolos aturan nama); tanpa sesi tmux balasannya menjelaskan keadaan nyata dengan kata yang sama seperti /list; kalau sesi ada tetapi server plugin mati, layar tetap ditampilkan plus keterangan itu
+- A1 [confirmed] Hanya bot di registry yang dilayani (nama lolos aturan nama); tanpa sesi tmux balasannya menjelaskan keadaan nyata dengan kata yang sama seperti /list; kalau sesi ada tetapi server plugin mati, layar tetap ditampilkan plus keterangan itu
   Why: Konsisten dengan /list dan /stop (tiket 261112225301, 261112225302)
   If wrong: Tolak juga sesi tanpa server plugin
-- A2 [unseen] Sensor: token bot itu (dari state/.env), token master-bot, dan apa pun berbentuk <angka>:<20+ karakter> diganti, juga seluruh nilai setelah TELEGRAM_BOT_TOKEN= atau MASTER_BOT_TOKEN= di baris mana pun; teks layar di-escape HTML dalam <pre>
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] Sensor: token bot itu (dari state/.env), token master-bot, dan apa pun berbentuk <angka>:<20+ karakter> diganti, juga seluruh nilai setelah TELEGRAM_BOT_TOKEN= atau MASTER_BOT_TOKEN= di baris mana pun; teks layar di-escape HTML dalam <pre>
   Why: Sama dengan sensor /list dan laporan penyalaan; Done when melarang token dan isi .env
   If wrong: Perluas pola sensor
-- A3 [unseen] /logs hanya membaca (tmux capture-pane), tanpa BotLocks dan tanpa mengubah sesi; boleh dipakai saat bot sedang dinyalakan atau dihentikan
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] /logs hanya membaca (tmux capture-pane), tanpa BotLocks dan tanpa mengubah sesi; boleh dipakai saat bot sedang dinyalakan atau dihentikan
   Why: Membaca tidak bentrok dengan penyalaan; /list juga tanpa kunci
   If wrong: Tolak saat bot sedang diproses
-- A4 [unseen] Kalau n baris yang diminta tidak muat satu pesan (layar 200 kolom), baris teratas dibuang dan judul menyebut jumlah yang tampil; batas 4000 karakter dihitung pada HTML mentah
+  Confirmed by owner, 2026-11-13
+- A4 [confirmed] Kalau n baris yang diminta tidak muat satu pesan (layar 200 kolom), baris teratas dibuang dan judul menyebut jumlah yang tampil; batas 4000 karakter dihitung pada HTML mentah
   Why: Q1 meminta selalu muat satu pesan tanpa dibagi, tetapi 50 baris x 200 kolom bisa melebihi 4096; membuang baris teratas sama dengan laporan penyalaan
   If wrong: Ganti dengan memotong lebar tiap baris di logsReport (master/src/logs.ts)
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: hanya membaca layar tmux, tidak mengubah sesi atau berkas; risikonya kebocoran token, dijaga Done when sensor

@@ -43,12 +43,14 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Sama dengan pemilik (Recommended). (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] access.json ditulis atomik (berkas sementara + rename, 0600) dan semua kolom lain dipertahankan; berlaku tanpa restart karena plugin membaca access.json setiap pesan. Penting: plugin memindahkan access.json yang rusak dan kembali ke dmPolicy pairing, jadi penulisan setengah jadi tidak boleh terjadi
+- A1 [confirmed] access.json ditulis atomik (berkas sementara + rename, 0600) dan semua kolom lain dipertahankan; berlaku tanpa restart karena plugin membaca access.json setiap pesan. Penting: plugin memindahkan access.json yang rusak dan kembali ke dmPolicy pairing, jadi penulisan setengah jadi tidak boleh terjadi
   Why: plugin/server.ts readAccessFile/saveAccess
   If wrong: -
-- A2 [unseen] user_id harus bilangan bulat positif; /allow untuk ID yang sudah ada dan /revoke untuk ID yang tidak ada dijawab tanpa mengubah berkas; bot harus terdaftar, status apa pun (juga stopped); dmPolicy tetap allowlist
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] user_id harus bilangan bulat positif; /allow untuk ID yang sudah ada dan /revoke untuk ID yang tidak ada dijawab tanpa mengubah berkas; bot harus terdaftar, status apa pun (juga stopped); dmPolicy tetap allowlist
   Why: Validasi input dan idempoten, seperti /stop
   If wrong: Tolak bot yang tidak aktif
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane strict: memberi orang lain akses ke bot yang berjalan bebas izin di server

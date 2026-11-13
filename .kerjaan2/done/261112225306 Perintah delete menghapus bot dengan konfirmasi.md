@@ -41,21 +41,26 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Pindah folder utuh (Recommended). (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Tombol konfirmasi berisi Hapus dan Batal, sekali pakai, berlaku 5 menit; tombol kedaluwarsa atau sudah dipakai dijawab 'kedaluwarsa' tanpa mengubah apa pun; hanya callback dari pemilik di chat pribadinya (isOwnerUpdate)
+- A1 [confirmed] Tombol konfirmasi berisi Hapus dan Batal, sekali pakai, berlaku 5 menit; tombol kedaluwarsa atau sudah dipakai dijawab 'kedaluwarsa' tanpa mengubah apa pun; hanya callback dari pemilik di chat pribadinya (isOwnerUpdate)
   Why: Pagar konfirmasi mirza-bots dan aturan pemilik saja
   If wrong: Ubah masa berlaku
-- A2 [unseen] Penghapusan memakai BotLocks yang sama (label 'dihapus'), langkah henti dari stop.ts; kalau bot tidak bisa dihentikan bersih, penghapusan dibatalkan dan registry serta folder tidak berubah; entri registry dihapus lewat writeRegistry setelah folder dipindah
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] Penghapusan memakai BotLocks yang sama (label 'dihapus'), langkah henti dari stop.ts; kalau bot tidak bisa dihentikan bersih, penghapusan dibatalkan dan registry serta folder tidak berubah; entri registry dihapus lewat writeRegistry setelah folder dipindah
   Why: Sama dengan /restart yang batal kalau bot lama tidak mati bersih (Q2 261112225302)
   If wrong: Hapus walau tersisa proses
-- A3 [unseen] Transkrip ~/.claude/projects dan trust di ~/.claude.json tidak disentuh; token di BotFather tetap berlaku (balasan menyarankan revoke di @BotFather kalau perlu)
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] Transkrip ~/.claude/projects dan trust di ~/.claude.json tidak disentuh; token di BotFather tetap berlaku (balasan menyarankan revoke di @BotFather kalau perlu)
   Why: Di luar folder bot-squad; mencabut token butuh BotFather
   If wrong: Tambah pembersihan transkrip
-- A4 [unseen] Nama folder arsip memakai waktu lokal server; kalau dua penghapusan nama yang sama jatuh di detik yang sama, yang kedua diberi akhiran -2
+  Confirmed by owner, 2026-11-13
+- A4 [confirmed] Nama folder arsip memakai waktu lokal server; kalau dua penghapusan nama yang sama jatuh di detik yang sama, yang kedua diberi akhiran -2
   Why: Sama dengan plugin.log yang memakai waktu lokal; akhiran mencegah arsip tertimpa
   If wrong: Ganti archiveStamp ke UTC di master/src/delete.ts
-- A5 [unseen] Langkah yang gagal di tengah tidak digulung balik: kalau rename gagal, token sudah terhapus dan laporan menyebutnya; kalau registry gagal ditulis, folder sudah di arsip dan /delete lagi menghapus entrinya
+  Confirmed by owner, 2026-11-13
+- A5 [confirmed] Langkah yang gagal di tengah tidak digulung balik: kalau rename gagal, token sudah terhapus dan laporan menyebutnya; kalau registry gagal ditulis, folder sudah di arsip dan /delete lagi menghapus entrinya
   Why: Tiket mewajibkan .env dihapus sebelum dipindah; mengembalikan token berarti menyimpan salinannya
   If wrong: Simpan .env sementara di memori dan tulis ulang kalau rename gagal
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane strict: menghapus data bot dan entri registry, tidak bisa dibatalkan kalau salah

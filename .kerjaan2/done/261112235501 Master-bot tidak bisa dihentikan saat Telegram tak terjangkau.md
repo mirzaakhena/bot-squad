@@ -46,15 +46,18 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Termasuk putus di tengah (Recommended): juga tangani Telegram yang putus setelah master-bot berjalan, batas sama keluar dalam 5 detik. (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Berhenti karena Ctrl+C/SIGTERM saat Telegram belum terjangkau keluar dengan kode 0, sama dengan jalur 'signal aborted' yang sudah ada di main.ts
+- A1 [confirmed] Berhenti karena Ctrl+C/SIGTERM saat Telegram belum terjangkau keluar dengan kode 0, sama dengan jalur 'signal aborted' yang sudah ada di main.ts
   Why: Berhenti diminta pemilik, bukan kegagalan; konsisten dengan kode sekarang
   If wrong: Ubah ke kode 1
-- A2 [unseen] Tes mencakup dua bentuk 'tak terjangkau': koneksi ditolak (port tertutup) dan koneksi yang diterima tetapi tidak pernah dijawab; Telegram tiruan lewat MASTER_BOT_API_ROOT plus HTTPS_PROXY=http://127.0.0.1:9
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] Tes mencakup dua bentuk 'tak terjangkau': koneksi ditolak (port tertutup) dan koneksi yang diterima tetapi tidak pernah dijawab; Telegram tiruan lewat MASTER_BOT_API_ROOT plus HTTPS_PROXY=http://127.0.0.1:9
   Why: Pelajaran: proxy harus memutus koneksi, dan koneksi menggantung adalah kasus terburuk (batas client 500 detik)
   If wrong: Uji satu bentuk saja
-- A3 [unseen] Kunci setelah kill -9 tidak diubah: pengambilalihan kunci basi (pid mati) sudah ada sejak 261112211002; tiket ini hanya memastikan kunci dilepas saat berhenti normal di jalur ini
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] Kunci setelah kill -9 tidak diubah: pengambilalihan kunci basi (pid mati) sudah ada sejak 261112211002; tiket ini hanya memastikan kunci dilepas saat berhenti normal di jalur ini
   Why: Done when hanya meminta pelepasan saat berhenti dengan Ctrl+C/SIGTERM
   If wrong: Tambah tes pengambilalihan setelah kill -9
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: alur berhenti master-bot, tidak menyentuh data atau token, mudah dibatalkan
