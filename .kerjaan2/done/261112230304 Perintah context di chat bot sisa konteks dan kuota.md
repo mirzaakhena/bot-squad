@@ -29,7 +29,7 @@ Ikuti persis /context di mirza-bots (keputusan pemilik): format balasan dari /Us
 - [x] Statusline bot menangkap payload lalu meneruskan payload yang sama ke statusline pendahulu (lapisan project/local workspace bot, lalu user ~/.claude/settings.json) dan mencetak keluarannya; gagal menangkap tidak mematikan baris status; kalau pendahulu tidak bisa dipastikan, tidak ada rantai yang merusak dipasang dan /context melapor apa adanya.
 - [x] Statusline milik pemilik di luar bot-squad tidak berubah: tidak ada berkas pengaturan Claude yang ditulis.
 - [x] Dibuktikan dengan tes otomatis.
-- [ ] (owner) Pemilik mengirim /context ke bot uji dan angkanya masuk akal.
+- [x] (owner) Pemilik mengirim /context ke bot uji dan angkanya masuk akal.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
@@ -46,27 +46,34 @@ Ikuti persis /context di mirza-bots (keputusan pemilik): format balasan dari /Us
   → Untuk /context ikuti persis yang ada di mirza-bots: data hanya dari bot ini sendiri (status.json bot itu), dengan Last update sebagai umur data. Plugin tidak membaca folder bot lain. (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Statusline dipasang hanya lewat --settings di claudeArgv (master/src/launch.ts), berupa perintah bun ke skrip di plugin/ yang menulis tangkapan ke <state>/status.json (0600, tulis atomik). Tidak ada berkas di ~/.claude yang ditulis.
+- A1 [confirmed] Statusline dipasang hanya lewat --settings di claudeArgv (master/src/launch.ts), berupa perintah bun ke skrip di plugin/ yang menulis tangkapan ke <state>/status.json (0600, tulis atomik). Tidak ada berkas di ~/.claude yang ditulis.
   Why: Done when 3 dan konvensi proyek: pengaturan tiap bot ditentukan saat start; --setting-sources project,local sudah mencegah statusline user termuat.
   If wrong: Hapus statusLine dari claudeArgv dan skrip tangkapnya.
-- A2 [unseen] Gagal menangkap (JSON rusak, tulis gagal) tidak pernah membuat statusline error; status.json yang rusak atau tak terbaca dibalas /context sebagai 'data belum tersedia/tidak terbaca', bukan angka.
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] Gagal menangkap (JSON rusak, tulis gagal) tidak pernah membuat statusline error; status.json yang rusak atau tak terbaca dibalas /context sebagai 'data belum tersedia/tidak terbaca', bukan angka.
   Why: Done when 2: tidak boleh ada angka kosong atau salah; pola pagar mirza-bots.
   If wrong: Ubah teks balasan saja.
-- A3 [unseen] /context ditambahkan ke menu perintah plugin (setMyCommands all_private_chats) dan dicatat di plugin.log sebagai hasil=tidak-diteruskan seperti /start, /help, /status.
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] /context ditambahkan ke menu perintah plugin (setMyCommands all_private_chats) dan dicatat di plugin.log sebagai hasil=tidak-diteruskan seperti /start, /help, /status.
   Why: Konvensi yang ada di plugin/server.ts dan CLAUDE.md bagian Log tiap bot.
   If wrong: Hapus entri menu.
-- A4 [unseen] Nama field payload (context_window.used_percentage, rate_limits.five_hour/seven_day.used_percentage dan resets_at dalam detik epoch) diverifikasi terhadap payload nyata Claude Code terpasang, ditangkap dari sesi claude di tmux uji tanpa plugin dan tanpa token, di scratchpad subfolder 261112230304; hasilnya dicatat di CLAUDE.md.
+  Confirmed by owner, 2026-11-13
+- A4 [confirmed] Nama field payload (context_window.used_percentage, rate_limits.five_hour/seven_day.used_percentage dan resets_at dalam detik epoch) diverifikasi terhadap payload nyata Claude Code terpasang, ditangkap dari sesi claude di tmux uji tanpa plugin dan tanpa token, di scratchpad subfolder 261112230304; hasilnya dicatat di CLAUDE.md.
   Why: Lesson proyek: jangan pakai token atau data asli ~/.bot-squad; field diambil dari render.ts mirza-bots.
   If wrong: Tidak ada yang perlu dibatalkan.
-- A5 [unseen] Bot yang sudah hidup baru mendapat /context setelah dinyalakan ulang (start-bot.sh atau /register ulang); belum ada /restart. Dicatat di CLAUDE.md.
+  Confirmed by owner, 2026-11-13
+- A5 [confirmed] Bot yang sudah hidup baru mendapat /context setelah dinyalakan ulang (start-bot.sh atau /register ulang); belum ada /restart. Dicatat di CLAUDE.md.
   Why: --settings hanya dibaca saat claude start.
   If wrong: Tidak ada.
-- A6 [unseen] status.json sesi sebelumnya dihapus saat bot dinyalakan, supaya /context sesi baru tidak menampilkan angka sesi lama.
+  Confirmed by owner, 2026-11-13
+- A6 [confirmed] status.json sesi sebelumnya dihapus saat bot dinyalakan, supaya /context sesi baru tidak menampilkan angka sesi lama.
   Why: Done when 2: sesi baru harus dijelaskan belum ada data, bukan angka lama.
   If wrong: Hapus rmSync status.json di prepareStatusline (master/src/statusline.ts).
-- A7 [unseen] Penantian data /context berjalan tanpa await di handler grammY, supaya tunggu sampai 18 detik tidak menahan pesan lain.
+  Confirmed by owner, 2026-11-13
+- A7 [confirmed] Penantian data /context berjalan tanpa await di handler grammY, supaya tunggu sampai 18 detik tidak menahan pesan lain.
   Why: grammY memproses update berurutan.
   If wrong: Kembalikan ke await di bot.command('context').
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: fitur baca-saja baru di plugin plus satu pengaturan --settings saat start; tidak menyentuh login, uang, atau data yang tak bisa dipulihkan, dan mudah dibatalkan.
@@ -77,10 +84,11 @@ Ikuti persis /context di mirza-bots (keputusan pemilik): format balasan dari /Us
 - Rantai disimpan di <state>/chained-statusline yang ditulis master saat start (seperti mirza-bots), bukan disematkan ke perintah --settings, supaya tidak ada kutip shell bertingkat. Perintah bridge hanya membawa path state.
 
 ## Manual checks
-- M1 [waiting] (item 7) 1. Gabungkan tiket ini, lalu nyalakan ulang bot uji (scripts/start-bot.sh <nama> setelah sesi lamanya dimatikan, atau /register bot baru).
+- M1 [ok] (item 7) 1. Gabungkan tiket ini, lalu nyalakan ulang bot uji (scripts/start-bot.sh <nama> setelah sesi lamanya dimatikan, atau /register bot baru).
   2. Di chat pribadi bot itu kirim satu pesan biasa dan tunggu jawabannya.
   3. Kirim /context.
   4. Harus muncul bagian Context dengan bar titik, persen dan token, Rate Limit 7d (dan 5h kalau akun memilikinya) dengan 'reset <durasi>', baris model/Session/CWD/Cost, dan 'Last update: HH:MM WIB' dengan umur beberapa detik; angkanya cocok dengan baris status di tmux attach -t <nama>.
+  Checked by owner, 2026-11-13
 
 ## Handoff
 /context dijawab plugin dari <state>/status.json bot itu sendiri, tanpa ke Claude; hanya pengirim allowFrom di DM (contextAllowed). Render adalah salinan renderContext mirza-bots (plugin/context-render.ts), jangan diubah. Master (master/src/statusline.ts, dipanggil launch.ts sebelum tmux) mencari statusline pendahulu local>project>user, menulis chained-statusline dan statusline.json di state, lalu memasang plugin/bot-squad-statusline.ts lewat --settings di claudeArgv; kalau tak pasti, tidak dipasang. Yang tidak boleh rusak: tidak ada berkas pengaturan Claude yang ditulis; bridge selalu meneruskan ke pendahulu walau tangkap gagal; bridge dan context.ts hanya mengimpor node:. claudeArgv kini menerima argumen statusLine.

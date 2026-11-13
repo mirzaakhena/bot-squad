@@ -1,2 +1,5 @@
-goal: Perintah /context di chat bot: sisa konteks dan kuota dari statusline, mengikuti mirza-bots
+goal: Bot dikelola sepenuhnya dari master-bot: /list, /stop dan /restart, dan penyalaan ulang otomatis saat master menyala
 order:
+  - 261112225302   # Perintah stop dan restart untuk satu bot
+  - 261112225301   # Perintah list daftar bot beserta keadaan nyatanya
+  - 261112225304   # Master menghidupkan kembali bot yang seharusnya hidup saat menyala
