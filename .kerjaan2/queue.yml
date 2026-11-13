@@ -1,2 +1,3 @@
-goal: Tes master-bot stabil, bot yang sedang dihapus tidak hidup lagi setelah crash, dan /quota di master-bot
+goal: Spike dan rancangan pesan antarbot lewat nama bot, berakhir di diskusi pemilik
 order:
+  - 261112230309   # Spike dan rancangan bot berkirim pesan ke bot lain
