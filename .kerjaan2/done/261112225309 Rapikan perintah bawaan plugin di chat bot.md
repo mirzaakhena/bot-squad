@@ -31,15 +31,18 @@ Jawaban bot atas /start, /help, dan /status sesuai cara kerja bot-squad, tanpa i
   → Hanya yang diizinkan (Recommended) — hanya pengirim di allowFrom, chat pribadi, apa pun dmPolicy, sama seperti /context; orang lain tidak dibalas. (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Teks baru /start, /help, /status dan deskripsi menu (setMyCommands all_private_chats) ditulis dalam Bahasa Indonesia, menyebut /context, tanpa kata pairing atau kode; skill /bot-squad:access dan alur pairing pesan biasa tidak diubah
+- A1 [confirmed] Teks baru /start, /help, /status dan deskripsi menu (setMyCommands all_private_chats) ditulis dalam Bahasa Indonesia, menyebut /context, tanpa kata pairing atau kode; skill /bot-squad:access dan alur pairing pesan biasa tidak diubah
   Why: Pemilik berkomunikasi dalam Bahasa Indonesia dan tambahan plugin sebelumnya (/context) sudah berbahasa Indonesia; tiket hanya meminta jawaban perintah
   If wrong: Ganti string di plugin/server.ts
-- A2 [unseen] Ada tes otomatis server plugin sungguhan (pola plugin/test/context-command.test.ts, Telegram tiruan lewat BOT_SQUAD_TELEGRAM_API_ROOT) untuk teks baru dan untuk pengirim tak diizinkan yang tidak dibalas; semua uji mengikuti aturan uji di bawah
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] Ada tes otomatis server plugin sungguhan (pola plugin/test/context-command.test.ts, Telegram tiruan lewat BOT_SQUAD_TELEGRAM_API_ROOT) untuk teks baru dan untuk pengirim tak diizinkan yang tidak dibalas; semua uji mengikuti aturan uji di bawah
   Why: Konvensi proyek: setiap perubahan perilaku punya tes, tanpa token asli
   If wrong: Hapus berkas tes
-- A3 [unseen] Aturan uji wajib: jangan membaca/menulis ~/.bot-squad; uji dengan HOME/BOT_SQUAD_HOME sementara berisi SALINAN tanpa symlink (cek find -type l); server tmux terpisah lewat TMUX_TMPDIR/-S (socket boleh di /tmp/k2-261112225309-*, hapus sesudahnya); master-bot, uji-03, uji-01 di server tmux default tidak disentuh; tanpa token asli; berkas sementara di scratchpad subfolder 261112225309, bukan di repo; kalau pengaman izin menolak kill, laporkan dan jangan cari jalan memutar
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] Aturan uji wajib: jangan membaca/menulis ~/.bot-squad; uji dengan HOME/BOT_SQUAD_HOME sementara berisi SALINAN tanpa symlink (cek find -type l); server tmux terpisah lewat TMUX_TMPDIR/-S (socket boleh di /tmp/k2-261112225309-*, hapus sesudahnya); master-bot, uji-03, uji-01 di server tmux default tidak disentuh; tanpa token asli; berkas sementara di scratchpad subfolder 261112225309, bukan di repo; kalau pengaman izin menolak kill, laporkan dan jangan cari jalan memutar
   Why: Aturan pemilik; .env master asli pernah terpotong lewat symlink
   If wrong: -
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane light: hanya teks balasan dan deskripsi menu plugin, mudah dibatalkan; gerbang balasan diselaraskan dengan contextAllowed yang sudah ada

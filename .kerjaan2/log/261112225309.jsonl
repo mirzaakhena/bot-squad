@@ -14,3 +14,6 @@
 {"t":"2026-11-13 19:18:42","event":"test","by":"worker:a2b0e04a6e15bd9b4","exit":0,"seconds":92,"fingerprint":"d7c4d437cae0a366d66b573e3412c1920e208ea4","command":"bun test --pass-with-no-tests","session":"44dfab39-c331-4018-b0c4-201c02604f0d"}
 {"t":"2026-11-13 19:18:43","event":"submitted","commit":"439c00e","lane":"light","to":"review","passed":true,"files":2,"fingerprint":"d7c4d437cae0a366d66b573e3412c1920e208ea4","session":"44dfab39-c331-4018-b0c4-201c02604f0d","by":"worker:a2b0e04a6e15bd9b4"}
 {"t":"2026-11-13 19:19:08","event":"landed","branch":"k2/261112225309-rapikan-perintah-bawaan-plugin","files":["plugin/server.ts","plugin/test/commands.test.ts"],"session":"44dfab39-c331-4018-b0c4-201c02604f0d"}
+{"t":"2026-11-13 19:44:20","event":"assumption-confirmed","key":"A1","session":"44dfab39-c331-4018-b0c4-201c02604f0d"}
+{"t":"2026-11-13 19:44:20","event":"assumption-confirmed","key":"A2","session":"44dfab39-c331-4018-b0c4-201c02604f0d"}
+{"t":"2026-11-13 19:44:20","event":"assumption-confirmed","key":"A3","session":"44dfab39-c331-4018-b0c4-201c02604f0d"}

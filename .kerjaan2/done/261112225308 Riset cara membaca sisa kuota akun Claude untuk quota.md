@@ -33,15 +33,18 @@ Cari cara yang andal untuk membaca pemakaian dan sisa kuota akun Claude dari ser
   → Data terakhir + umurnya (Recommended). (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Hasil riset hanya CLAUDE.md (bagian baru tentang kuota) dan, kalau layak, satu tiket backlog /quota (k2 new, tidak dipindah ke todo); tidak ada kode di master/ atau plugin/. Skrip percobaan tinggal di scratchpad subfolder 261112225308
+- A1 [confirmed] Hasil riset hanya CLAUDE.md (bagian baru tentang kuota) dan, kalau layak, satu tiket backlog /quota (k2 new, tidak dipindah ke todo); tidak ada kode di master/ atau plugin/. Skrip percobaan tinggal di scratchpad subfolder 261112225308
   Why: Request tiket hanya meminta riset dan keputusan
   If wrong: Hapus bagian CLAUDE.md dan tiket baru
-- A2 [unseen] Aturan uji wajib: jangan membaca/menulis ~/.bot-squad (termasuk status.json bot yang sedang jalan); uji dengan HOME/BOT_SQUAD_HOME sementara berisi SALINAN tanpa symlink; server tmux terpisah lewat TMUX_TMPDIR/-S (socket boleh di /tmp/k2-261112225308-*, hapus sesudahnya); master-bot, uji-03, uji-01 di server tmux default tidak disentuh; tanpa token asli; berkas sementara di scratchpad subfolder 261112225308; jangan membaca kredensial/token akun Claude pemilik (~/.claude/.credentials*, keychain) kecuali sesuai jawaban Q1; kalau pengaman izin menolak, laporkan dan jangan cari jalan memutar
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] Aturan uji wajib: jangan membaca/menulis ~/.bot-squad (termasuk status.json bot yang sedang jalan); uji dengan HOME/BOT_SQUAD_HOME sementara berisi SALINAN tanpa symlink; server tmux terpisah lewat TMUX_TMPDIR/-S (socket boleh di /tmp/k2-261112225308-*, hapus sesudahnya); master-bot, uji-03, uji-01 di server tmux default tidak disentuh; tanpa token asli; berkas sementara di scratchpad subfolder 261112225308; jangan membaca kredensial/token akun Claude pemilik (~/.claude/.credentials*, keychain) kecuali sesuai jawaban Q1; kalau pengaman izin menolak, laporkan dan jangan cari jalan memutar
   Why: Aturan pemilik
   If wrong: -
-- A3 [unseen] Tiket backlog /quota tidak bisa dibuat worker (k2 new dan k2 followup ditolak untuk worker); isinya diusulkan di laporan agar dibuat foreman: /quota membaca status.json semua bot (hanya baca), memakai captured_at_ms terbaru, menampilkan 7d/5h terpakai, reset, umur data, bot sumber, dan pesan jelas kalau tidak ada data
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] Tiket backlog /quota tidak bisa dibuat worker (k2 new dan k2 followup ditolak untuk worker); isinya diusulkan di laporan agar dibuat foreman: /quota membaca status.json semua bot (hanya baca), memakai captured_at_ms terbaru, menampilkan 7d/5h terpakai, reset, umur data, bot sumber, dan pesan jelas kalau tidak ada data
   Why: Riset menyimpulkan layak; pembuatan tiket bukan wewenang worker
   If wrong: Foreman membuat tiket dengan k2 new lalu baris 2 dicentang
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: riset tanpa kode, tetapi menyentuh akun Claude pemilik; hasilnya keputusan /quota
