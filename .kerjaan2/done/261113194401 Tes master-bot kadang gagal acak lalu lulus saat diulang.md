@@ -54,12 +54,14 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Paralel, 10 + 5 kali (Recommended) = (a) (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Bug sungguhan di master-bot atau plugin yang ternyata menjadi penyebab kegagalan acak boleh diperbaiki di tiket ini kalau kecil, dicatat dengan k2 decide; selain itu dicatat sebagai followup, tidak diperbaiki di sini
+- A1 [confirmed] Bug sungguhan di master-bot atau plugin yang ternyata menjadi penyebab kegagalan acak boleh diperbaiki di tiket ini kalau kecil, dicatat dengan k2 decide; selain itu dicatat sebagai followup, tidak diperbaiki di sini
   Why: Out of scope tiket mengizinkan bug sungguhan yang ditemukan lewat tes, dicatat terpisah
   If wrong: Pindahkan perbaikannya ke tiket sendiri
-- A2 [unseen] Setiap putaran tes keluarannya disimpan ke scratchpad (subfolder 261113194401), supaya kegagalan bisa dibaca; bila perlu waktu tunggu dilonggarkan, alasannya dicatat di tiket
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] Setiap putaran tes keluarannya disimpan ke scratchpad (subfolder 261113194401), supaya kegagalan bisa dibaca; bila perlu waktu tunggu dilonggarkan, alasannya dicatat di tiket
   Why: Kegagalan 261112225307 tidak bisa dijelaskan karena keluarannya tidak tersimpan; Done when melarang pelonggaran tanpa alasan tercatat
   If wrong: -
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: hanya tes dan bantuan tes; tidak mengubah perilaku master-bot atau plugin

@@ -15,3 +15,5 @@
 {"t":"2026-11-13 21:08:59","event":"agent","role":"reviewer","agent":"a5800aef37eb87d01","step":"review:1:0:0","session":"44dfab39-c331-4018-b0c4-201c02604f0d"}
 {"t":"2026-11-13 21:12:27","event":"verdict","result":"pass","round":1,"commit":"5245abd","session":"44dfab39-c331-4018-b0c4-201c02604f0d","by":"reviewer:a5800aef37eb87d01"}
 {"t":"2026-11-13 21:12:43","event":"landed","branch":"k2/261113194401-tes-master-bot-kadang","files":["CLAUDE.md","master/test/allow.test.ts","master/test/fake-telegram.ts","master/test/test-servers.test.ts","plugin/test/commands.test.ts","plugin/test/context-command.test.ts","plugin/test/plugin-log.test.ts"],"session":"44dfab39-c331-4018-b0c4-201c02604f0d"}
+{"t":"2026-11-13 21:18:53","event":"assumption-confirmed","key":"A1","session":"44dfab39-c331-4018-b0c4-201c02604f0d"}
+{"t":"2026-11-13 21:18:53","event":"assumption-confirmed","key":"A2","session":"44dfab39-c331-4018-b0c4-201c02604f0d"}

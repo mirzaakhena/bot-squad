@@ -50,15 +50,18 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Ringkas + tanda basi (Recommended) = (a) (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Folder di bots/ yang tidak terdaftar dan isi archive/ tidak dibaca; status.json dibaca dengan readCapturedStatus dari plugin/context.ts (master/src/statusline.ts sudah mengimpor berkas itu); status.json yang tidak ada dilewati, yang rusak atau tak terbaca dilewati dan dicatat di log master-bot
+- A1 [confirmed] Folder di bots/ yang tidak terdaftar dan isi archive/ tidak dibaca; status.json dibaca dengan readCapturedStatus dari plugin/context.ts (master/src/statusline.ts sudah mengimpor berkas itu); status.json yang tidak ada dilewati, yang rusak atau tak terbaca dilewati dan dicatat di log master-bot
   Why: Sama dengan /list dan /logs: hanya bot terdaftar yang dikelola, kesalahan baca dicatat di log, satu pembaca berkas untuk plugin dan master
   If wrong: Tambahkan bot tak terdaftar atau sebutkan berkas rusak di balasan
-- A2 [unseen] /quota tidak memakai BotLocks dan tidak memeriksa sesi tmux; hanya membaca registry dan status.json
+  Confirmed by owner, 2026-11-13
+- A2 [confirmed] /quota tidak memakai BotLocks dan tidak memeriksa sesi tmux; hanya membaca registry dan status.json
   Why: Sama dengan /logs dan /list yang hanya membaca
   If wrong: Tambahkan cek keadaan bot ke balasan
-- A3 [unseen] Jendela dianggap ada kalau berisi used_percentage atau resets_at berupa angka; jendela tanpa persen tetapi belum pulih ditulis 'persen terpakai tidak ada di data'
+  Confirmed by owner, 2026-11-13
+- A3 [confirmed] Jendela dianggap ada kalau berisi used_percentage atau resets_at berupa angka; jendela tanpa persen tetapi belum pulih ditulis 'persen terpakai tidak ada di data'
   Why: Claude Code bisa mengirim jendela tak lengkap; lebih jujur menampilkan apa yang ada
   If wrong: Ubah usable() di master/src/quota.ts agar mensyaratkan used_percentage
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: perintah baru yang hanya membaca status.json, mudah dibatalkan, tanpa data yang tak bisa dipulihkan

@@ -52,9 +52,10 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Catat 'stopped' dulu (Recommended) = (a) (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Kalau master-bot mati setelah folder diarsipkan tetapi sebelum entri registry dihapus, entri yang tersisa berstatus 'stopped' sehingga tidak dinyalakan, dan /delete <nama> lagi menyelesaikannya seperti sekarang; teks ringkasan penyalaan otomatis ('dihentikan pemilik') dipakai apa adanya
+- A1 [confirmed] Kalau master-bot mati setelah folder diarsipkan tetapi sebelum entri registry dihapus, entri yang tersisa berstatus 'stopped' sehingga tidak dinyalakan, dan /delete <nama> lagi menyelesaikannya seperti sekarang; teks ringkasan penyalaan otomatis ('dihentikan pemilik') dipakai apa adanya
   Why: Perilaku 'langkah gagal di tengah' dan ringkasan revive.ts sudah dikonfirmasi di 261112225306 dan 261112225304
   If wrong: Tambahkan label khusus 'sedang dihapus' di ringkasan
+  Confirmed by owner, 2026-11-13
 
 ## Decisions
 - Lane standard: urutan status registry saat hapus; arsip tetap ada, tidak ada data yang hilang permanen karena perubahan ini
