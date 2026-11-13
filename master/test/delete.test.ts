@@ -5,7 +5,8 @@ import { join } from "node:path";
 import type { Update } from "grammy/types";
 import { COMMANDS, createMasterBot, DELETE_CONFIRM_MS, DELETE_EXPIRED } from "../src/bot.ts";
 import { createBotLocks } from "../src/busy.ts";
-import { archiveBot, archiveStamp } from "../src/delete.ts";
+import { archiveBot, archiveStamp, markStoppedForDelete } from "../src/delete.ts";
+import { reviveAndReport } from "../src/revive.ts";
 import type { LaunchResult } from "../src/launch.ts";
 import { readRegistry, registryPath, writeRegistry, type BotStatus } from "../src/registry.ts";
 import type { StopResult } from "../src/stop.ts";
@@ -336,39 +337,101 @@ describe("/delete setelah dikonfirmasi", () => {
     expect(readFileSync(join(`${ARCHIVE()}-2`, "workspace", "proyek", "hasil.txt"), "utf8")).toBe("kedua\n");
   });
 
-  test("bot tidak bisa dimatikan bersih: registry dan folder tidak berubah", async () => {
-    for (const [i, res] of [
-      { ...CLEAN, pidsLeft: [555] },
-      { ...CLEAN, sessionLeft: true },
-      { ...CLEAN, error: "ps keluar dengan kode 1" },
-    ].entries()) {
-      const name = `dl-u${i}`;
-      seed({ [name]: "active" });
-      const before = snapshot();
-      const { bot, settle } = makeBot({ stop: async () => res });
-      await bot.handleUpdate(ownerDm(`/delete ${name}`));
-      await bot.handleUpdate(press(button("Hapus")));
-      await settle();
-      expect(snapshot()).toEqual(before);
-      expect(texts()[texts().length - 1]).toContain(`('${name}') tidak dihapus: bot tidak bisa dimatikan bersih`);
-    }
-  });
+  /** Potret yang diharapkan setelah hanya status bot itu yang diubah menjadi 'stopped'. */
+  function withStopped(before: Record<string, string>, name: string): Record<string, unknown> {
+    const reg = JSON.parse(before["registry.json"]!);
+    reg.bots[name].status = "stopped";
+    return { ...before, "registry.json": reg };
+  }
+  /** Potret sekarang, dengan registry.json sebagai objek supaya bisa dibandingkan dengan withStopped. */
+  const snapshotParsed = () => {
+    const s = snapshot();
+    return { ...s, "registry.json": JSON.parse(s["registry.json"]!) };
+  };
 
-  test("stop melempar error: tidak dihapus", async () => {
+  for (const prev of ["active", "registered", "failed", "stopped"] as const) {
+    test(`bot (${prev}) tidak bisa dimatikan bersih: folder dan entri tetap, status 'stopped', saran /restart dan /delete`, async () => {
+      for (const [i, res] of [
+        { ...CLEAN, pidsLeft: [555] },
+        { ...CLEAN, sessionLeft: true },
+        { ...CLEAN, error: "ps keluar dengan kode 1" },
+      ].entries()) {
+        const name = `dl-u${i}`;
+        seed({ [name]: prev, "dl-lain": "active" });
+        const before = snapshot();
+        let atStop: string | undefined;
+        const { bot, settle } = makeBot({
+          stop: async (n) => {
+            atStop = readRegistry(home).bots[n]!.status;
+            return res;
+          },
+        });
+        await bot.handleUpdate(ownerDm(`/delete ${name}`));
+        await bot.handleUpdate(press(button("Hapus")));
+        await settle();
+        // Status sudah 'stopped' saat bot dihentikan (Q1).
+        expect(atStop).toBe("stopped");
+        expect(snapshotParsed()).toEqual(withStopped(before, name));
+        expect(readRegistry(home).bots["dl-lain"]!.status).toBe("active");
+        const last = texts()[texts().length - 1]!;
+        expect(last).toContain(`('${name}') tidak dihapus: bot tidak bisa dimatikan bersih`);
+        expect(last).toContain("status tercatat 'stopped'");
+        expect(last).toContain(`/restart ${name}`);
+        expect(last).toContain(`/delete ${name}`);
+      }
+    });
+  }
+
+  test("stop melempar error: tidak dihapus, status 'stopped'", async () => {
     seed({ "dl-a": "active" });
     const before = snapshot();
     const { bot, settle } = makeBot({ stop: async () => { throw new Error("boom"); } });
     await bot.handleUpdate(ownerDm("/delete dl-a"));
     await bot.handleUpdate(press(button("Hapus")));
     await settle();
-    expect(snapshot()).toEqual(before);
+    expect(snapshotParsed()).toEqual(withStopped(before, "dl-a"));
     expect(texts()[2]).toContain("tidak dihapus");
+    expect(texts()[2]).toContain("/restart dl-a");
+  });
+
+  test("status 'stopped' gagal dicatat: batal sebelum bot dihentikan, tidak ada yang diubah", async () => {
+    seed({ "dl-a": "active" });
+    const { bot, calls, settle } = makeBot({ failRegistryWrite: () => true });
+    await bot.handleUpdate(ownerDm("/delete dl-a"));
+    const before = snapshot();
+    await bot.handleUpdate(press(button("Hapus")));
+    await settle();
+    expect(calls).toEqual([]);
+    expect(snapshot()).toEqual(before);
+    expect(texts()[1]).toBe("Menghapus 'dl-a'...");
+    expect(texts()[2]).toContain("('dl-a') tidak dihapus: status 'stopped' gagal dicatat di daftar bot (registry.json gagal ditulis");
+    expect(texts()[2]).toContain("Tidak ada yang diubah: bot tidak dihentikan");
+    expect(logs.join("\n")).toContain("/delete 'dl-a' batal: status 'stopped' gagal dicatat");
+  });
+
+  test("markStoppedForDelete: registry rusak, entri hilang, atau identitas lain: tidak ada yang diubah", async () => {
+    seed({ "dl-a": "active" });
+    const id = { telegramId: 7100, createdAt: "2026-11-13T00:00:00.000Z" };
+    const before = snapshot();
+    expect((await markStoppedForDelete("dl-a", { dataDir: home, expect: { ...id, telegramId: 9999 } })).ok).toBe(false);
+    expect((await markStoppedForDelete("dl-a", { dataDir: home, expect: { ...id, createdAt: "lain" } })).ok).toBe(false);
+    expect((await markStoppedForDelete("dl-x", { dataDir: home })).ok).toBe(false);
+    expect(snapshot()).toEqual(before);
+    writeFileSync(registryPath(home), "{rusak");
+    const r = await markStoppedForDelete("dl-a", { dataDir: home, expect: id });
+    expect(r.ok).toBe(false);
+    expect(readFileSync(registryPath(home), "utf8")).toBe("{rusak");
+    seed({ "dl-a": "active" });
+    expect(await markStoppedForDelete("dl-a", { dataDir: home, expect: id })).toEqual({ ok: true });
+    expect(readRegistry(home).bots["dl-a"]!.status).toBe("stopped");
   });
 
   test("registry gagal ditulis: folder sudah diarsipkan, entri tetap; /delete lagi menyelesaikannya", async () => {
     seed({ "dl-a": "active" });
     let fail = true;
-    const { bot, settle } = makeBot({ failRegistryWrite: () => fail });
+    // Tulisan pertama (status 'stopped') berhasil; yang gagal penghapusan entri.
+    let writes = 0;
+    const { bot, settle } = makeBot({ failRegistryWrite: () => fail && ++writes > 1 });
     await bot.handleUpdate(ownerDm("/delete dl-a"));
     await bot.handleUpdate(press(button("Hapus")));
     await settle();
@@ -550,5 +613,81 @@ describe("bot yang sedang diproses", () => {
     await settle();
     expect(calls).toEqual([["stop", "dl-a"]]);
     expect(Object.hasOwn(readRegistry(home).bots, "dl-a")).toBe(false);
+  });
+});
+
+describe("master-bot mati mendadak di tengah penghapusan (tiket 261113190701)", () => {
+  /**
+   * Master-bot yang menyala lagi di folder data yang sama: penyalaan otomatis
+   * dengan kunci baru dan launch tiruan, membaca registry seperti yang
+   * ditinggalkan proses yang mati.
+   */
+  async function restartMaster() {
+    const launched: string[] = [];
+    const summary: string[] = [];
+    await reviveAndReport({
+      dataDir: home,
+      locks: createBotLocks(),
+      log: (m) => logs.push(m),
+      probe: { tmux: { hasSession: async () => false } as any, isAlive: () => false },
+      launch: async (name) => {
+        launched.push(name);
+        return { kind: "active", pid: 4242 };
+      },
+      retry: { sleep: async () => {} },
+      send: async (text) => {
+        summary.push(text);
+      },
+    });
+    return { launched, summary };
+  }
+
+  for (const prev of ["active", "registered"] as const) {
+    test(`bot (${prev}) sudah dihentikan, belum diarsipkan: tidak dinyalakan lagi, ringkasan menyebutnya dihentikan`, async () => {
+      seed({ "dl-a": prev, "dl-lain": prev });
+      // Bot sudah mati, lalu master-bot mati sebelum langkah berikutnya:
+      // stop tidak pernah kembali, jadi arsip dan registry tidak disentuh lagi.
+      let stopped = false;
+      const { bot, calls } = makeBot({
+        stop: () => {
+          stopped = true;
+          return new Promise<StopResult>(() => {});
+        },
+      });
+      await bot.handleUpdate(ownerDm("/delete dl-a"));
+      await bot.handleUpdate(press(button("Hapus")));
+      for (let i = 0; !stopped; i++) {
+        if (i > 200) throw new Error("stop tidak dipanggil");
+        await Bun.sleep(5);
+      }
+      expect(calls).toEqual([["stop", "dl-a"]]);
+      expect(existsSync(join(home, "bots", "dl-a", "state", ".env"))).toBe(true);
+
+      const { launched, summary } = await restartMaster();
+      expect(launched).toEqual(["dl-lain"]);
+      expect(readRegistry(home).bots["dl-a"]!.status).toBe("stopped");
+      expect(summary).toHaveLength(1);
+      expect(summary[0]).toContain("Dibiarkan:\n- @dl_a_bot ('dl-a'): dihentikan pemilik. Nyalakan dengan /restart dl-a");
+      expect(summary[0]).toContain("Dinyalakan ulang:\n- @dl_lain_bot ('dl-lain')");
+    });
+  }
+
+  test("mati tepat sebelum folder dipindah (token sudah dihapus): tidak dinyalakan lagi", async () => {
+    seed({ "dl-a": "active" });
+    let atMove: string | undefined;
+    const { bot, settle } = makeBot({
+      beforeArchive: () => {
+        // Keadaan di disk saat proses mati di titik ini.
+        atMove = readFileSync(registryPath(home), "utf8");
+        throw new Error("master-bot mati");
+      },
+    });
+    await bot.handleUpdate(ownerDm("/delete dl-a"));
+    await bot.handleUpdate(press(button("Hapus")));
+    await settle();
+    writeFileSync(registryPath(home), atMove!);
+    const { launched, summary } = await restartMaster();
+    expect(launched).toEqual([]);
+    expect(summary[0]).toContain("('dl-a'): dihentikan pemilik");
   });
 });

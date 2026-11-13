@@ -34,12 +34,12 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 ## Done when
 
-- [ ] Kalau master-bot mati mendadak setelah bot dihentikan tetapi sebelum diarsipkan, bot itu tidak dinyalakan lagi saat master-bot menyala, dan ringkasan penyalaan menyebutnya sebagai bot yang dihentikan.
-- [ ] Status 'stopped' dicatat di registry sebelum bot dihentikan; kalau penulisan status gagal, penghapusan batal sebelum apa pun disentuh dan laporan mengatakannya (Q1).
-- [ ] Kalau bot tidak bisa dihentikan dengan bersih, penghapusan tetap dibatalkan seperti sekarang, status tetap 'stopped', dan laporan menyarankan /restart <nama> untuk menyalakan lagi atau /delete <nama> untuk mencoba lagi (Q1).
-- [ ] Perilaku hapus yang lain (konfirmasi, arsip, token dihapus) tidak berubah, dan tes yang ada tetap lulus.
-- [ ] Ada tes yang gagal di kode lama untuk skenario mati mendadak itu.
-- [ ] Catatan proyek (CLAUDE.md) menjelaskan urutan status saat bot dihapus.
+- [x] Kalau master-bot mati mendadak setelah bot dihentikan tetapi sebelum diarsipkan, bot itu tidak dinyalakan lagi saat master-bot menyala, dan ringkasan penyalaan menyebutnya sebagai bot yang dihentikan.
+- [x] Status 'stopped' dicatat di registry sebelum bot dihentikan; kalau penulisan status gagal, penghapusan batal sebelum apa pun disentuh dan laporan mengatakannya (Q1).
+- [x] Kalau bot tidak bisa dihentikan dengan bersih, penghapusan tetap dibatalkan seperti sekarang, status tetap 'stopped', dan laporan menyarankan /restart <nama> untuk menyalakan lagi atau /delete <nama> untuk mencoba lagi (Q1).
+- [x] Perilaku hapus yang lain (konfirmasi, arsip, token dihapus) tidak berubah, dan tes yang ada tetap lulus.
+- [x] Ada tes yang gagal di kode lama untuk skenario mati mendadak itu.
+- [x] Catatan proyek (CLAUDE.md) menjelaskan urutan status saat bot dihapus.
 
 ## Out of scope
 
@@ -59,3 +59,16 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 ## Decisions
 - Lane standard: urutan status registry saat hapus; arsip tetap ada, tidak ada data yang hilang permanen karena perubahan ini
 - Tidak solo dan tidak menunggu: bentrok berkas dengan 261113194401 (delete.test.ts) hanya tumpang tindih berkas, diselesaikan antrean merge
+
+## Handoff
+Tombol Hapus /delete kini lebih dulu mencatat status 'stopped' lewat markStoppedForDelete (delete.ts, di dalam serialized(), hanya untuk entri dengan telegramId+createdAt yang dikonfirmasi). Gagal dicatat berarti batal sebelum stop dipanggil, dengan laporan deleteNotMarkedReport. Setelah itu langkah henti, arsip, dan hapus entri tidak berubah; laporan batal karena tidak bersih kini menyebut status 'stopped' dan menyarankan /restart atau /delete. Yang tidak boleh rusak: entri registry yang tertinggal setelah crash di tengah /delete harus selalu 'stopped' supaya revive.ts tidak menyalakannya. Tes: delete.test.ts (dalam proses) dan delete-process.test.ts (main.ts sungguhan dimatikan SIGKILL saat server plugin bandel menahan langkah henti).
+
+## Review
+- 2026-11-13 standard, round 1, at 506bef5: passed.
+  1: delete-process.test.ts (main.ts sungguhan, SIGKILL setelah sesi mati sebelum arsip) lulus di salinan HEAD; master-bot kedua tidak menyalakan bot, ringkasan 'Dibiarkan ... dihentikan pemilik'. Tes dalam proses 'master-bot mati mendadak...' (active/registered, dan sebelum folder dipindah) juga lulus.
+  2: delete.test.ts 'bot (...) tidak bisa dimatikan bersih' memeriksa status sudah 'stopped' saat stop dipanggil; 'status stopped gagal dicatat' memeriksa stop tidak dipanggil, folder identik, laporan 'Tidak ada yang diubah'. Lulus.
+  3: delete.test.ts untuk active/registered/failed/stopped x (pid sisa, sesi sisa, error ps) dan stop melempar: folder dan entri tetap, status 'stopped', laporan memuat /restart <nama> dan /delete <nama>. Lulus.
+  4: suite penuh lulus menurut k2 pada 5ccfc8c7ff; delete.test.ts + delete-process.test.ts saya jalankan ulang lewat k2 test di salinan: 40 pass. Perubahan tes lama hanya menyesuaikan Q1 (status 'stopped').
+  5: salinan dengan master/src/bot.ts dan delete.ts dari main (plus stub markStoppedForDelete supaya impor jalan): 3 tes mati mendadak dalam proses gagal (dl-a ikut dinyalakan) dan delete-process.test.ts gagal (status 'active').
+  6: CLAUDE.md bagian /delete kini menjelaskan urutan (1) stopped dicatat, (2) henti, (3) arsip dan hapus entri, beserta jalur gagal; dinilai dengan membaca.
+  note: di kode lama delete-process.test.ts gagal di pemeriksaan antara (status 'stopped' sebelum SIGKILL), bukan di hasil penyalaan ulang; hasil itu dibuktikan tes dalam proses. Tidak ada AGENTS.md; pemeriksaan selain bun test tidak tersedia di repo.
