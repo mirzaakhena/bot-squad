@@ -26,3 +26,8 @@ Slash yang tidak dikenal di chat bot tidak dikirim sebagai pesan biasa, melainka
 - [ ] Konfirmasi yang terlalu lama tidak ditekan tidak bisa lagi menjalankan perintah basi.
 - [ ] Hanya pengirim yang diizinkan yang bisa memicu dan mengonfirmasi.
 - [ ] Dibuktikan dengan tes otomatis.
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Decisions
+- 2026-11-13 moved to cancel: Pemilik: bot-squad hanya mendukung beberapa perintah terpilih yang penting dan sering dipakai, bukan meneruskan semua slash command Claude Code.

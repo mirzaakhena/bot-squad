@@ -1,2 +1,3 @@
-goal: Bot dikelola sepenuhnya dari master-bot: /list, /stop dan /restart, dan penyalaan ulang otomatis saat master menyala
+goal: Master-bot selalu bisa dihentikan, lalu perintah master-bot yang tidak mengetik ke sesi Claude
 order:
+  - 261112235501   # Master-bot tidak bisa dihentikan saat Telegram tak terjangkau
