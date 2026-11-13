@@ -1,2 +1,4 @@
-goal: Master-bot selalu bisa dihentikan, lalu perintah master-bot yang tidak mengetik ke sesi Claude (/logs, /allow-/revoke-/access, /delete)
+goal: Rapikan /start, /help, /status di chat bot dan riset sumber kuota untuk /quota
 order:
+  - 261112225309   # Rapikan perintah bawaan plugin di chat bot
+  - 261112225308   # Riset cara membaca sisa kuota akun Claude untuk quota
