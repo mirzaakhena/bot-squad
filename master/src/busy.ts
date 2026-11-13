@@ -1,6 +1,7 @@
 /**
  * Kunci "sedang diproses" per bot (tiket 261112225302, Q1): selama satu bot
- * sedang dinyalakan (/register, /restart) atau dihentikan (/stop), perintah
+ * sedang dinyalakan (/register, /restart), dihentikan (/stop), atau dihapus
+ * (/delete, tiket 261112225306), perintah
  * lain untuk bot yang sama ditolak, supaya bot tidak pernah berjalan dua
  * kali. Satu master-bot memegang satu BotLocks (main.ts membuatnya dan
  * memberikannya ke createMasterBot); pekerjaan lain di proses yang sama yang
@@ -8,7 +9,7 @@
  * proses (start-bot.sh bersamaan) tetap dijaga cek sesi tmux di launch.ts.
  */
 
-export type BusyAction = "dinyalakan" | "dihentikan" | "dinyalakan ulang";
+export type BusyAction = "dinyalakan" | "dihentikan" | "dinyalakan ulang" | "dihapus";
 
 export type BotLocks = {
   /** Apa yang sedang dikerjakan pada bot `name`, atau null kalau bebas. */

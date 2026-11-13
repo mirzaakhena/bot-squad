@@ -30,6 +30,8 @@ export function ignoredUpdates(): Array<[string, Update]> {
     ["/restart dari akun lain di DM", { update_id: nextId++, message: textMessage("/restart uji-x", STRANGER, dm(STRANGER)) }],
     ["/logs dari akun lain di DM", { update_id: nextId++, message: textMessage("/logs uji-x", STRANGER, dm(STRANGER)) }],
     ["/logs dari pemilik di grup", { update_id: nextId++, message: textMessage("/logs uji-x 50", OWNER, group) }],
+    ["/delete dari akun lain di DM", { update_id: nextId++, message: textMessage("/delete uji-x", STRANGER, dm(STRANGER)) }],
+    ["/delete dari pemilik di grup", { update_id: nextId++, message: textMessage("/delete uji-x", OWNER, group) }],
     ["/stop dari pemilik di grup", { update_id: nextId++, message: textMessage("/stop uji-x", OWNER, group) }],
     ["/register dari pemilik di grup", { update_id: nextId++, message: textMessage("/register uji-x 123456:AAAAAAAAAAAAAAAAAAAAAAAAAAAAA", OWNER, group) }],
     ["teks biasa dari akun lain", { update_id: nextId++, message: textMessage("halo", STRANGER, dm(STRANGER)) }],

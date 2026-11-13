@@ -38,3 +38,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - k2 test menjalankan skrip hanya lewat path absolut; ./skrip.sh dicari relatif ke worktree
 - Sensor layar: token yang diketahui bisa tampil sebagai POTONGAN tanpa '<angka>:' (baris atas pane lanjutan wrap dari scrollback, awalan sebelum elipsis); sensor potongan token yang diketahui juga
 - Soket tmux di scratchpad terlalu panjang dan hasSession diam-diam false (stop tampak bersih); uji tmux nyata dengan TMUX_TMPDIR=mktemp -d /tmp/k2-<tiket>-XXXX dan cek sesinya ada
+- Tombol konfirmasi untuk aksi yang merusak harus mengikat identitas sasaran (mis. telegramId), bukan hanya nama: nama bisa dihapus lalu didaftarkan ulang selama tombol masih berlaku.
