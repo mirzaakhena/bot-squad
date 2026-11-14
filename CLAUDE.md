@@ -221,6 +221,16 @@ Tiga perintah bawaan plugin (`plugin/server.ts`) dijawab plugin sendiri dengan t
 - **Siapa**: hanya pengirim di `allowFrom` bot itu, di chat pribadi, apa pun `dmPolicy`-nya (aturan yang sama dengan `/context`, `contextAllowed`). Orang lain, juga saat `dmPolicy` `pairing` dan di grup, tidak dibalas sama sekali.
 - Tes: `plugin/test/commands.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
 
+## "typing…" dan reaksi tanda diterima di chat bot (tiket 261114101201)
+
+Setiap pesan yang diteruskan ke Claude (hasil `diteruskan` di `plugin.log`) langsung mendapat dua tanda di Telegram, supaya pemilik tahu pesannya sampai dan bot sedang bekerja. Kodenya `plugin/typing.ts`, dipakai dari `plugin/server.ts`; angkanya sama dengan mirza-bots.
+
+- **"typing…"** dikirim saat itu juga, lalu diulang setiap 4 detik (Telegram memadamkannya sendiri ~5 detik), sampai balasan pertama yang berhasil lewat alat `reply` ke chat itu (teks atau berkas). `react` dan `edit_message` tidak menghentikannya. Batas aman 300 detik sejak pesan masuk terakhir di chat itu, juga kalau Claude tidak pernah membalas; pesan baru saat masih menyala memperpanjang batas tanpa menambah timer. Gagal kirim (429, jaringan) ditelan dan tidak menggagalkan penerusan. Saat server plugin berhenti, semua timer dilepas.
+- **Tidak ada "typing…"** untuk pengirim di luar allowlist (`dibuang`), pairing, perintah plugin (`/start`, `/help`, `/status`, `/context`), dan jawaban izin `yes/no xxxxx` (tetap hanya ✅/❌).
+- **Reaksi tanda diterima**: `ackReaction` di `access.json`; kalau tidak diisi, plugin memakai 👀 (keputusan pemilik Q1), jadi semua bot mendapatkannya tanpa mengubah `access.json`. Bot yang sudah berjalan baru mendapatkannya setelah dinyalakan ulang (`/restart`). `ackReaction: ""` mematikannya; emoji lain harus ada di daftar reaksi Telegram. Reaksi dipasang sekali dan tidak dicopot setelah Claude membalas.
+- `BOT_SQUAD_TYPING_MAX_MS` hanya untuk tes (mempercepat batas 300 detik) dan hanya dibaca kalau `BOT_SQUAD_TELEGRAM_API_ROOT` diisi.
+- Tes: `plugin/test/typing.test.ts` (jam palsu, termasuk batas 300 detik) dan `plugin/test/typing-server.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
+
 ## Prinsip: perintah terpilih, bukan semua slash Claude Code
 
 bot-squad hanya mendukung beberapa perintah chat bot yang dipilih pemilik karena penting dan sering dipakai (saat ini `/start`, `/help`, `/status`, `/context`). Slash command Claude Code lain (misalnya `/compact`, `/model`) **tidak** diteruskan ke sesi bot, juga tidak dengan tombol konfirmasi (tiket 261112230305 dibatalkan oleh pemilik, 2026-11-13). Perintah baru yang mengetik ke sesi Claude (interrupt, new, rename, branch/switch) ditambahkan satu per satu sebagai perintah khusus, menunggu rancangan mekanismenya (tiket 261112230302).
@@ -359,6 +369,7 @@ Selesai:
 - [x] `/register` langsung menyalakan bot dan melaporkan aktif atau gagal
 - [x] Bot yang seharusnya hidup dinyalakan ulang saat master-bot menyala
 - [x] Log tiap bot (`plugin.log`), `/context` di chat bot, dan perintah bawaan `/start`, `/help`, `/status` di chat bot
+- [x] "typing…" sepanjang giliran dan reaksi 👀 tanda diterima di chat bot
 - [x] Riset sumber kuota akun Claude (tiket 261112225308)
 
 Direncanakan (backlog):
