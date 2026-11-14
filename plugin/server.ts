@@ -26,6 +26,7 @@ import { execFileSync } from 'child_process'
 import { join, extname, sep } from 'path'
 import { createPluginLog, describeError, isoLocal, q, secs } from './log.ts'
 import { answerContext, contextAllowed } from './context.ts'
+import { ackEmoji, createTypingKeepalive } from './typing.ts'
 import { quoteMeta } from './quote.ts'
 
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR
@@ -133,6 +134,16 @@ if (API_ROOT) {
 }
 
 const bot = new Bot(TOKEN, API_ROOT ? { client: { apiRoot: API_ROOT } } : undefined)
+
+// "typing…" sepanjang giliran (tiket 261114101201, plugin/typing.ts): dikirim
+// ulang tiap 4 detik sampai reply pertama ke chat itu, paling lama 300 detik.
+// BOT_SQUAD_TYPING_MAX_MS hanya untuk tes, dan hanya dipakai bersama
+// BOT_SQUAD_TELEGRAM_API_ROOT (Telegram tiruan).
+const typingMaxForTest = API_ROOT ? Number(process.env.BOT_SQUAD_TYPING_MAX_MS) : NaN
+const typing = createTypingKeepalive({
+  send: chatId => bot.api.sendChatAction(chatId, 'typing'),
+  ...(typingMaxForTest > 0 ? { maxMs: typingMaxForTest } : {}),
+})
 let botUsername = ''
 
 // Inbound timing: when getUpdates returned each update (epoch ms).
@@ -690,6 +701,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
               ...(parseMode ? { parse_mode: parseMode } : {}),
             })
             sentIds.push(sent.message_id)
+            typing.stop(chat_id)
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
@@ -713,6 +725,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
             const sent = await bot.api.sendDocument(chat_id, input, opts)
             sentIds.push(sent.message_id)
           }
+          typing.stop(chat_id)
         }
 
         const result =
@@ -782,6 +795,7 @@ await mcp.connect(new StdioServerTransport())
 function shutdown(reason = 'tidak-diketahui'): void {
   if (shuttingDown) return
   shuttingDown = true
+  typing.stopAll()
   plog('berhenti', { alasan: reason })
   process.stderr.write('bot-squad channel: shutting down\n')
   try {
@@ -1091,16 +1105,17 @@ async function handleInbound(
   const rec = inboundRecords.get(ctx)
   if (rec) rec.logged = true
 
-  // Typing indicator — signals "processing" until we reply (or ~5s elapses).
-  void bot.api.sendChatAction(chat_id, 'typing').catch(() => {})
+  // Typing indicator — kept alive until the first reply (plugin/typing.ts).
+  typing.start(chat_id)
 
-  // Ack reaction — lets the user know we're processing. Fire-and-forget.
-  // Telegram only accepts a fixed emoji whitelist — if the user configures
-  // something outside that set the API rejects it and we swallow.
-  if (access.ackReaction && msgId != null) {
+  // Ack reaction — 👀 unless access.json sets ackReaction ("" disables).
+  // Fire-and-forget. Telegram only accepts a fixed emoji whitelist — if the
+  // user configures something outside that set the API rejects it and we swallow.
+  const ack = ackEmoji(access.ackReaction)
+  if (ack && msgId != null) {
     void bot.api
       .setMessageReaction(chat_id, msgId, [
-        { type: 'emoji', emoji: access.ackReaction as ReactionTypeEmoji['emoji'] },
+        { type: 'emoji', emoji: ack as ReactionTypeEmoji['emoji'] },
       ])
       .catch(() => {})
   }
