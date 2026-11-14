@@ -48,3 +48,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - fetch menormalkan ../ di URL unduhan, jadi file_path Telegram berisi ../ bisa naik keluar dari /file/bot<token>/; Telegram tiruan di tes harus melayani path hasil normalisasi
 - Callback query Telegram membawa message.reply_markup; label tombol yang ditekan bisa dicari di situ, dan tombol yang sudah tidak ada berarti keyboard sudah dicopot (abaikan ketukan).
 - Setelah main membawa dependency plugin baru (mis. telegramify-markdown dari 261114101205), jalankan ulang bun install --cwd plugin di worktree; tanpa itu semua tes server plugin gagal 'Cannot find package', bukan kegagalan kode
+- Meta pesan ke Claude dibentuk di dua tempat sejak 261114101204: forwardMessage (pesan tunggal) dan forwardAlbum (album) di plugin/server.ts; atribut baru harus masuk keduanya
