@@ -45,9 +45,10 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Semua digabung (Recommended) — opsi A: semua item satu album jadi satu pesan; foto diunduh, item lain jadi lampiran bernomor untuk download_attachment. (owner, 2026-11-14)
 
 ## Assumptions
-- A1 [unseen] Jeda tunggu album 1,5 detik sejak item terakhir, batas keras 8 detik, maks. 10 item (lebih dari itu jadi pesan kedua), urut message_id menaik, caption diberi label 'Photo <n>:'. Hanya pesan yang punya media_group_id yang ditunda; foto tunggal dan teks langsung diteruskan. Gerbang allowlist dicek per item sebelum masuk buffer, jadi item dari pengirim tak diizinkan dibuang tanpa diunduh. Typing dan reaksi tanda diterima sekali per album (reaksi di item pertama). Meta: image_path untuk foto pertama (kompatibel) plus image_path_<n> per foto, dan daftar nomor foto yang gagal diunduh di meta serta satu kalimat di content. Album yang masih di buffer saat plugin berhenti dibuang.
+- A1 [confirmed] Jeda tunggu album 1,5 detik sejak item terakhir, batas keras 8 detik, maks. 10 item (lebih dari itu jadi pesan kedua), urut message_id menaik, caption diberi label 'Photo <n>:'. Hanya pesan yang punya media_group_id yang ditunda; foto tunggal dan teks langsung diteruskan. Gerbang allowlist dicek per item sebelum masuk buffer, jadi item dari pengirim tak diizinkan dibuang tanpa diunduh. Typing dan reaksi tanda diterima sekali per album (reaksi di item pertama). Meta: image_path untuk foto pertama (kompatibel) plus image_path_<n> per foto, dan daftar nomor foto yang gagal diunduh di meta serta satu kalimat di content. Album yang masih di buffer saat plugin berhenti dibuang.
   Why: Angka dari mirza-bots engine.ts (AlbumBuffer 1500/8000, maks. 10) dan README bagian Album.
   If wrong: Ubah konstanta atau bentuk meta di plugin/album.ts.
+  Confirmed by owner, 2026-11-14
 
 ## Decisions
 - Lane standard. Menunggu 261114101201 (typing harus menyala sekali per album, bukan per foto) dan 261114101202 (album memakai pembentuk meta yang sama, termasuk kutipan). Ini perombakan handleInbound terbesar, jadi sengaja paling akhir di jalur pesan masuk.
@@ -79,4 +80,5 @@ Album (media_group_id) kini ditahan di plugin/album.ts (1,5 s debounce, 8 s bata
   note: foto tunggal gagal diunduh tidak diberi tahu ke Claude (followup F1); tidak ada CI/skrip cek lain di repo selain bun test
 
 ## Follow-ups
-- F1 [open] Foto tunggal yang gagal diunduh (getFile ditolak, atau sejak 261114101204 unduhan bukan 2xx) diteruskan ke Claude hanya dengan kapsi/'(photo)' tanpa image_path dan tanpa pemberitahuan gagal, jadi Claude tidak tahu ada foto yang hilang. Album sudah memberi album_failed dan kalimat 'could not be downloaded — tell the sender'; foto tunggal di forwardMessage (plugin/server.ts) sebaiknya diberi tanda serupa (mis. meta image_failed dan satu kalimat di content). Terbukti: foto tunggal dengan berkas 404 di Telegram tiruan menghasilkan meta tanpa image_path dan content 'tunggal gagal' saja.
+- F1 [ticketed] Foto tunggal yang gagal diunduh (getFile ditolak, atau sejak 261114101204 unduhan bukan 2xx) diteruskan ke Claude hanya dengan kapsi/'(photo)' tanpa image_path dan tanpa pemberitahuan gagal, jadi Claude tidak tahu ada foto yang hilang. Album sudah memberi album_failed dan kalimat 'could not be downloaded — tell the sender'; foto tunggal di forwardMessage (plugin/server.ts) sebaiknya diberi tanda serupa (mis. meta image_failed dan satu kalimat di content). Terbukti: foto tunggal dengan berkas 404 di Telegram tiruan menghasilkan meta tanpa image_path dan content 'tunggal gagal' saja.
+  → 261114173703

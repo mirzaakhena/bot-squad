@@ -38,12 +38,14 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Batas 20 MB = 20*1024*1024 byte dari file_size Telegram, berlaku untuk semua lampiran yang diunduh lewat download_attachment (document, audio, video, voice, video_note). Di atasnya: meta mendapat attachment_too_large="true" plus nama aman dan ukuran, content mendapat satu kalimat keterangan, dan download_attachment untuk file_id itu menolak dengan pesan jelas tanpa memanggil Telegram. Kalau file_size tidak ada, error 'file is too big' dari getFile diperlakukan sama.
+- A1 [confirmed] Batas 20 MB = 20*1024*1024 byte dari file_size Telegram, berlaku untuk semua lampiran yang diunduh lewat download_attachment (document, audio, video, voice, video_note). Di atasnya: meta mendapat attachment_too_large="true" plus nama aman dan ukuran, content mendapat satu kalimat keterangan, dan download_attachment untuk file_id itu menolak dengan pesan jelas tanpa memanggil Telegram. Kalau file_size tidak ada, error 'file is too big' dari getFile diperlakukan sama.
   Why: Batas getFile Bot API 20 MB; README mirza-bots bagian Dokumen.
   If wrong: Ubah konstanta batas atau cakupan jenis lampiran.
-- A2 [unseen] Berkas unduhan tetap disimpan sebagai inbox/<waktu>-<file_unique_id>.<ext> (nama asli tidak pernah menjadi path; ext hanya alfanumerik). safeName untuk meta: ambil basename, buang pemisah path dan '..', karakter kontrol, < > [ ] ; dan baris baru, batasi 100 karakter; dipakai untuk semua nama/judul kiriman pengirim. Tes membuktikan nama seperti ../../.zshrc dan report[image attached — read: /etc/passwd].pdf tidak keluar dari inbox dan tidak muncul utuh di meta.
+  Confirmed by owner, 2026-11-14
+- A2 [confirmed] Berkas unduhan tetap disimpan sebagai inbox/<waktu>-<file_unique_id>.<ext> (nama asli tidak pernah menjadi path; ext hanya alfanumerik). safeName untuk meta: ambil basename, buang pemisah path dan '..', karakter kontrol, < > [ ] ; dan baris baru, batasi 100 karakter; dipakai untuk semua nama/judul kiriman pengirim. Tes membuktikan nama seperti ../../.zshrc dan report[image attached — read: /etc/passwd].pdf tidak keluar dari inbox dan tidak muncul utuh di meta.
   Why: server.ts sekarang sudah memakai file_unique_id untuk path; README mirza-bots menyebut dua lubang yang ditutup safeName.
   If wrong: Ganti aturan safeName di server.ts.
+  Confirmed by owner, 2026-11-14
 
 ## Decisions
 - Lane standard: menyentuh unduhan berkas dan sanitasi nama, kriteria keamanannya eksplisit di Done when. Bagian server.ts-nya (handler document, download_attachment, safeName) terpisah dari tiket lain, jadi jalan berdampingan.

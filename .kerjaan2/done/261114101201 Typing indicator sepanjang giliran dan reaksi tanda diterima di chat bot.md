@@ -46,12 +46,14 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → 👀 untuk semua bot (Recommended) — opsi A: plugin memakai 👀 bawaan kalau ackReaction tidak diisi, berlaku juga untuk bot-01..03 setelah dinyalakan ulang; ackReaction "" tetap mematikan. (owner, 2026-11-14)
 
 ## Assumptions
-- A1 [unseen] Typing diperbarui setiap 4 detik di chat asal pesan dan berhenti pada panggilan reply pertama yang berhasil ke chat itu (termasuk reply yang hanya berisi files); react dan edit_message tidak menghentikannya. Pesan baru saat typing masih hidup memulai ulang hitungan 300 detik dari pesan terbaru. Gagal sendChatAction (429, jaringan) ditelan dan dicatat paling banyak sebagai baris plugin.log, tidak pernah menggagalkan penerusan.
+- A1 [confirmed] Typing diperbarui setiap 4 detik di chat asal pesan dan berhenti pada panggilan reply pertama yang berhasil ke chat itu (termasuk reply yang hanya berisi files); react dan edit_message tidak menghentikannya. Pesan baru saat typing masih hidup memulai ulang hitungan 300 detik dari pesan terbaru. Gagal sendChatAction (429, jaringan) ditelan dan dicatat paling banyak sebagai baris plugin.log, tidak pernah menggagalkan penerusan.
   Why: Sama dengan mirza-bots (typing.ts: TYPING_PING_INTERVAL_MS 4000, TYPING_MAX_MS 300000, stop di balasan pertama).
   If wrong: Ubah konstanta atau titik berhenti di plugin/typing.ts.
-- A2 [unseen] Reaksi tanda diterima dipasang sekali saat pesan diteruskan dan tidak dicopot setelah Claude membalas; jawaban izin tetap memakai reaksi ✅/❌ yang sudah ada.
+  Confirmed by owner, 2026-11-14
+- A2 [confirmed] Reaksi tanda diterima dipasang sekali saat pesan diteruskan dan tidak dicopot setelah Claude membalas; jawaban izin tetap memakai reaksi ✅/❌ yang sudah ada.
   Why: Perilaku plugin upstream sekarang; Done when hanya meminta reaksi muncul.
   If wrong: Tambah penghapusan reaksi di jalur reply.
+  Confirmed by owner, 2026-11-14
 
 ## Decisions
 - Lane standard: perilaku UX plugin, tanpa data yang tak bisa dipulihkan. Tidak menunggu apa pun; 261114101204 dan 261114101206 menunggu tiket ini karena album dan tekan tombol harus memakai keepalive typing yang sama.

@@ -47,21 +47,26 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → '✏ Explain manually' — opsi B: label persis mirza-bots '✏️ Explain manually', perilaku sama dengan A (tombol dicopot, pesan ditandai, Claude diberi tahu pemilik akan menjawab sendiri). (owner, 2026-11-14)
 
 ## Assumptions
-- A1 [unseen] Parameter reply.buttons: daftar baris berisi {text, data?} (data bawaan = text), menempel di potongan terakhir (kalau ada files, di pesan teks). callback_data diberi awalan sendiri (mis. 'c:'); batas 64 byte termasuk awalan; data berawalan 'perm:' atau awalan plugin ditolak. Tombol berlabel angka saja wajib punya baris bernomor yang cocok di badan pesan (aturan mirza-bots messages.ts).
+- A1 [confirmed] Parameter reply.buttons: daftar baris berisi {text, data?} (data bawaan = text), menempel di potongan terakhir (kalau ada files, di pesan teks). callback_data diberi awalan sendiri (mis. 'c:'); batas 64 byte termasuk awalan; data berawalan 'perm:' atau awalan plugin ditolak. Tombol berlabel angka saja wajib punya baris bernomor yang cocok di badan pesan (aturan mirza-bots messages.ts).
   Why: mirza-bots messages.ts (MAX_CALLBACK_DATA_BYTES, numbered_buttons_without_list).
   If wrong: Ubah skema di plugin/buttons.ts.
-- A2 [unseen] Saat tombol ditekan: answerCallbackQuery selalu; di luar allowFrom dapat 'Not authorized.' dan tidak diteruskan; pengirim sah: pesan diedit tanpa reply_markup, entities asli dipertahankan, akhiran '→ <label>', lalu Claude menerima notifikasi channel biasa (content = label, meta button_data dan message_id pesan bertombol); typing dan reaksi berlaku seperti pesan masuk. Tekan ulang setelah keyboard dicopot diabaikan.
+  Confirmed by owner, 2026-11-14
+- A2 [confirmed] Saat tombol ditekan: answerCallbackQuery selalu; di luar allowFrom dapat 'Not authorized.' dan tidak diteruskan; pengirim sah: pesan diedit tanpa reply_markup, entities asli dipertahankan, akhiran '→ <label>', lalu Claude menerima notifikasi channel biasa (content = label, meta button_data dan message_id pesan bertombol); typing dan reaksi berlaku seperti pesan masuk. Tekan ulang setelah keyboard dicopot diabaikan.
   Why: README mirza-bots bagian Keyboard dicopot setelah tombol ditap.
   If wrong: Ubah handler callback di plugin/buttons.ts.
-- A3 [unseen] Isi notifikasi saat tombol ditekan adalah data tombol (bawaan = label), bukan label; label ada di meta button_label. Reaksi 👀 tidak dipasang pada pesan bertombol, hanya typing.
+  Confirmed by owner, 2026-11-14
+- A3 [confirmed] Isi notifikasi saat tombol ditekan adalah data tombol (bawaan = label), bukan label; label ada di meta button_label. Reaksi 👀 tidak dipasang pada pesan bertombol, hanya typing.
   Why: Data ditulis Claude sebagai penanda pilihan yang bermakna (label sering hanya angka), sama dengan mirza-bots yang meneruskan data; mereaksi pesan bot sendiri tidak berguna.
   If wrong: Ganti choiceContent di plugin/buttons.ts dan tambah setMessageReaction di plugin/choice-tap.ts.
-- A4 [unseen] Tombol jawab-sendiri yang ditulis Claude dibuang lalu satu ditempel di baris terakhir (bukan dibiarkan di posisinya seperti mirza-bots); data berawalan perm: tidak ditolak karena semua data tombol Claude diberi awalan c:.
+  Confirmed by owner, 2026-11-14
+- A4 [confirmed] Tombol jawab-sendiri yang ditulis Claude dibuang lalu satu ditempel di baris terakhir (bukan dibiarkan di posisinya seperti mirza-bots); data berawalan perm: tidak ditolak karena semua data tombol Claude diberi awalan c:.
   Why: Done when meminta tombol terakhir dan tidak dua kali; awalan c: sudah mencegah tabrakan dengan tombol izin.
   If wrong: Ubah withManualFallback dan checkButtons di plugin/buttons.ts.
-- A5 [unseen] Yang boleh menekan tombol pilihan: pengirim di allowFrom saja (seperti tombol izin), juga di grup.
+  Confirmed by owner, 2026-11-14
+- A5 [confirmed] Yang boleh menekan tombol pilihan: pengirim di allowFrom saja (seperti tombol izin), juga di grup.
   Why: Sama dengan tombol izin yang sudah ada; grup jarang dipakai bot-squad.
   If wrong: Ganti fungsi allowed di kait callback_query plugin/server.ts.
+  Confirmed by owner, 2026-11-14
 
 ## Decisions
 - Lane standard: menambah tombol ke reply dan handler callback_query, dengan cek allowFrom. Menunggu 261114101205 (pemotong dan konversi format baru, tombol di potongan terakhir) dan 261114101201 (tekan tombol diteruskan seperti pesan masuk, typing ikut menyala).
@@ -94,4 +99,5 @@ Alat reply menerima buttons (baris {text,data?}); aturan di plugin/buttons.ts, k
   Merge d6629c5: konflik impor server.ts diselesaikan dengan menyimpan buttons/choice-tap dan context-reminder/attachment; instruksi MCP keduanya ada; kait tombol, perm:, lampiran, contextReminderMeta utuh, tanpa tambahan. 55 tes buttons/attachment/context-reminder lulus via k2 test di salinan baru.
 
 ## Follow-ups
-- F1 [open] Tombol jawab-sendiri bisa tampil dua kali kalau Claude menulis label tanpa variation selector, mis. '✏ Explain manually' (U+270F tanpa U+FE0F, persis cara pemilik menulisnya di jawaban Q1). withManualFallback di plugin/buttons.ts hanya mengenali label persis '✏️ Explain manually' atau data 'let me explain manually instead'; varian itu lolos sebagai tombol biasa (data 'c:✏ Explain manually', tanpa button_manual) dan plugin menempel tombol resmi lagi di baris terakhir. Usul: normalisasi label (buang U+FE0F, trim, case-insensitive) sebelum dibandingkan.
+- F1 [ticketed] Tombol jawab-sendiri bisa tampil dua kali kalau Claude menulis label tanpa variation selector, mis. '✏ Explain manually' (U+270F tanpa U+FE0F, persis cara pemilik menulisnya di jawaban Q1). withManualFallback di plugin/buttons.ts hanya mengenali label persis '✏️ Explain manually' atau data 'let me explain manually instead'; varian itu lolos sebagai tombol biasa (data 'c:✏ Explain manually', tanpa button_manual) dan plugin menempel tombol resmi lagi di baris terakhir. Usul: normalisasi label (buang U+FE0F, trim, case-insensitive) sebelum dibandingkan.
+  → 261114173702

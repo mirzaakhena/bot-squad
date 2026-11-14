@@ -40,12 +40,14 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Konversi memakai paket telegramify-markdown seperti mirza-bots (dependency baru di plugin/package.json dan bun.lock). Parameter format reply dan edit_message: bawaan baru 'markdown' (otomatis); 'markdownv2' tetap diteruskan mentah; 'text' tetap polos. Batas 4096 dihitung setelah escape; textChunkLimit dan chunkMode di access.json tetap dihormati. Fence yang terpotong ditutup lalu dibuka lagi (bahasa sama) di potongan berikutnya. Kalau Telegram menolak format (400 parse entities), potongan itu dikirim ulang sebagai teks asli tanpa parse_mode. Instruksi MCP diperbarui.
+- A1 [confirmed] Konversi memakai paket telegramify-markdown seperti mirza-bots (dependency baru di plugin/package.json dan bun.lock). Parameter format reply dan edit_message: bawaan baru 'markdown' (otomatis); 'markdownv2' tetap diteruskan mentah; 'text' tetap polos. Batas 4096 dihitung setelah escape; textChunkLimit dan chunkMode di access.json tetap dihormati. Fence yang terpotong ditutup lalu dibuka lagi (bahasa sama) di potongan berikutnya. Kalau Telegram menolak format (400 parse entities), potongan itu dikirim ulang sebagai teks asli tanpa parse_mode. Instruksi MCP diperbarui.
   Why: mirza-bots markdown.ts dan chunk.ts; README bagian Jalur pesan keluar.
   If wrong: Kembalikan bawaan format ke 'text'.
-- A2 [unseen] Tanpa chunkMode di access.json, format markdown memotong di batas paragraf/baris/spasi (bukan per panjang) supaya baris kode tidak terbelah; chunkMode eksplisit tetap dihormati, format text/markdownv2 tanpa chunkMode tetap per panjang
+  Confirmed by owner, 2026-11-14
+- A2 [confirmed] Tanpa chunkMode di access.json, format markdown memotong di batas paragraf/baris/spasi (bukan per panjang) supaya baris kode tidak terbelah; chunkMode eksplisit tetap dihormati, format text/markdownv2 tanpa chunkMode tetap per panjang
   Why: access.json tulisan master-bot tidak punya chunkMode, dan potongan per panjang membelah baris kode di tengah, bertentangan dengan 'potongan yang rapi'
   If wrong: Di planReply (plugin/outbound.ts) ubah bawaan mode menjadi 'length' untuk semua format
+  Confirmed by owner, 2026-11-14
 
 ## Decisions
 - Lane standard: alat reply dan edit_message, menambah dependency telegramify-markdown ke plugin/ (package.json dan bun.lock; hanya tiket ini yang menambah dependency, jadi tidak solo). Tidak menunggu apa pun; 261114101206 menunggu tiket ini karena tombol menempel di potongan terakhir dari pemotong baru.
@@ -75,4 +77,5 @@ Pesan keluar reply dan edit_message kini lewat plugin/outbound.ts: planReply (ko
   Merge c11bcca: import outbound/typing/quote, instruksi Markdown dan kutipan ada; typing.stop tetap sesudah tiap sendWithFallback sukses (juga fallback teks biasa) dan kirim berkas; quoteMeta, start, stopAll utuh; diff ke main sama dengan perubahan tiket; tes typing/quote/outbound/reply-format 36 pass
 
 ## Follow-ups
-- F1 [open] Pemotongan Markdown di plugin/outbound.ts: (1) chunkText membuang baris baru di awal sisa teks, jadi baris kosong dalam blok kode di batas potongan hilang (fence 40 baris kosong, limit 200: 4 hilang). (2) Fence berindentasi >3 spasi (kode di item daftar) tidak dikenali balanceFences; fence penutupnya tampil sebagai backtick ter-escape. (3) Baris paragraf lebih panjang dari setengah batas dipotong di spasi dan bisa membelah tebal/kode inline, pasangan penanda bergeser. (4) Jendela setengah batas membuat pesan hanya ~separuh terisi (~33 ribu karakter kode: 17 pesan).
+- F1 [ticketed] Pemotongan Markdown di plugin/outbound.ts: (1) chunkText membuang baris baru di awal sisa teks, jadi baris kosong dalam blok kode di batas potongan hilang (fence 40 baris kosong, limit 200: 4 hilang). (2) Fence berindentasi >3 spasi (kode di item daftar) tidak dikenali balanceFences; fence penutupnya tampil sebagai backtick ter-escape. (3) Baris paragraf lebih panjang dari setengah batas dipotong di spasi dan bisa membelah tebal/kode inline, pasangan penanda bergeser. (4) Jendela setengah batas membuat pesan hanya ~separuh terisi (~33 ribu karakter kode: 17 pesan).
+  → 261114173701

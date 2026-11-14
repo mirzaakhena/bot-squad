@@ -42,12 +42,14 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → 400rb token atau 50% (Recommended) — opsi A: menyala di atas 400 ribu token terpakai ATAU di atas 50% jendela, mana yang lebih dulu. (owner, 2026-11-14)
 
 ## Assumptions
-- A1 [unseen] Pengingat di meta (atribut context_reminder: imbauan plus angka terpakai/jendela), bukan di content, supaya tidak bisa dipalsukan dengan mengetik; instruksi MCP menjelaskannya dan bahwa keputusan percakapan baru milik pemilik. Hanya pada pesan yang diteruskan (bukan perintah plugin, izin, atau dibuang). Angka dari status.json lewat readCapturedStatus (plugin/context.ts) saat pesan masuk. Tidak tersedia = berkas tidak ada, rusak, atau angka null; umur berkas bukan syarat (sesi menganggur tidak berubah konteksnya; status.json lama dihapus saat start).
+- A1 [confirmed] Pengingat di meta (atribut context_reminder: imbauan plus angka terpakai/jendela), bukan di content, supaya tidak bisa dipalsukan dengan mengetik; instruksi MCP menjelaskannya dan bahwa keputusan percakapan baru milik pemilik. Hanya pada pesan yang diteruskan (bukan perintah plugin, izin, atau dibuang). Angka dari status.json lewat readCapturedStatus (plugin/context.ts) saat pesan masuk. Tidak tersedia = berkas tidak ada, rusak, atau angka null; umur berkas bukan syarat (sesi menganggur tidak berubah konteksnya; status.json lama dihapus saat start).
   Why: README mirza-bots bagian Pengingat mesin; CLAUDE.md bagian /context.
   If wrong: Pindahkan ke content atau tambah batas umur.
-- A2 [unseen] Data dianggap tidak pasti kalau used_percentage bukan angka; pengingat tidak menyala walau total_input_tokens besar. Sesudah /clear pengingat hilang karena Claude Code menggambar ulang statusline saat sesi baru mulai (menurut dokumentasi statusline), tanpa cek session_id seperti mirza-bots.
+  Confirmed by owner, 2026-11-14
+- A2 [confirmed] Data dianggap tidak pasti kalau used_percentage bukan angka; pengingat tidak menyala walau total_input_tokens besar. Sesudah /clear pengingat hilang karena Claude Code menggambar ulang statusline saat sesi baru mulai (menurut dokumentasi statusline), tanpa cek session_id seperti mirza-bots.
   Why: Dokumentasi: total_input_tokens = token di jendela sekarang, used_percentage null di awal sesi dan sesudah /compact; plugin bot-squad tidak tahu session_id sesi berjalan.
   If wrong: Tambah hook SessionStart yang mencatat session_id lalu bandingkan dengan payload.session_id di context-reminder.ts.
+  Confirmed by owner, 2026-11-14
 
 ## Decisions
 - Lane standard: menambah teks pengingat ke notifikasi masuk, hanya membaca status.json. Perubahannya kecil di titik notifikasi, jadi jalan berdampingan dengan tiket lain tanpa blocked_by.
