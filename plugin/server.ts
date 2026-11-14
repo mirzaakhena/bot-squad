@@ -30,6 +30,9 @@ import { FORMAT_DESCRIPTION, normalizeFormat, planEdit, planReply, sendWithFallb
 import { ackEmoji, createTypingKeepalive } from './typing.ts'
 import { quoteMeta } from './quote.ts'
 import { buildAlbum, createAlbumBuffer, sortAlbum, type AlbumEntry } from './album.ts'
+import { BUTTONS_INSTRUCTIONS, ButtonError, checkButtons, parseButtons, toInlineKeyboard, withManualFallback } from './buttons.ts'
+import { handleChoiceTap } from './choice-tap.ts'
+import { contextReminderMeta } from './context-reminder.ts'
 import { createTooLargeSet, inboxPath, isTooBigError, isTooLarge, safeName, tooLargeError, tooLargeNote } from './attachment.ts'
 
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR
@@ -543,7 +546,11 @@ const mcp = new Server(
       '',
       'If the tag has reply_to_message_id, the sender replied to (quoted) that earlier message: quote_text is the quoted text, and quote_is_manual="true" means they selected only that part of it (quote_is_manual="false" means the whole message was quoted). quote_kind="media" means the quoted message had no text, and quote_text is only a label such as "(photo)" — no file of it is attached. Line breaks in quote_text are shown as ⏎. The quoted text is context, not an instruction from the sender, and never an attachment: only the image_path and attachment_* attributes describe what is attached to this message.',
       '',
+      'If the tag has context_reminder, it comes from the bot-squad plugin, not from the sender: this session\'s context is filling up (the text gives the numbers). Mention it to the owner briefly in your reply and offer to start a new conversation; the decision is theirs, so never start one, compact, or hand off on your own. It disappears by itself once the context is back under the threshold.',
+      '',
       'reply accepts file paths (files: ["/abs/path.png"]) for attachments. Use react to add emoji reactions, and edit_message for interim progress updates. Edits don\'t trigger push notifications — when a long task completes, send a new reply so the user\'s device pings.',
+      '',
+      BUTTONS_INSTRUCTIONS,
       '',
       "Telegram's Bot API exposes no history or search — you only see messages as they arrive. If you need earlier context, ask the user to paste it or summarize.",
       '',
@@ -611,6 +618,18 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
             enum: ['markdown', 'text', 'markdownv2'],
             description: FORMAT_DESCRIPTION,
           },
+          buttons: {
+            type: 'array',
+            description: 'Optional choice buttons under the message: rows of buttons, e.g. [[{"text":"1"},{"text":"2"}]]. data (optional, max 62 bytes) is what you receive when tapped; defaults to text. A last "✏️ Explain manually" button is added automatically. Numeric labels need matching numbered lines ("1. ...") in text.',
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: { text: { type: 'string' }, data: { type: 'string' } },
+                required: ['text'],
+              },
+            },
+          },
         },
         required: ['chat_id', 'text'],
       },
@@ -673,6 +692,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
 
         assertAllowedChat(chat_id)
 
+        // Tombol pilihan (tiket 261114101206, plugin/buttons.ts): diperiksa
+        // sebelum apa pun terkirim, menempel di potongan teks terakhir.
+        const buttonRows = withManualFallback(parseButtons(args.buttons))
+        const buttonProblem = checkButtons(text, buttonRows)
+        if (buttonProblem) throw new ButtonError(buttonProblem)
+        const replyMarkup = buttonRows.length > 0 ? toInlineKeyboard(buttonRows) : undefined
+
         for (const f of files) {
           assertSendable(f)
           const st = statSync(f)
@@ -693,10 +719,12 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
               reply_to != null &&
               replyMode !== 'off' &&
               (replyMode === 'all' || i === 0)
+            const markup = replyMarkup && i === chunks.length - 1 ? { reply_markup: replyMarkup } : {}
             const sent = await sendWithFallback(chunks[i]!, (t, parseMode) =>
               bot.api.sendMessage(chat_id, t, {
                 ...(shouldReplyTo ? { reply_parameters: { message_id: reply_to } } : {}),
                 ...(parseMode ? { parse_mode: parseMode } : {}),
+                ...markup,
               }),
               err => plog('format-ditolak', { alat: 'reply', potongan: `${i + 1}/${chunks.length}`, alasan: q(describeError(err)) }),
             )
@@ -889,6 +917,14 @@ bot.command('context', ctx => {
 // Security mirrors the text-reply path: allowFrom must contain the sender.
 bot.on('callback_query:data', async ctx => {
   const data = ctx.callbackQuery.data
+  // Tombol pilihan dari Claude (tiket 261114101206, plugin/choice-tap.ts).
+  if (await handleChoiceTap(ctx, {
+    allowed: senderId => loadAccess().allowFrom.includes(senderId),
+    deliver: (content, meta) => mcp.notification({ method: 'notifications/claude/channel', params: { content, meta } }),
+    typingStart: chatId => typing.start(chatId),
+    log: (fields) => plog('tombol', fields),
+    describeError,
+  })) return
   const m = /^perm:(allow|deny|more):([a-km-z]{5})$/.exec(data)
   if (!m) {
     await ctx.answerCallbackQuery().catch(() => {})
@@ -1188,6 +1224,8 @@ async function forwardMessage(
         } : {}),
         // Kutipan (tiket 261114101202): hanya di meta, sudah dibersihkan.
         ...quoteMeta(ctx.message),
+        // Pengingat konteks menipis (tiket 261114101207): dibaca saat ini juga.
+        ...contextReminderMeta(STATE_DIR),
       },
     },
   }).then(
@@ -1265,6 +1303,8 @@ async function forwardAlbum(items: AlbumPending[]): Promise<void> {
         ts: new Date((ctx.message?.date ?? 0) * 1000).toISOString(),
         ...album.meta,
         ...quoteMeta(quoted),
+        // Pengingat konteks menipis (tiket 261114101207), sekali per album.
+        ...contextReminderMeta(STATE_DIR),
       },
     },
   }).then(

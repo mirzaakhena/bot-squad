@@ -298,3 +298,14 @@ test.skipIf(!hasDeps)("album yang masih ditahan saat plugin berhenti dibuang dan
   for (const l of log) expect(l).toContain('hasil=gagal');
   expect(log[0]).toContain("plugin berhenti sebelum album diteruskan");
 }, 30_000);
+
+test.skipIf(!hasDeps)("album membawa pengingat konteks sekali, seperti pesan tunggal", async () => {
+  const { writeCapturedStatus } = await import("../context.ts");
+  const { tg, srv, state } = await setup();
+  writeCapturedStatus(join(state, "status.json"), { context_window: { total_input_tokens: 150000, context_window_size: 200000, used_percentage: 75 } }, Date.now());
+  tg.push(msg(961, { ...photo("p1"), media_group_id: "g7" }), msg(962, { ...photo("p2"), media_group_id: "g7" }));
+  await waitFor(() => srv.notes().length >= 1, "notifikasi album");
+  const a = srv.notes()[0]!;
+  expect(a.meta.album_size).toBe("2");
+  expect(a.meta.context_reminder).toBeTruthy();
+}, 30_000);
