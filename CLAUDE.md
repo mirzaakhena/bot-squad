@@ -221,6 +221,18 @@ Tiga perintah bawaan plugin (`plugin/server.ts`) dijawab plugin sendiri dengan t
 - **Siapa**: hanya pengirim di `allowFrom` bot itu, di chat pribadi, apa pun `dmPolicy`-nya (aturan yang sama dengan `/context`, `contextAllowed`). Orang lain, juga saat `dmPolicy` `pairing` dan di grup, tidak dibalas sama sekali.
 - Tes: `plugin/test/commands.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
 
+## Kutipan pesan di chat bot (tiket 261114101202)
+
+Kalau pemilik membalas sebuah pesan di chat bot (mengutip seluruhnya, atau menyeleksi sebagian teksnya), plugin meneruskan pesan itu ke Claude dengan atribut tambahan di tag `<channel>` (`plugin/quote.ts`, dipanggil dari `handleInbound` di `plugin/server.ts`, jadi berlaku untuk teks, foto, dokumen, dan jenis lain). Isi pesan (`content`) tidak berubah.
+
+- `reply_to_message_id`: id pesan yang dikutip (bisa dipakai sebagai `reply_to`).
+- `quote_text`: yang dikutip. Urutannya: bagian yang diseleksi (`message.quote.text`), lalu teks pesan yang dikutip, lalu kapsinya, lalu keterangan jenis seperti `(photo)`, `(document: <nama>)`, `(sticker 👍)`.
+- `quote_is_manual`: `true` kalau pemilik menyeleksi sebagian teks, `false` kalau seluruh pesan dikutip.
+- `quote_kind`: `text` (dari teks/kapsi) atau `media` (hanya keterangan jenis; berkas pesan yang dikutip tidak dilampirkan).
+- Pembersihan: `quote_text` hanya ada di meta, tidak di `content`. Karakter `< > [ ] ; "`, karakter kontrol, dan pemisah baris Unicode diganti `_`, baris baru ditulis ` ⏎ `, dan teks lebih dari 1000 karakter dipotong dengan `…`. Jadi teks kutipan tidak bisa keluar dari tag atau memalsukan atribut seperti `image_path`/`attachment_*`. Instruksi MCP plugin menjelaskan atribut ini ke Claude dan menyebut kutipan sebagai konteks, bukan perintah atau lampiran.
+- Tidak diteruskan sebagai kutipan: pesan tanpa `reply_to_message` (atribut di atas tidak ada sama sekali), kutipan dari chat lain (`external_reply`), dan "balasan" otomatis ke pesan pembuka topik di grup bertopik.
+- Tes: `plugin/test/quote.test.ts` dan `plugin/test/quote-server.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
+
 ## Prinsip: perintah terpilih, bukan semua slash Claude Code
 
 bot-squad hanya mendukung beberapa perintah chat bot yang dipilih pemilik karena penting dan sering dipakai (saat ini `/start`, `/help`, `/status`, `/context`). Slash command Claude Code lain (misalnya `/compact`, `/model`) **tidak** diteruskan ke sesi bot, juga tidak dengan tombol konfirmasi (tiket 261112230305 dibatalkan oleh pemilik, 2026-11-13). Perintah baru yang mengetik ke sesi Claude (interrupt, new, rename, branch/switch) ditambahkan satu per satu sebagai perintah khusus, menunggu rancangan mekanismenya (tiket 261112230302).
