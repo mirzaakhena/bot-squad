@@ -5,7 +5,7 @@ lane: standard
 labels: []
 blocked_by: []
 related: []
-touches: []
+touches: [plugin/server.ts, plugin/context.ts, plugin/reminder.ts, plugin/test/reminder.test.ts, CLAUDE.md]
 created: 2026-11-14 10:12
 ---
 
@@ -34,3 +34,17 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - [ ] Kalau data konteks tidak tersedia atau basi, tidak ada pengingat yang salah.
 - [ ] Ada tes otomatis untuk di atas ambang, di bawah ambang, dan data tidak ada.
 - [ ] CLAUDE.md menjelaskan perilaku dan ambangnya.
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Questions
+- Q1 [blocking] Ambang pengingat konteks menipis? Payload statusline memberi total_input_tokens dan context_window_size; jendelanya bisa 200 ribu atau 1 juta token. A (rekomendasi): menyala kalau terpakai di atas 400 ribu token ATAU di atas 50% jendela, mana yang lebih dulu, sehingga tetap berguna di jendela 200 ribu (menyala di 100 ribu). B: persis mirza-bots, di atas 400 ribu token saja (tidak pernah menyala di jendela 200 ribu). C: persentase saja, di atas 50% jendela (sebutkan kalau mau angka lain, mis. 70%).
+
+## Assumptions
+- A1 [unseen] Pengingat di meta (atribut context_reminder: imbauan plus angka terpakai/jendela), bukan di content, supaya tidak bisa dipalsukan dengan mengetik; instruksi MCP menjelaskannya dan bahwa keputusan percakapan baru milik pemilik. Hanya pada pesan yang diteruskan (bukan perintah plugin, izin, atau dibuang). Angka dari status.json lewat readCapturedStatus (plugin/context.ts) saat pesan masuk. Tidak tersedia = berkas tidak ada, rusak, atau angka null; umur berkas bukan syarat (sesi menganggur tidak berubah konteksnya; status.json lama dihapus saat start).
+  Why: README mirza-bots bagian Pengingat mesin; CLAUDE.md bagian /context.
+  If wrong: Pindahkan ke content atau tambah batas umur.
+
+## Decisions
+- Lane standard: menambah teks pengingat ke notifikasi masuk, hanya membaca status.json. Perubahannya kecil di titik notifikasi, jadi jalan berdampingan dengan tiket lain tanpa blocked_by.
+- Uji plugin dilewati diam-diam tanpa plugin/node_modules: worker wajib menjalankan 'bun install --cwd plugin' di worktree sebelum k2 test dan memastikan tes barunya benar-benar jalan (bukan skip). Logika baru diletakkan di modul sendiri (seperti plugin/context.ts, plugin/log.ts) dengan kait sekecil mungkin di server.ts supaya merge antar tiket ringan.

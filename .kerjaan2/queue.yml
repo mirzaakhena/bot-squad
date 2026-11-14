@@ -1,2 +1,5 @@
-goal: Spike dan rancangan pesan antarbot lewat nama bot, berakhir di diskusi pemilik
+goal: Fitur chat bot dari mirza-bots yang tidak mengetik ke sesi Claude (tahap 1: format balasan, kutipan, dokumen)
 order:
+  - 261114101205   # Balasan bot memakai Markdown otomatis dan potongan yang rapi
+  - 261114101202   # Kutipan dari pemilik ikut diteruskan ke Claude
+  - 261114101203   # Dokumen besar dan nama berkas aman di chat bot

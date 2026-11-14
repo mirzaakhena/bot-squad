@@ -5,7 +5,7 @@ lane: standard
 labels: []
 blocked_by: []
 related: []
-touches: []
+touches: [plugin/server.ts, plugin/quote.ts, plugin/test/quote.test.ts, CLAUDE.md]
 created: 2026-11-14 10:12
 ---
 
@@ -36,3 +36,15 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - [ ] Ada tes otomatis dengan Telegram tiruan untuk kutipan penuh, kutipan sebagian, dan pesan tanpa kutipan.
 - [ ] CLAUDE.md menjelaskan perilaku ini.
 - [ ] (owner) Pemilik mengutip pesan bot lama dan bertanya tentangnya; Claude menjawab sesuai pesan yang dikutip.
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Assumptions
+- A1 [unseen] Bentuk meta mengikuti mirza-bots: reply_to_message_id, quote_text, quote_is_manual ("true" untuk seleksi sebagian dari message.quote dengan is_manual, "false" untuk kutipan penuh). Urutan sumber: message.quote.text, lalu reply_to_message.text, lalu caption, lalu keterangan jenis seperti (photo)/(document: <nama aman>). Teks kutipan hanya di meta (tidak di content), karakter < > [ ] ; dan baris baru diganti seperti safeName, dan dipotong 1000 karakter dengan tanda …. Kutipan lintas chat (external_reply) diabaikan. Instruksi MCP plugin menjelaskan atribut baru ini.
+  Why: mirza-bots telegram/quote.ts dan README bagian Kutipan; sanitasi meniru safeName yang sudah ada di server.ts untuk mencegah pemalsuan atribut.
+  If wrong: Ubah pembentuk meta di plugin/quote.ts.
+
+## Decisions
+- Lane standard: mengubah meta notifikasi masuk, ada kriteria anti-pemalsuan atribut. Tidak menunggu apa pun; 261114101204 menunggu tiket ini supaya album dibangun di atas bentuk meta kutipan yang sudah final.
+- Uji plugin dilewati diam-diam tanpa plugin/node_modules: worker wajib menjalankan 'bun install --cwd plugin' di worktree sebelum k2 test dan memastikan tes barunya benar-benar jalan (bukan skip). Logika baru diletakkan di modul sendiri (seperti plugin/context.ts, plugin/log.ts) dengan kait sekecil mungkin di server.ts supaya merge antar tiket ringan.
+- 2026-11-14 moved to todo: Tanpa pertanyaan tersisa; disetujui lewat foreman untuk langsung diantrekan

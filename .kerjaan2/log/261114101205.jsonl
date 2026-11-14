@@ -1,1 +1,3 @@
 {"t":"2026-11-14 10:12:19","event":"created","status":"backlog","session":"44dfab39-c331-4018-b0c4-201c02604f0d"}
+{"t":"2026-11-14 10:30:18","event":"assumption","key":"A1","session":"44dfab39-c331-4018-b0c4-201c02604f0d","by":"planner:a4e0b4c96200a7e0c"}
+{"t":"2026-11-14 10:30:25","event":"moved","to":"todo","session":"44dfab39-c331-4018-b0c4-201c02604f0d","by":"planner:a4e0b4c96200a7e0c"}

@@ -3,9 +3,9 @@ type: feature
 priority: medium
 lane: standard
 labels: []
-blocked_by: []
+blocked_by: [261114101205, 261114101201]
 related: []
-touches: []
+touches: [plugin/server.ts, plugin/buttons.ts, plugin/test/buttons.test.ts, CLAUDE.md]
 created: 2026-11-14 10:12
 ---
 
@@ -39,3 +39,20 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - [ ] Ada tes otomatis dengan Telegram tiruan untuk mengirim tombol, menekan tombol, tombol jawab sendiri, dan penolakan tombol yang salah.
 - [ ] CLAUDE.md menjelaskan perilaku ini.
 - [ ] (owner) Pemilik meminta Claude memberi pilihan, menekan salah satu tombol, lalu mencoba tombol jawab sendiri.
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Questions
+- Q1 [blocking] Tombol jawab-sendiri: label dan akibatnya saat ditekan? A (rekomendasi): label '✏️ Jawab sendiri'; saat ditekan, tombol dicopot dan pesan ditandai '→ ✏️ Jawab sendiri', lalu Claude menerima pemberitahuan bahwa pemilik akan mengetik jawabannya sendiri (Claude menunggu pesan berikutnya, tidak menebak pilihan). B: sama tetapi label Inggris '✏️ Explain manually' persis mirza-bots. C: saat ditekan tidak ada yang diteruskan ke Claude, hanya tombol dicopot; pemilik langsung mengetik.
+
+## Assumptions
+- A1 [unseen] Parameter reply.buttons: daftar baris berisi {text, data?} (data bawaan = text), menempel di potongan terakhir (kalau ada files, di pesan teks). callback_data diberi awalan sendiri (mis. 'c:'); batas 64 byte termasuk awalan; data berawalan 'perm:' atau awalan plugin ditolak. Tombol berlabel angka saja wajib punya baris bernomor yang cocok di badan pesan (aturan mirza-bots messages.ts).
+  Why: mirza-bots messages.ts (MAX_CALLBACK_DATA_BYTES, numbered_buttons_without_list).
+  If wrong: Ubah skema di plugin/buttons.ts.
+- A2 [unseen] Saat tombol ditekan: answerCallbackQuery selalu; di luar allowFrom dapat 'Not authorized.' dan tidak diteruskan; pengirim sah: pesan diedit tanpa reply_markup, entities asli dipertahankan, akhiran '→ <label>', lalu Claude menerima notifikasi channel biasa (content = label, meta button_data dan message_id pesan bertombol); typing dan reaksi berlaku seperti pesan masuk. Tekan ulang setelah keyboard dicopot diabaikan.
+  Why: README mirza-bots bagian Keyboard dicopot setelah tombol ditap.
+  If wrong: Ubah handler callback di plugin/buttons.ts.
+
+## Decisions
+- Lane standard: menambah tombol ke reply dan handler callback_query, dengan cek allowFrom. Menunggu 261114101205 (pemotong dan konversi format baru, tombol di potongan terakhir) dan 261114101201 (tekan tombol diteruskan seperti pesan masuk, typing ikut menyala).
+- Uji plugin dilewati diam-diam tanpa plugin/node_modules: worker wajib menjalankan 'bun install --cwd plugin' di worktree sebelum k2 test dan memastikan tes barunya benar-benar jalan (bukan skip). Logika baru diletakkan di modul sendiri (seperti plugin/context.ts, plugin/log.ts) dengan kait sekecil mungkin di server.ts supaya merge antar tiket ringan.

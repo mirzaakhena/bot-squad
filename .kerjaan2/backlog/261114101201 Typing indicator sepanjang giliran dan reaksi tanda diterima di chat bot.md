@@ -5,7 +5,7 @@ lane: standard
 labels: []
 blocked_by: []
 related: []
-touches: []
+touches: [plugin/server.ts, plugin/typing.ts, plugin/test/typing.test.ts, CLAUDE.md]
 created: 2026-11-14 10:12
 ---
 
@@ -38,3 +38,20 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - [ ] Ada tes otomatis dengan Telegram tiruan untuk indikator yang diperbarui, berhenti di balasan pertama, dan batas 300 detik (boleh dengan waktu yang dipercepat).
 - [ ] CLAUDE.md menjelaskan perilaku ini.
 - [ ] (owner) Pemilik mengirim pesan yang butuh waktu lama dan melihat "typing…" bertahan sampai balasan datang.
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Questions
+- Q1 [blocking] Reaksi tanda diterima: emoji apa, dan berlaku untuk bot mana? A (rekomendasi): plugin memakai 👀 sebagai bawaan kalau ackReaction di access.json tidak diisi, jadi semua bot (termasuk bot-01..03 yang sudah ada) mendapatkannya setelah dinyalakan ulang, dan ackReaction "" tetap mematikannya; paling sederhana dan tidak perlu menulis ulang access.json. B: master-bot menulis ackReaction 👀 ke access.json hanya saat /register, sehingga bot lama tidak berubah. C: emoji lain (sebutkan; harus ada di daftar reaksi Telegram, mis. 👍 👌 ⚡).
+
+## Assumptions
+- A1 [unseen] Typing diperbarui setiap 4 detik di chat asal pesan dan berhenti pada panggilan reply pertama yang berhasil ke chat itu (termasuk reply yang hanya berisi files); react dan edit_message tidak menghentikannya. Pesan baru saat typing masih hidup memulai ulang hitungan 300 detik dari pesan terbaru. Gagal sendChatAction (429, jaringan) ditelan dan dicatat paling banyak sebagai baris plugin.log, tidak pernah menggagalkan penerusan.
+  Why: Sama dengan mirza-bots (typing.ts: TYPING_PING_INTERVAL_MS 4000, TYPING_MAX_MS 300000, stop di balasan pertama).
+  If wrong: Ubah konstanta atau titik berhenti di plugin/typing.ts.
+- A2 [unseen] Reaksi tanda diterima dipasang sekali saat pesan diteruskan dan tidak dicopot setelah Claude membalas; jawaban izin tetap memakai reaksi ✅/❌ yang sudah ada.
+  Why: Perilaku plugin upstream sekarang; Done when hanya meminta reaksi muncul.
+  If wrong: Tambah penghapusan reaksi di jalur reply.
+
+## Decisions
+- Lane standard: perilaku UX plugin, tanpa data yang tak bisa dipulihkan. Tidak menunggu apa pun; 261114101204 dan 261114101206 menunggu tiket ini karena album dan tekan tombol harus memakai keepalive typing yang sama.
+- Uji plugin dilewati diam-diam tanpa plugin/node_modules: worker wajib menjalankan 'bun install --cwd plugin' di worktree sebelum k2 test dan memastikan tes barunya benar-benar jalan (bukan skip). Logika baru diletakkan di modul sendiri (seperti plugin/context.ts, plugin/log.ts) dengan kait sekecil mungkin di server.ts supaya merge antar tiket ringan.
