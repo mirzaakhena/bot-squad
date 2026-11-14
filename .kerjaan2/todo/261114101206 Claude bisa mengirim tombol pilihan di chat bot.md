@@ -32,7 +32,7 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 ## Done when
 
 - [ ] Claude bisa mengirim pesan dengan tombol pilihan, dan pilihan yang ditekan pemilik sampai ke Claude sebagai jawaban.
-- [ ] Setiap keyboard pilihan otomatis punya tombol terakhir untuk menjawab sendiri (setara `✏️ Explain manually` di mirza-bots), ditambahkan oleh plugin, bukan bergantung pada Claude, dan tidak muncul dua kali.
+- [ ] Setiap keyboard pilihan otomatis punya tombol terakhir untuk menjawab sendiri berlabel persis `✏️ Explain manually` seperti mirza-bots, ditambahkan oleh plugin, bukan bergantung pada Claude, dan tidak muncul dua kali. Saat ditekan, tombolnya dicopot, pesannya ditandai dengan pilihan itu, dan Claude diberi tahu bahwa pemilik akan mengetik jawabannya sendiri.
 - [ ] Setelah sebuah tombol ditekan, tombol-tombol pesan itu hilang dan pesannya menunjukkan pilihan yang diambil, sehingga tidak bisa dijawab dua kali.
 - [ ] Tombol yang tidak masuk akal ditolak sebelum apa pun terkirim, dengan pesan yang menjelaskan cara memperbaikinya ke Claude: data tombol melebihi batas Telegram, atau tombol bernomor tanpa daftar bernomor yang cocok di badan pesan.
 - [ ] Hanya pengirim yang diizinkan yang bisa menekan tombol; tombol izin yang sudah ada tetap bekerja seperti sekarang.
@@ -43,7 +43,8 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Questions
-- Q1 [blocking] Tombol jawab-sendiri: label dan akibatnya saat ditekan? A (rekomendasi): label '✏️ Jawab sendiri'; saat ditekan, tombol dicopot dan pesan ditandai '→ ✏️ Jawab sendiri', lalu Claude menerima pemberitahuan bahwa pemilik akan mengetik jawabannya sendiri (Claude menunggu pesan berikutnya, tidak menebak pilihan). B: sama tetapi label Inggris '✏️ Explain manually' persis mirza-bots. C: saat ditekan tidak ada yang diteruskan ke Claude, hanya tombol dicopot; pemilik langsung mengetik.
+- Q1 [answered] Tombol jawab-sendiri: label dan akibatnya saat ditekan? A (rekomendasi): label '✏️ Jawab sendiri'; saat ditekan, tombol dicopot dan pesan ditandai '→ ✏️ Jawab sendiri', lalu Claude menerima pemberitahuan bahwa pemilik akan mengetik jawabannya sendiri (Claude menunggu pesan berikutnya, tidak menebak pilihan). B: sama tetapi label Inggris '✏️ Explain manually' persis mirza-bots. C: saat ditekan tidak ada yang diteruskan ke Claude, hanya tombol dicopot; pemilik langsung mengetik.
+  → '✏ Explain manually' — opsi B: label persis mirza-bots '✏️ Explain manually', perilaku sama dengan A (tombol dicopot, pesan ditandai, Claude diberi tahu pemilik akan menjawab sendiri). (owner, 2026-11-14)
 
 ## Assumptions
 - A1 [unseen] Parameter reply.buttons: daftar baris berisi {text, data?} (data bawaan = text), menempel di potongan terakhir (kalau ada files, di pesan teks). callback_data diberi awalan sendiri (mis. 'c:'); batas 64 byte termasuk awalan; data berawalan 'perm:' atau awalan plugin ditolak. Tombol berlabel angka saja wajib punya baris bernomor yang cocok di badan pesan (aturan mirza-bots messages.ts).
@@ -56,3 +57,4 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 ## Decisions
 - Lane standard: menambah tombol ke reply dan handler callback_query, dengan cek allowFrom. Menunggu 261114101205 (pemotong dan konversi format baru, tombol di potongan terakhir) dan 261114101201 (tekan tombol diteruskan seperti pesan masuk, typing ikut menyala).
 - Uji plugin dilewati diam-diam tanpa plugin/node_modules: worker wajib menjalankan 'bun install --cwd plugin' di worktree sebelum k2 test dan memastikan tes barunya benar-benar jalan (bukan skip). Logika baru diletakkan di modul sendiri (seperti plugin/context.ts, plugin/log.ts) dengan kait sekecil mungkin di server.ts supaya merge antar tiket ringan.
+- 2026-11-14 moved to todo: Pertanyaan dijawab pemilik; urutan dan blocked_by disetujui
