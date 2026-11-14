@@ -26,6 +26,7 @@ import { execFileSync } from 'child_process'
 import { join, extname, sep } from 'path'
 import { createPluginLog, describeError, isoLocal, q, secs } from './log.ts'
 import { answerContext, contextAllowed } from './context.ts'
+import { FORMAT_DESCRIPTION, normalizeFormat, planEdit, planReply, sendWithFallback } from './outbound.ts'
 
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR
   ?? join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'channels', 'bot-squad')
@@ -482,29 +483,8 @@ function checkApprovals(): void {
 
 if (!STATIC) setInterval(checkApprovals, 5000).unref()
 
-// Telegram caps messages at 4096 chars. Split long replies, preferring
-// paragraph boundaries when chunkMode is 'newline'.
-
-function chunk(text: string, limit: number, mode: 'length' | 'newline'): string[] {
-  if (text.length <= limit) return [text]
-  const out: string[] = []
-  let rest = text
-  while (rest.length > limit) {
-    let cut = limit
-    if (mode === 'newline') {
-      // Prefer the last double-newline (paragraph), then single newline,
-      // then space. Fall back to hard cut.
-      const para = rest.lastIndexOf('\n\n', limit)
-      const line = rest.lastIndexOf('\n', limit)
-      const space = rest.lastIndexOf(' ', limit)
-      cut = para > limit / 2 ? para : line > limit / 2 ? line : space > 0 ? space : limit
-    }
-    out.push(rest.slice(0, cut))
-    rest = rest.slice(cut).replace(/^\n+/, '')
-  }
-  if (rest) out.push(rest)
-  return out
-}
+// Telegram caps messages at 4096 chars. Splitting, Markdown conversion and
+// the plain-text fallback live in outbound.ts (tiket 261114101205).
 
 // .jpg/.jpeg/.png/.gif/.webp go as photos (Telegram compresses + shows inline);
 // everything else goes as documents (raw file, no compression).
@@ -529,6 +509,8 @@ const mcp = new Server(
       'The sender reads Telegram, not this session. Anything you want them to see must go through the reply tool — your transcript output never reaches their chat.',
       '',
       'Messages from Telegram arrive as <channel source="bot-squad" chat_id="..." message_id="..." user="..." ts="...">. If the tag has an image_path attribute, Read that file — it is a photo the sender attached. If the tag has attachment_file_id, call download_attachment with that file_id to fetch the file, then Read the returned path. Reply with the reply tool — pass chat_id back. Use reply_to (set to a message_id) only when replying to an earlier message; the latest message doesn\'t need a quote-reply, omit reply_to for normal responses.',
+      '',
+      'Write replies in ordinary Markdown (**bold**, *italic*, `code`, ``` fenced blocks, [links](url), lists). The reply and edit_message tools convert it to Telegram formatting and escape special characters for you; never escape anything yourself. Long replies are split into several messages automatically, and a split code block stays a code block in every part.',
       '',
       'reply accepts file paths (files: ["/abs/path.png"]) for attachments. Use react to add emoji reactions, and edit_message for interim progress updates. Edits don\'t trigger push notifications — when a long task completes, send a new reply so the user\'s device pings.',
       '',
@@ -595,8 +577,8 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           format: {
             type: 'string',
-            enum: ['text', 'markdownv2'],
-            description: "Rendering mode. 'markdownv2' enables Telegram formatting (bold, italic, code, links). Caller must escape special chars per MarkdownV2 rules. Default: 'text' (plain, no escaping needed).",
+            enum: ['markdown', 'text', 'markdownv2'],
+            description: FORMAT_DESCRIPTION,
           },
         },
         required: ['chat_id', 'text'],
@@ -637,8 +619,8 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
           text: { type: 'string' },
           format: {
             type: 'string',
-            enum: ['text', 'markdownv2'],
-            description: "Rendering mode. 'markdownv2' enables Telegram formatting (bold, italic, code, links). Caller must escape special chars per MarkdownV2 rules. Default: 'text' (plain, no escaping needed).",
+            enum: ['markdown', 'text', 'markdownv2'],
+            description: FORMAT_DESCRIPTION,
           },
         },
         required: ['chat_id', 'message_id', 'text'],
@@ -656,8 +638,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         const text = args.text as string
         const reply_to = args.reply_to != null ? Number(args.reply_to) : undefined
         const files = (args.files as string[] | undefined) ?? []
-        const format = (args.format as string | undefined) ?? 'text'
-        const parseMode = format === 'markdownv2' ? 'MarkdownV2' as const : undefined
+        const format = normalizeFormat(args.format)
 
         assertAllowedChat(chat_id)
 
@@ -671,9 +652,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
 
         const access = loadAccess()
         const limit = Math.max(1, Math.min(access.textChunkLimit ?? MAX_CHUNK_LIMIT, MAX_CHUNK_LIMIT))
-        const mode = access.chunkMode ?? 'length'
         const replyMode = access.replyToMode ?? 'first'
-        const chunks = chunk(text, limit, mode)
+        const chunks = planReply(text, format, limit, access.chunkMode)
         const sentIds: number[] = []
 
         try {
@@ -682,10 +662,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
               reply_to != null &&
               replyMode !== 'off' &&
               (replyMode === 'all' || i === 0)
-            const sent = await bot.api.sendMessage(chat_id, chunks[i], {
-              ...(shouldReplyTo ? { reply_parameters: { message_id: reply_to } } : {}),
-              ...(parseMode ? { parse_mode: parseMode } : {}),
-            })
+            const sent = await sendWithFallback(chunks[i]!, (t, parseMode) =>
+              bot.api.sendMessage(chat_id, t, {
+                ...(shouldReplyTo ? { reply_parameters: { message_id: reply_to } } : {}),
+                ...(parseMode ? { parse_mode: parseMode } : {}),
+              }),
+              err => plog('format-ditolak', { alat: 'reply', potongan: `${i + 1}/${chunks.length}`, alasan: q(describeError(err)) }),
+            )
             sentIds.push(sent.message_id)
           }
         } catch (err) {
@@ -745,13 +728,15 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
       }
       case 'edit_message': {
         assertAllowedChat(args.chat_id as string)
-        const editFormat = (args.format as string | undefined) ?? 'text'
-        const editParseMode = editFormat === 'markdownv2' ? 'MarkdownV2' as const : undefined
-        const edited = await bot.api.editMessageText(
-          args.chat_id as string,
-          Number(args.message_id),
-          args.text as string,
-          ...(editParseMode ? [{ parse_mode: editParseMode }] : []),
+        const editPart = planEdit(args.text as string, normalizeFormat(args.format))
+        const edited = await sendWithFallback(editPart, (t, parseMode) =>
+          bot.api.editMessageText(
+            args.chat_id as string,
+            Number(args.message_id),
+            t,
+            ...(parseMode ? [{ parse_mode: parseMode }] : []),
+          ),
+          err => plog('format-ditolak', { alat: 'edit_message', alasan: q(describeError(err)) }),
         )
         const id = typeof edited === 'object' ? edited.message_id : args.message_id
         return { content: [{ type: 'text', text: `edited (id: ${id})` }] }
