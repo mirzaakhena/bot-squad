@@ -1,9 +1,5 @@
 goal: Fitur chat bot dari mirza-bots yang tidak mengetik ke sesi Claude: typing dan reaksi, format balasan, kutipan, dokumen, pengingat konteks, tombol pilihan, album
 order:
-  - 261114101201   # Typing indicator sepanjang giliran dan reaksi tanda diterima di chat bot
-  - 261114101205   # Balasan bot memakai Markdown otomatis dan potongan yang rapi
-  - 261114101202   # Kutipan dari pemilik ikut diteruskan ke Claude
-  - 261114101203   # Dokumen besar dan nama berkas aman di chat bot
   - 261114101207   # Pengingat saat konteks sesi bot menipis
   - 261114101206   # Claude bisa mengirim tombol pilihan di chat bot
   - 261114101204   # Album foto diteruskan sebagai satu pesan
