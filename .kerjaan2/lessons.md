@@ -45,3 +45,6 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - HOME sementara di macOS memutus login Claude Code: Keychain login tidak ada di daftar pencarian, layar 'Not logged in'; sesi uji butuh CLAUDE_CODE_OAUTH_TOKEN atau HOME asli
 - Saat menulis regex dengan \u2028 lewat alat tulis berkas, escape bisa berubah jadi karakter asli dan membuat Syntax Error di bun; pakai \p{Cc} dengan flag u atau cek dengan od -c
 - telegramify-markdown membuang bahasa fence (```ts menjadi ```) dan menambah newline di akhir; dalam mode escape tabel dan --- di-escape, bukan dibuang
+- fetch menormalkan ../ di URL unduhan, jadi file_path Telegram berisi ../ bisa naik keluar dari /file/bot<token>/; Telegram tiruan di tes harus melayani path hasil normalisasi
+- Callback query Telegram membawa message.reply_markup; label tombol yang ditekan bisa dicari di situ, dan tombol yang sudah tidak ada berarti keyboard sudah dicopot (abaikan ketukan).
+- Setelah main membawa dependency plugin baru (mis. telegramify-markdown dari 261114101205), jalankan ulang bun install --cwd plugin di worktree; tanpa itu semua tes server plugin gagal 'Cannot find package', bukan kegagalan kode
