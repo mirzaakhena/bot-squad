@@ -196,6 +196,7 @@ Server plugin setiap bot selalu menulis `<TELEGRAM_STATE_DIR>/plugin.log` (untuk
 | `polling-berhenti alasan=` | Polling berhenti: `bot.stop`, `shutdown`, atau 409 yang terus terjadi. |
 | `berhenti alasan=` | Server plugin mulai berhenti: `stdin-end`/`stdin-close`/`stdin-tertutup` (Claude pergi), `stderr-putus`, `SIGTERM`, `SIGINT`, `SIGHUP`. |
 | `format-ditolak alat= potongan=<i>/<n> alasan=` | `alat` = `reply` atau `edit_message`. Telegram menolak format satu potongan balasan (400 `can't parse entities` dan sejenisnya), lalu potongan itu dikirim ulang sebagai teks biasa (tiket 261114101205). `potongan` hanya untuk `reply`. Isi pesan tidak ditulis. |
+| `tombol hasil=<hasil> chat= msg=` | Satu baris per ketukan tombol pilihan dari Claude (tiket 261114101206). `msg` = id pesan bertombol. `hasil`: `diteruskan`, `jawab-sendiri` (tombol `✏️ Explain manually`), `dibuang` (pengirim tidak di `allowFrom`, ada `dari=`), `ganda` (keyboard sudah dicopot atau pesan sudah dijawab), `gagal` (notifikasi ke Claude gagal, ada `alasan`). Tombol izin tidak dicatat di sini. |
 | `error jenis= alasan=` | Error handler, unhandled rejection, atau uncaught exception. |
 | `api-tiruan alamat=` | Hanya di tes (lihat di bawah). |
 
@@ -226,6 +227,19 @@ Claude cukup menulis Markdown biasa di alat `reply` dan `edit_message`; plugin m
 - **Blok kode terpotong** dijahit ulang: fence yang masih terbuka di akhir potongan ditutup di situ, lalu dibuka lagi (baris pembuka yang sama) di awal potongan berikutnya, sehingga setiap potongan menampilkan kode sebagai blok kode dan teks sesudahnya tidak ikut menjadi monospace. Fence ```` ```` ```` hanya ditutup fence sepanjang itu atau lebih.
 - **Kutipan** (`reply_to`) menempel di potongan pertama (`replyToMode` bawaan `first`; `all` dan `off` tetap berlaku). Edit tidak bisa dipotong: kalau hasil konversi melewati 4096, teks aslinya dikirim sebagai teks biasa.
 - Tes: `plugin/test/outbound.test.ts` (konversi, karakter khusus per karakter, pemotongan, penjahitan fence, kirim ulang teks biasa) dan `plugin/test/reply-format.test.ts` (server plugin sungguhan terhadap Telegram tiruan yang memeriksa MarkdownV2), keduanya dilewati tanpa `plugin/node_modules`.
+
+## Tombol pilihan di chat bot (tiket 261114101206)
+
+Claude bisa menawarkan pilihan berupa tombol, dan pemilik cukup menekan satu tombol untuk menjawab. Kodenya `plugin/buttons.ts` (aturan, diadaptasi dari `mirza-bots/cc-plugin/src/engine/messages.ts`) dan `plugin/choice-tap.ts` (ketukan), dengan kait kecil di `plugin/server.ts`.
+
+- **Mengirim**: alat `reply` menerima `buttons`, daftar baris berisi `{text, data?}` (contoh `[[{"text":"1"},{"text":"2"}]]`; tombol tunggal di tingkat atas dianggap satu baris). `data` bawaan = `text`. Keyboard menempel di potongan teks **terakhir** balasan; berkas (`files`) tetap dikirim sesudahnya tanpa tombol. `edit_message` tidak memakai tombol. Instruksi MCP plugin menjelaskannya ke Claude.
+- **Tombol jawab sendiri**: setiap keyboard pilihan selalu diberi baris terakhir `✏️ Explain manually` (persis mirza-bots, keputusan pemilik Q1) oleh plugin, bukan oleh Claude. Kalau Claude menulisnya sendiri (dikenali dari label atau data `let me explain manually instead`), tombol itu dibuang dulu, jadi tombolnya selalu satu dan selalu terakhir. Balasan tanpa `buttons` (atau `buttons: []`) tidak mendapat keyboard.
+- **Ditolak sebelum apa pun terkirim** (alat mengembalikan error berisi cara memperbaikinya, tidak ada pesan maupun berkas yang terkirim): `buttons` bukan daftar, label kosong, `data` bukan teks; `data` lebih dari 62 byte (batas Telegram 64 byte termasuk awalan plugin `c:`; dihitung per byte, emoji 4 byte; label panjang tanpa `data` ikut kena karena label dipakai sebagai data); lebih dari 8 tombol per baris atau 100 per pesan (termasuk tombol jawab sendiri); dan minimal dua tombol berlabel angka saja tanpa baris bernomor yang cocok (`1.` atau `1)` di awal baris) di badan pesan. Satu tombol angka, atau label kata seperti `✅ Ya`/`❌ Tidak`, tidak kena aturan nomor.
+- **Saat ditekan**: Telegram selalu dijawab (`answerCallbackQuery`). Hanya pengirim di `allowFrom` bot itu yang dilayani (aturan yang sama dengan tombol izin); orang lain mendapat `Not authorized.` dan tidak ada yang diteruskan atau diubah. Pilihan sampai ke Claude sebagai notifikasi channel biasa: `content` = `data` tombol, meta `button_data`, `button_label`, `button_message_id` (id pesan bertombol), `chat_id`, `user`, `user_id`, `ts`; "typing…" menyala seperti pesan masuk. Tombol jawab sendiri memberi `button_manual="true"` dan `content` yang memberi tahu Claude bahwa pemilik akan mengetik jawabannya sendiri di pesan berikutnya, jadi Claude menunggu dan tidak memilih. Lalu pesan diedit menjadi teks aslinya ditambah `→ <label>` (entity format dipertahankan) tanpa keyboard; kalau tidak bisa (bukan teks, atau melewati 4096), keyboard-nya saja yang dicopot.
+- **Sekali jawab**: ketukan pada tombol yang sudah tidak ada di keyboard pesan itu, atau ketukan kedua pada pesan yang sama (diingat per proses, maks. 1000 pesan), dijawab tanpa diteruskan (`ganda` di `plugin.log`).
+- **Tombol izin** (`perm:...`) tidak berubah; tombol Claude selalu berawalan `c:`, jadi tidak bisa menyamar sebagai jawaban izin.
+- Bot yang sudah berjalan baru mendapat fitur ini setelah dinyalakan ulang (`/restart`).
+- Tes: `plugin/test/buttons.test.ts` dan `plugin/test/buttons-server.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
 
 ## /start, /help, /status di chat bot (tiket 261112225309)
 
