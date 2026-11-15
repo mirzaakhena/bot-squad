@@ -72,7 +72,7 @@ bun run --cwd master start
 ```
 
 - Konfigurasi hanya dibaca dari `$BOT_SQUAD_HOME/master/.env` (default `~/.bot-squad/master/.env`): `MASTER_BOT_TOKEN` dan `OWNER_TELEGRAM_ID`. Hanya pemilik di chat pribadinya yang dilayani.
-- Perintah saat ini: `/start`, `/help`, `/register <nama> <token>`, `/list`, `/stop <nama>`, `/restart <nama> [new]`, `/logs <nama> [n]`, `/keys <nama> <tombol...>`, `/quota`, `/allow <nama> <user_id>`, `/revoke <nama> <user_id>`, `/access <nama>`, dan `/delete <nama>`. Perilaku rincinya di `docs/master-bot.md`.
+- Perintah saat ini: `/help`, `/register <nama> <token>`, `/list`, `/stop <nama>`, `/restart <nama>`, `/new <nama>`, `/logs <nama> [n]`, `/keys <nama> <tombol...>`, `/quota`, `/allow <nama> <user_id>`, `/revoke <nama> <user_id>`, `/access <nama>`, dan `/delete <nama>`. Perilaku rincinya di `docs/master-bot.md`.
 - Menyalakan satu bot tanpa master-bot: `scripts/start-bot.sh <nama-bot>` (kode yang sama, `master/src/launch.ts`; rincian di `docs/menyalakan-bot.md`).
 - Tes: `bun test` dari root repo. Tes memakai server Telegram tiruan (`master/test/fake-telegram.ts`), jadi tidak butuh token asli. Tes plugin dilewati kalau `plugin/node_modules` belum dipasang (`bun install --cwd plugin`). Rincian di `docs/tes.md`.
 - Folder `master/test/` dan `plugin/test/` dikecualikan dari secret scanning GitHub (`.github/secret_scanning.yml`): hanya boleh berisi token tiruan, token asli tidak akan terdeteksi. Lihat `docs/tes.md`.

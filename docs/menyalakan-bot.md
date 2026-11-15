@@ -66,7 +66,7 @@ Prompt yang muncul saat start dan cara menanganinya:
 
 ## Melanjutkan percakapan terakhir (`--continue`, tiket 261115100301, Claude Code 2.1.325)
 
-Keputusan pemilik (2026-11-15): `/restart <nama>` dan penyalaan otomatis melanjutkan percakapan terakhir bot, `/restart <nama> new` dan `/register` mulai kosong. `launchBot(name, deps, mode)` menerima `"continue"` atau `"new"` (bawaan `"new"`, dipakai `start-bot.sh`). Hasil `active` membawa `conversation`: `continued`, atau `new` dengan sebab `requested`, `no-history`, atau `continue-failed` (plus alasannya).
+Keputusan pemilik (2026-11-15): `/restart <nama>` dan penyalaan otomatis melanjutkan percakapan terakhir bot, `/new <nama>` (dulu `/restart <nama> new`, diganti di tiket 261115202401) dan `/register` mulai kosong. `launchBot(name, deps, mode)` menerima `"continue"` atau `"new"` (bawaan `"new"`, dipakai `start-bot.sh`). Hasil `active` membawa `conversation`: `continued`, atau `new` dengan sebab `requested`, `no-history`, atau `continue-failed` (plus alasannya).
 
 **Master-bot yang memutuskan, bukan `claude`:**
 

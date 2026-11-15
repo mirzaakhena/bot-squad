@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { COMMANDS, createMasterBot, helpText, RESTART_USAGE, STOP_USAGE } from "../src/bot.ts";
+import { COMMANDS, createMasterBot, helpText, NEW_USAGE, RESTART_USAGE, STOP_USAGE } from "../src/bot.ts";
 import type { ConversationMode, LaunchResult } from "../src/launch.ts";
 import { readRegistry, registryPath, writeRegistry, type BotStatus } from "../src/registry.ts";
 import type { StopResult } from "../src/stop.ts";
@@ -254,7 +254,7 @@ describe("/restart", () => {
         ["launch", name],
       ]);
       const t = texts();
-      expect(t[0]).toBe(`Menyalakan ulang '${name}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /restart ${name} new`);
+      expect(t[0]).toBe(`Menyalakan ulang '${name}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /new ${name}`);
       expect(t[1]).toContain(`('${name}') aktif.`);
       expect(status(name)).toBe("active");
       expect(status("sr-h-lain")).toBe("failed");
@@ -379,7 +379,8 @@ describe("bot yang sedang diproses", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tiket 261115100301: /restart melanjutkan percakapan terakhir, /restart <nama> new memulai yang baru.
+// Tiket 261115100301: /restart melanjutkan percakapan terakhir. Percakapan baru lewat
+// /new (tiket 261115202401, master/test/new.test.ts); /restart <nama> new tidak berlaku lagi.
 
 describe("/restart dan percakapan (261115100301)", () => {
   test("/restart <nama>: dinyalakan dengan mode continue; kedua balasan menyebut percakapan dilanjutkan", async () => {
@@ -397,22 +398,6 @@ describe("/restart dan percakapan (261115100301)", () => {
     expect(t[1]).toContain("Percakapan terakhir dilanjutkan.");
     expect(t[1]).not.toContain("Percakapan baru");
     expect(status("sr-p1")).toBe("active");
-  });
-
-  test("/restart <nama> new: mode new; kedua balasan menyebut percakapan baru", async () => {
-    seed({ "sr-p2": "active" });
-    const { bot, calls, modes, settle } = makeBot({
-      launch: async () => ({ kind: "active", pid: 1, conversation: { kind: "new", why: "requested" } }),
-    });
-    await bot.handleUpdate(ownerDm("/restart sr-p2 new"));
-    await settle();
-    expect(calls).toEqual([["stop", "sr-p2"], ["launch", "sr-p2"]]);
-    expect(modes).toEqual(["new"]);
-    const t = texts();
-    expect(t[0]).toBe("Menyalakan ulang 'sr-p2' dengan percakapan baru...");
-    expect(t[1]).toContain("('sr-p2') aktif.");
-    expect(t[1]).toContain("Percakapan baru dimulai.");
-    expect(t[1]).not.toContain("dilanjutkan");
   });
 
   test("/restart <nama> tanpa percakapan sebelumnya: aktif (bukan gagal), laporan menjelaskan", async () => {
@@ -443,27 +428,26 @@ describe("/restart dan percakapan (261115100301)", () => {
     expect(status("sr-p4")).toBe("active");
   });
 
-  test("hasil tanpa keterangan percakapan: laporan mengikuti mode yang diminta", async () => {
+  test("hasil tanpa keterangan percakapan: laporan menyebut percakapan dilanjutkan", async () => {
     seed({ "sr-p5": "active" });
     const { bot, settle } = makeBot({});
     await bot.handleUpdate(ownerDm("/restart sr-p5"));
     await settle();
-    await bot.handleUpdate(ownerDm("/restart sr-p5 new"));
-    await settle();
-    const done = texts().filter((x) => x.includes("aktif."));
-    expect(done[0]).toContain("Percakapan terakhir dilanjutkan.");
-    expect(done[1]).toContain("Percakapan baru dimulai.");
+    expect(texts()[1]).toContain("Percakapan terakhir dilanjutkan.");
   });
 
   for (const [label, arg] of [
+    ["new", "sr-p6 new"],
     ["kata lain", "sr-p6 baru"],
     ["huruf besar", "sr-p6 NEW"],
     ["tiga argumen", "sr-p6 new new"],
     ["new di depan", "new sr-p6"],
     ["nama tak sah dengan new", "Sr-P6 new"],
     ["token mirip new", "sr-p6 new!"],
+    ["tak terdaftar dengan new", "sr-tidak-ada new"],
+    ["bot bernama new dengan new", "new new"],
   ] as const) {
-    test(`/restart ${label} ('${arg}'): cara pakai, bot tidak disentuh`, async () => {
+    test(`/restart ${label} ('${arg}'): cara pakai yang menyebut /new, bot tidak disentuh`, async () => {
       seed({ "sr-p6": "active", new: "active" });
       const before = readFileSync(registryPath(home), "utf8");
       const { bot, calls, settle } = makeBot({});
@@ -471,56 +455,29 @@ describe("/restart dan percakapan (261115100301)", () => {
       await settle();
       expect(calls).toEqual([]);
       expect(texts()).toEqual([RESTART_USAGE]);
+      expect(texts()[0]).toContain("Untuk percakapan baru: /new <nama>");
       expect(readFileSync(registryPath(home), "utf8")).toBe(before);
     });
   }
 
-  test("/restart <tak terdaftar> new: ditolak, tidak ada yang disentuh", async () => {
-    seed({ "sr-p7": "active" });
-    const { bot, calls, settle } = makeBot({});
-    await bot.handleUpdate(ownerDm("/restart sr-tidak-ada new"));
-    await settle();
-    expect(calls).toEqual([]);
-    expect(texts()[0]).toContain("Bot 'sr-tidak-ada' tidak terdaftar.");
-  });
-
-  test("bot bernama 'new' tetap bisa dinyalakan ulang", async () => {
+  test("bot bernama 'new' tetap bisa dinyalakan ulang, selalu melanjutkan", async () => {
     seed({ new: "active" });
     const { bot, calls, modes, settle } = makeBot({});
     await bot.handleUpdate(ownerDm("/restart new"));
     await settle();
-    await bot.handleUpdate(ownerDm("/restart new new"));
-    await settle();
-    expect(calls.filter((c) => c[0] === "launch")).toEqual([["launch", "new"], ["launch", "new"]]);
-    expect(modes).toEqual(["continue", "new"]);
+    expect(calls.filter((c) => c[0] === "launch")).toEqual([["launch", "new"]]);
+    expect(modes).toEqual(["continue"]);
   });
 
-  test("/restart <nama> new saat bot sedang diproses: ditolak seperti biasa", async () => {
-    seed({ "sr-p8": "active" });
-    let release!: (r: LaunchResult) => void;
-    const { bot, calls, settle } = makeBot({ launch: () => new Promise((r) => (release = r)) });
-    await bot.handleUpdate(ownerDm("/restart sr-p8"));
-    await bot.handleUpdate(ownerDm("/restart sr-p8 new"));
-    expect(texts().at(-1)).toBe("'sr-p8' sedang dinyalakan ulang, coba lagi setelah selesai.");
-    await Bun.sleep(10);
-    release({ kind: "active", pid: 1 });
-    await settle();
-    expect(calls.filter((c) => c[0] === "launch")).toHaveLength(1);
-  });
-
-  test("gagal menyala dengan /restart <nama> new: laporan gagal biasa, tanpa kalimat percakapan", async () => {
-    seed({ "sr-p9": "active" });
-    const { bot, settle } = makeBot({ launch: async () => ({ kind: "failed", reason: "x", sessionAlive: false }) });
-    await bot.handleUpdate(ownerDm("/restart sr-p9 new"));
-    await settle();
-    expect(texts()[1]).toContain("gagal dinyalakan: x.");
-    expect(texts()[1]).not.toContain("Percakapan");
-    expect(status("sr-p9")).toBe("failed");
-  });
-
-  test("/help dan menu menyebut /restart <nama> [new]", () => {
-    expect(helpText()).toContain("/restart - Nyalakan ulang satu bot: /restart <nama> [new]");
-    expect(COMMANDS.find((c) => c.command === "restart")!.description).toContain("/restart <nama> [new]");
-    expect(RESTART_USAGE).toContain("/restart <nama> [new]");
+  test("/help, menu, dan cara pakai: /restart tanpa [new], ada /new <nama>, tidak ada /start", () => {
+    expect(helpText()).toContain("/restart - Nyalakan ulang satu bot, percakapan dilanjutkan: /restart <nama>");
+    expect(helpText()).toContain("/new - Mulai percakapan baru di satu bot (dengan konfirmasi): /new <nama>");
+    expect(helpText()).not.toContain("[new]");
+    expect(helpText()).not.toContain("/start");
+    expect(COMMANDS.map((c) => c.command as string)).not.toContain("start");
+    expect(COMMANDS.map((c) => c.command as string)).toContain("new");
+    expect(RESTART_USAGE).toStartWith("Cara pakai: /restart <nama>\n");
+    expect(RESTART_USAGE).not.toContain("[new]");
+    expect(NEW_USAGE).toStartWith("Cara pakai: /new <nama>\n");
   });
 });

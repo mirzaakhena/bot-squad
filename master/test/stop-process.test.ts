@@ -212,7 +212,7 @@ describe.skipIf(!TMUX)("/stop dan /restart (proses sungguhan)", () => {
       readFileSync(join(state(NAME), "argv.log"), "utf8").split("\n").filter(Boolean).map((l) => l.split(" ")[0] === "--continue");
     expect(continued()).toEqual([false]); // /register
     const rs = await command(m, `/restart ${NAME}`, 2, 30_000);
-    expect(rs[0]).toBe(`Menyalakan ulang '${NAME}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /restart ${NAME} new`);
+    expect(rs[0]).toBe(`Menyalakan ulang '${NAME}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /new ${NAME}`);
     expect(rs[1]).toContain(`('${NAME}') aktif.`);
     expect(rs[1]).toContain("Percakapan baru dimulai: belum ada percakapan sebelumnya di folder kerja bot ini.");
     expect(continued()).toEqual([false, false]);
@@ -240,8 +240,27 @@ describe.skipIf(!TMUX)("/stop dan /restart (proses sungguhan)", () => {
     for (const pid of others) expect(alive(pid)).toBe(true);
     expect(hasSession("srp-01-lain")).toBe(true);
 
-    // /restart <nama> new: percakapan kosong walau ada percakapan lama; transkrip lama tidak dihapus.
-    const rs3 = await command(m, `/restart ${NAME} new`, 2, 30_000);
+    // Tiket 261115202401: /restart <nama> new tidak berlaku lagi (cara pakai, bot tidak disentuh).
+    const old = await command(m, `/restart ${NAME} new`, 1, 10_000);
+    expect(old[0]).toStartWith("Cara pakai: /restart <nama>\n");
+    expect(old[0]).toContain("/new <nama>");
+    await Bun.sleep(500);
+    expect(servers(NAME)).toEqual([pid3]);
+    expect(continued()).toHaveLength(3);
+
+    // /new <nama>: bertanya dulu; sebelum tombol ditekan bot tidak disentuh.
+    const ask = await command(m, `/new ${NAME}`, 1, 10_000);
+    expect(ask[0]).toContain(`Mulai percakapan baru di bot`);
+    await Bun.sleep(500);
+    expect(servers(NAME)).toEqual([pid3]);
+    expect(continued()).toHaveLength(3);
+    const kb = tg.calls.filter((c) => c.method === "sendMessage" && c.params.reply_markup).at(-1)!;
+    const yes = (kb.params.reply_markup as any).inline_keyboard[0].find((b: any) => b.text === "Mulai baru").callback_data as string;
+    // Setelah dikonfirmasi: percakapan kosong walau ada percakapan lama; transkrip lama tidak dihapus.
+    const beforeNew = reports().length;
+    tg.push({ update_id: 778001, callback_query: { id: "cbn1", from: { id: OWNER, is_bot: false, first_name: "u" }, chat_instance: "ci", data: yes, message: { message_id: 5, date: 0, chat: { id: OWNER, type: "private" }, text: "?" } } } as any);
+    await m.until(() => reports().length >= beforeNew + 2, "2 balasan untuk tombol /new", 30_000);
+    const rs3 = reports().slice(beforeNew);
     expect(rs3[0]).toBe(`Menyalakan ulang '${NAME}' dengan percakapan baru...`);
     expect(rs3[1]).toContain("aktif.");
     expect(rs3[1]).toContain("Percakapan baru dimulai.");
@@ -255,9 +274,9 @@ describe.skipIf(!TMUX)("/stop dan /restart (proses sungguhan)", () => {
     const pid4 = Number(readFileSync(botPaths(home, NAME).pidFile, "utf8"));
     expect(servers(NAME)).toEqual([pid4]);
 
-    // Argumen kedua selain 'new': cara pakai, bot tidak disentuh.
+    // Argumen kedua lain: cara pakai, bot tidak disentuh.
     const bad = await command(m, `/restart ${NAME} baru`, 1, 10_000);
-    expect(bad[0]).toStartWith("Cara pakai: /restart <nama> [new]");
+    expect(bad[0]).toStartWith("Cara pakai: /restart <nama>\n");
     await Bun.sleep(500);
     expect(servers(NAME)).toEqual([pid4]);
     expect(continued()).toHaveLength(4);

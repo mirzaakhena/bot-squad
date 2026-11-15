@@ -53,7 +53,7 @@ describe("menu sisa dari bot lain ditimpa saat master-bot menyala", () => {
       const { code, out } = await runUntilReply(tg);
       expect(code).toBe(0);
       expect(tg.privateMenu(OWNER)).toEqual(MASTER_MENU);
-      expect(tg.privateMenu(OWNER).map((c) => c.command)).toEqual(["start", "help", "register", "list", "stop", "restart", "logs", "keys", "quota", "allow", "revoke", "access", "delete"]);
+      expect(tg.privateMenu(OWNER).map((c) => c.command)).toEqual(["help", "register", "list", "stop", "restart", "new", "logs", "keys", "quota", "allow", "revoke", "access", "delete"]);
       expect(out).not.toContain("peringatan: menu");
     } finally {
       tg.stop();
