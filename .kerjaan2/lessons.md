@@ -57,3 +57,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - tmux send-keys untuk karakter dari pemilik: petakan dari daftar tertutup dan kirim harfiah dengan -l; uji dengan penerima mode raw (bun, process.stdin.setRawMode) yang mencatat hex per potongan
 - Konfirmasi dua tombol master-bot ada di satu tempat (confirmations + askConfirm di master/src/bot.ts); jenis baru cukup menambah entri, jangan menyalin penangan tombol
 - Perintah master-bot yang butuh satu nama bot didaftarkan lewat named() di master/src/bot.ts (bukan bot.command), supaya otomatis dapat pemilih bot dan tombolnya menjalankan fungsi yang sama
+- Aturan nama bot untuk perintah master-bot dicek di withNameRule (master/src/bot.ts); pekerjaan baru yang menerima nama bot dibungkus dengannya, jangan menambah cek NAME_RULE di penangan perintah

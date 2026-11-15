@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readAccess } from "./allow.ts";
 import { describeError, type Logger } from "./log.ts";
+import { NAME_RULE } from "./register.ts";
 import { readRegistry } from "./registry.ts";
 
 /**
@@ -16,6 +17,11 @@ import { readRegistry } from "./registry.ts";
  * user_id tidak pernah ada di data tombol. Nomor merujuk daftar yang dicatat
  * di sini saat pertanyaan dikirim, dan pilihan dicek ulang terhadap registry
  * saat ditekan.
+ *
+ * Nama di registry yang tidak lolos aturan nama bot (registry diedit tangan
+ * atau rusak, tiket 261115210901) tidak pernah menjadi tombol, dan ketukan
+ * yang merujuknya ditolak sebelum apa pun dibaca. Pekerjaan perintahnya
+ * sendiri juga menolak nama itu (`withNameRule` di bot.ts).
  */
 
 export const PICK_COMMANDS = ["stop", "restart", "new", "logs", "access", "delete", "revoke"] as const;
@@ -69,6 +75,8 @@ export type PickerDeps = {
   actions: Record<Exclude<PickCommand, "revoke">, (ctx: PickContext, name: string) => Promise<void>>;
   /** Pekerjaan /revoke <nama> <user_id>. */
   revoke: (ctx: PickContext, name: string, userId: string) => Promise<void>;
+  /** Aturan nama bot. Bawaan NAME_RULE; hanya tes yang menggantinya. */
+  isBotName?: (name: string) => boolean;
 };
 
 /** Bot yang ditampilkan: nama dan identitas entri registry saat itu. */
@@ -90,6 +98,7 @@ export function pickKeyboard(id: string, labels: string[]): Button[][] {
 
 export function createPicker(d: PickerDeps) {
   const pending = new Map<string, Entry>();
+  const isBotName = d.isBotName ?? ((name: string) => NAME_RULE.test(name));
 
   const remember = (entry: Entry): string => {
     for (const [id, e] of pending) if (e.expires <= d.now()) pending.delete(id);
@@ -122,7 +131,8 @@ export function createPicker(d: PickerDeps) {
       await reply(`${err instanceof Error ? err.message : "registry.json tidak bisa dibaca"}. Tidak ada yang diubah.`);
       return;
     }
-    const names = Object.keys(bots).sort();
+    // Nama tidak sah diperlakukan seperti tidak ada: bukan tombol, tidak dihitung.
+    const names = Object.keys(bots).filter(isBotName).sort();
     if (names.length === 0) {
       await reply(PICK_NO_BOTS);
       return;
@@ -196,6 +206,11 @@ export function createPicker(d: PickerDeps) {
     const bot = entry.step === "bot" ? entry.bots[n] : entry.bot;
     const userId = entry.step === "user" ? entry.users[n] : undefined;
     if (!bot || (entry.step === "user" && userId === undefined)) return expired();
+    // Aturan nama dicek sebelum registry atau berkas apa pun dibaca.
+    if (!isBotName(bot.name)) {
+      d.log(`/${entry.command} ditolak: tombol pemilih merujuk nama bot yang tidak sesuai aturan nama`);
+      return expired();
+    }
     // Dicek ulang: bot yang ditampilkan bisa sudah dihapus, atau namanya kini milik bot lain.
     const current = stillThere(bot);
     if (!current) {
