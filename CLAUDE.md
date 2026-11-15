@@ -341,9 +341,11 @@ Fakta `rate_limits` yang teramati dan terdokumentasi:
 - Tidak ada rincian per model (`/usage` menampilkan juga `Current week (Fable) 28%`), tidak ada kredit tambahan, dan tidak ada angka token atau dolar.
 - Hanya ada di bot yang bridge-nya terpasang (`statusline.json` menyatakan terpasang). Bot yang dinyalakan sebelum fitur `/context` atau yang statusline-nya ditolak pagar tidak punya `status.json`. Kalau tidak ada satu pun bot dengan data, `/quota` harus bilang begitu, bukan menebak.
 
-## Bot berkirim pesan ke bot lain: temuan dan rancangan (tiket 261112230309, Claude Code 2.1.323, BELUM DIUJI)
+## Bot berkirim pesan ke bot lain: temuan dan rancangan (tiket 261112230309, Claude Code 2.1.323, BELUM DIUJI, DIBATALKAN)
 
-Status: **rancangan untuk didiskusikan, belum ada yang dibuktikan dengan uji kirim** (keputusan pemilik Q5, 2026-11-13). Uji sungguhan terhenti karena login (lihat "Langkah uji yang belum dijalankan"). Setiap klaim di bawah diberi tanda **[BD: sumber]** (belum dibuktikan). Sumbernya salah satu dari tiga: `strings` biner Claude Code 2.1.323 (`~/.local/share/claude/versions/2.1.323`), berkas registri sesi `~/.claude/sessions/<pid>.json` (hanya dibaca; berkas `.key` tidak dibaca), atau README mirza-bots. Implementasinya di tiket 261113230601, dan baru dikerjakan setelah rancangan ini disetujui pemilik.
+**Dibatalkan pemilik (2026-11-15).** Tiket implementasi 261113230601 dibatalkan dan tidak ada fitur bot-squad untuk ini. Pemilik melakukannya manual: (1) meminta bot tujuan menyebut session-id-nya, lalu (2) meminta bot pengirim menghubungi bot tujuan dengan session-id itu. Menurut pengalaman pemilik cara ini berhasil, jadi klaim di bawah bahwa session-id bukan alamat untuk sesi lokal tidak sesuai dengan pemakaian nyata (klaim itu memang belum dibuktikan). Sisa bagian ini hanya arsip temuan dan rancangan, bukan rencana.
+
+Status saat ditulis: **rancangan untuk didiskusikan, belum ada yang dibuktikan dengan uji kirim** (keputusan pemilik Q5, 2026-11-13). Uji sungguhan terhenti karena login (lihat "Langkah uji yang belum dijalankan"). Setiap klaim di bawah diberi tanda **[BD: sumber]** (belum dibuktikan). Sumbernya salah satu dari tiga: `strings` biner Claude Code 2.1.323 (`~/.local/share/claude/versions/2.1.323`), berkas registri sesi `~/.claude/sessions/<pid>.json` (hanya dibaca; berkas `.key` tidak dibaca), atau README mirza-bots. Implementasinya dulu direncanakan di tiket 261113230601 (dibatalkan).
 
 ### Mekanisme bawaan Claude Code
 
@@ -374,7 +376,7 @@ Mengapa hasilnya tetap benar:
 - **Setelah `/clear`**: prosesnya sama, jadi soket dan alamat `uds:` tidak berubah. `sessionId` di berkas registri diperbarui lewat penanganan `onSessionSwitch` (`updatePidFile({sessionId})`). Nama turunan bisa ikut berubah kalau flag `tengu_session_stable_address` hidup, dan inilah alasan lain untuk tidak memakai nama sesi. [BD: strings kode `Hu((U,H)=>...Qn({sessionId:U...}))`]
 - Sumber cadangan untuk `sessionId`: `session_id` di `<state>/status.json` dari bridge statusline. Ia hanya diperbarui saat statusline digambar ulang, jadi bisa tertinggal sebentar setelah `/clear`. [BD]
 
-### Rancangan tahap 2 (261113230601)
+### Rancangan tahap 2 (261113230601, dibatalkan)
 
 - **Alamat hanya nama bot.** Plugin bot-squad menambah satu alat MCP, misalnya `cari_bot(nama)`, yang menjalankan pencarian di atas setiap kali dipanggil dan tidak menyimpan hasilnya. Bot lalu memanggil `SendMessage({to: "uds:<soket>", message})`. Instruksi plugin melarang bot memakai `ListAgents` atau nama sesi untuk memilih tujuan.
 - **Jawaban yang selalu ada (tidak ada pesan hilang diam-diam).** `cari_bot` mengembalikan error yang jelas:
@@ -460,7 +462,7 @@ Selesai:
 Direncanakan (backlog):
 
 - [ ] Perintah chat bot yang mengetik ke sesi Claude (interrupt, new, rename, branch/switch): ditunda menunggu rancangan mekanismenya (tiket 261112230302); lihat prinsip perintah terpilih di atas
-- [ ] Perbaikan lain di backlog: pesan pertama ke bot baru yang kadang terlambat (261112223103), tes master-bot yang kadang gagal acak (261113194401), penjaga balasan Claude (261112230307), bot berkirim pesan ke bot lain (261112230309)
+- [ ] Perbaikan lain di backlog: pesan pertama ke bot baru yang kadang terlambat (261112223103), tes master-bot yang kadang gagal acak (261113194401), penjaga balasan Claude (261112230307)
 - [ ] Master-bot sendiri belum dinyalakan otomatis setelah reboot
 
 ## Cara bekerja di proyek ini
