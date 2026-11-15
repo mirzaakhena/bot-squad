@@ -35,6 +35,7 @@ Prasyarat: `~/.bot-squad/master/.env` berisi `OWNER_TELEGRAM_ID`, dan `~/.bot-sq
 ```bash
 tmux new-session -d -s <nama> -x 200 -y 50 -c ~/.bot-squad/bots/<nama>/workspace \
   -e TELEGRAM_STATE_DIR=$HOME/.bot-squad/bots/<nama>/state \
+  -e CLAUDE_CODE_RESUME_THRESHOLD_MINUTES=999999999 -e CLAUDE_CODE_RESUME_TOKEN_THRESHOLD=999999999 \
   claude \
     --setting-sources project,local \
     --settings '{"skipDangerousModePermissionPrompt":true,"statusLine":{"type":"command","command":"bun '"'"'<repo>/plugin/bot-squad-statusline.ts'"'"' '"'"'<state>'"'"'"}}' \
@@ -86,8 +87,53 @@ Keputusan pemilik (2026-11-15): `/restart <nama>` dan penyalaan otomatis melanju
 **Belum terbukti (butuh akun Claude yang login; lihat butir pemilik di tiket):**
 
 - Bahwa Claude benar-benar mengingat percakapan setelah `--continue` dan channel plugin tetap menerima pesan. Tanpa login, layar menulis `Channels are not currently available`, jadi dialog development channel tidak muncul di uji ini; urutan dialog itu terhadap tampilnya percakapan lama belum terlihat.
-- **Dialog saat melanjutkan percakapan lama.** Dari teks biner 2.1.325 (bukan dari uji): (1) `This session is <umur> old and <n> tokens.` dengan pilihan `Resume from summary (recommended)`, `Resume full session as-is`, `Don't ask me again`, muncul kalau pesan terakhir lebih tua dari 70 menit dan percakapan di atas 100 ribu token (`CLAUDE_CODE_RESUME_THRESHOLD_MINUTES`, `CLAUDE_CODE_RESUME_TOKEN_THRESHOLD`), di balik flag server, dan tidak muncul lagi setelah `Don't ask me again` (`resumeReturnDismissed` di `~/.claude.json`); (2) `Resume this conversation?` (peringatan kuota 5 jam, pilihan `Start a new conversation`/`Resume from summary`), juga dimatikan `resumeReturnDismissed`; (3) tawaran model yang lebih baru. Keadaan (1) persis keadaan bot setelah server reboot. Kalau salah satu muncul, master-bot tidak menjawabnya: percobaan `--continue` dinyatakan gagal (`dialog tak terduga`, atau batas waktu kalau teksnya tidak dikenali) dan bot dinyalakan dengan percakapan kosong (langkah 3). Jadi bot tetap hidup, tetapi tidak melanjutkan. Menjawab dialog itu otomatis, atau mematikannya lewat variabel di atas, belum dibuat karena tidak bisa diuji tanpa login.
+- **Dialog saat melanjutkan percakapan lama** belum pernah terlihat di uji mana pun. Syarat, pencegahan, dan pilihan yang tersisa ada di bagian "Dialog saat melanjutkan percakapan lama" di bawah.
 - Setelah bot menyala kosong karena `continue-failed`, percakapan "terakhir" berikutnya adalah yang baru itu (begitu ada giliran); percakapan lama tetap di disk tetapi tidak dipilih lagi oleh `--continue`.
+
+## Dialog saat melanjutkan percakapan lama (tiket 261115105101, Claude Code 2.1.325)
+
+Saat membuka percakapan lama (`--continue` maupun `--resume`), Claude Code menjalankan tiga pemeriksaan berurutan, masing-masing bisa menampilkan dialog. Master-bot tidak pernah menjawab dialog ini; kalau satu muncul, jaring pengaman di "Melanjutkan percakapan terakhir" langkah 3 menyalakan bot dengan percakapan kosong. Dialog pertama dicegah per sesi bot; dua lainnya tidak bisa dicegah per sesi tanpa efek samping.
+
+**Yang dibuat.** Setiap sesi bot yang dibuka `launch.ts` (jadi `/register`, `/restart`, penyalaan otomatis, dan `scripts/start-bot.sh`, pada percobaan `--continue` maupun percobaan kosong) mendapat dua variabel lingkungan lewat `tmux new-session -e` (`RESUME_THRESHOLD_ENV` dan `sessionEnv()`): `CLAUDE_CODE_RESUME_THRESHOLD_MINUTES=999999999` dan `CLAUDE_CODE_RESUME_TOKEN_THRESHOLD=999999999`. Nilai di lingkungan master-bot atau pemanggil `start-bot.sh` tidak dipakai (`-e` menimpanya). Tidak ada berkas konfigurasi Claude yang ditulis, jadi sesi Claude lain di mesin tidak terpengaruh. Bot yang sudah berjalan baru mendapatkannya setelah dinyalakan ulang.
+
+Semua syarat di bawah **hanya dari membaca kode di biner 2.1.325** (`~/.local/share/claude/versions/2.1.325`), kecuali yang disebut di "Terbukti dengan menjalankan". Uji ulang setelah Claude Code di-upgrade: cari `CLAUDE_CODE_RESUME_THRESHOLD_MINUTES??70` dan semua pemakaian `resumeReturnDismissed`.
+
+| Dialog | Muncul kalau (semua harus terpenuhi) | Bisa dicegah per sesi bot? |
+| :- | :- | :- |
+| 1. `This session is <umur> old and <n> tokens.` Pilihan `Resume from summary (recommended)`, `Resume full session as-is`, `Don't ask me again` | Flag server `tengu_gleaming_fair` atau `tengu_gleaming_fair_reuse` hidup (bawaan mati); `resumeReturnDismissed` di konfigurasi global belum diset; pesan user/assistant terakhir (yang lebih tua dari 1 menit) berumur minimal `CLAUDE_CODE_RESUME_THRESHOLD_MINUTES` menit (bawaan 70); perkiraan token percakapan minimal `CLAUDE_CODE_RESUME_TOKEN_THRESHOLD` (bawaan 100 ribu) | **Ya, sudah dibuat**: dua variabel di atas |
+| 2. `Resume this conversation?` (peringatan kuota 5 jam; pilihan melanjutkan, `Start a new conversation`, kadang `Resume from summary`) | Flag server `tengu_amber_tally` berisi tabel kredit yang sah (bawaan kosong, berarti mati); prompt caching aktif untuk model itu; `resumeReturnDismissed` belum diset; akun tidak sedang kena batas kuota; cache percakapan sudah dingin (pesan terakhir lebih tua dari masa cache, 5 menit atau 1 jam) atau modelnya berbeda dari pesan terakhir; perkiraan biaya mengirim ulang konteks minimal `minPercent` (bawaan 5%) dari kuota 5 jam | **Tidak** ada variabel ambang. Lihat pilihan di bawah |
+| 3. Tawaran model lebih baru: `You're resuming a <lama> session. Continue with <baru>?` | `resumeReturnDismissed` belum diset; model bawaan sesi lebih baru (keluarga yang sama) dari model percakapan itu dan belum ada pesan dari model baru; aktivitas terakhir minimal 2 jam lalu; harga model baru tidak lebih mahal; flag server `tengu_hidden_volcano` berisi `enabled: true` dan `form` (`line` atau `dialog`); belum ditawarkan 2 kali untuk model itu dan tawaran terakhir (model apa pun) minimal 168 jam lalu | **Tidak** ada variabel. Bentuk `line` hanya satu baris pemberitahuan 60 detik (tidak menghalangi); bentuk `dialog` menghalangi |
+
+Rincian dialog 1 (dasar nilai yang dipilih):
+
+- Kedua nama dibaca dari `process.env` proses `claude` setiap kali diperiksa, bukan dari berkas pengaturan. Nilainya diurai sebagai bilangan bulat: `parseInt` basis 10 (juga menerima notasi `1e9` dan pemisah ribuan `1,000`), tanpa batas bawah atau atas. Nilai yang tidak terbaca sebagai angka terhingga (`Infinity`, kata) **dibuang dan bawaan dipakai**, karena itu nilainya angka desimal polos.
+- Dialog dibatalkan kalau umur < ambang menit **atau** token < ambang token. Dengan 999999999 (sekitar 1.900 tahun; 1 miliar token) masing-masing variabel sendirian sudah cukup; keduanya dipasang.
+- Syaratnya dihitung dari isi transkrip, jadi sama untuk `--continue` dan `--resume <uuid>`.
+- `Don't ask me again` menulis `resumeReturnDismissed: true` ke konfigurasi global (`~/.claude.json`), yang juga mematikan dialog 2 dan 3, untuk semua sesi di mesin.
+
+Catatan dialog 2 dan 3:
+
+- `resumeReturnDismissed` dibaca dari konfigurasi global Claude, bukan dari pengaturan (`settings.json`), jadi `--settings` sesi tidak bisa mengisinya.
+- Peringatan kuota (dialog 2) juga punya pemicu `idle`: sesi yang **sedang berjalan** dan lama menganggur bisa ditanyai dengan dialog yang sama sebelum giliran berikutnya. Kapan tepatnya pemicu ini dipanggil, dan apakah berlaku untuk pesan yang masuk lewat channel, belum dibaca. Kalau bot yang lama menganggur tiba-tiba tidak menjawab, periksa layarnya (`/logs <nama>`).
+- Tawaran model (dialog 3) yang tampil di sesi bot mencatat `newerModelAsks` di konfigurasi global, jadi ikut menghabiskan jatah 2 tawaran untuk sesi pemilik.
+
+**Pilihan pemilik untuk dialog 2 dan 3** (tidak ada yang dikerjakan di tiket ini):
+
+| Pilihan | Akibat |
+| :- | :- |
+| A. Biarkan (keadaan sekarang) | Kalau dialog muncul, bot menyala dengan percakapan kosong dan laporan menyebut `percakapan terakhir tidak bisa dilanjutkan (dialog tak terduga muncul di layar)`; percakapan lama tetap di disk. Kedua flag server itu bawaannya mati |
+| B. `resumeReturnDismissed: true` di `~/.claude.json` | Mematikan ketiga dialog untuk **semua** sesi di mesin, termasuk sesi pemilik. Cara resminya memilih `Don't ask me again` di dialog 1 saat muncul di sesi pemilik; menulis berkas itu sendiri berisiko karena setiap sesi Claude yang berjalan menulis ulang berkas yang sama |
+| C. `CLAUDE_CODE_DISABLE_FEATURE_FLAGS=1` (atau `DISABLE_GROWTHBOOK=1`) di lingkungan sesi bot | Semua flag server kembali ke bawaan di sesi itu saja, jadi ketiga dialog mati. Efek sampingnya luas dan **belum diuji**: fitur lain di balik flag ikut berubah (misalnya pesan antarsesi yang dipakai bot untuk berkirim pesan) |
+| D. `DISABLE_PROMPT_CACHING=1` di lingkungan sesi bot | Mematikan dialog 2 saja, tetapi juga mematikan prompt caching, jadi kuota jauh lebih cepat habis. Tidak disarankan |
+| E. `CLAUDE_CONFIG_DIR` terpisah untuk bot, dengan `resumeReturnDismissed` di dalamnya | Tidak menyentuh sesi pemilik, tetapi bot kehilangan login, trust, dan riwayat percakapan di `~/.claude`; belum diuji |
+
+**Terbukti dengan menjalankan** (2026-11-15):
+
+- Kedua variabel sampai ke proses `claude` di sesi tmux lewat `/register`, `/restart`, penyalaan otomatis (proses `main.ts` sungguhan, claude tiruan yang mencatat environment-nya) dan lewat `scripts/start-bot.sh` sungguhan, termasuk saat pemanggil sudah punya nilai lain. Tes: `master/test/start-bot-process.test.ts`, `stop-process.test.ts`, `revive-process.test.ts`, `launch.test.ts` ("ambang dialog resume").
+- claude 2.1.325 sungguhan (HOME sementara tanpa login, server tmux terpisah) dengan kedua variabel dan `--continue` pada transkrip buatan berumur 5 jam dan sekitar 1,2 MB teks: percakapan lama tampil, `bypass permissions on` di footer, tanpa dialog, dan `ps -E` menunjukkan kedua variabel di proses itu. `.claude.json` HOME uji tidak mendapat `resumeReturnDismissed`.
+- Pembanding tanpa variabel pada transkrip yang sama **juga tidak menampilkan dialog**: tanpa login flag servernya mati. Jadi uji ini hanya membuktikan variabel itu tidak mengganggu start; bahwa dialog 1 muncul tanpa variabel dan hilang dengan variabel **belum pernah terlihat**.
+
+**Hanya dari membaca biner (belum terbukti):** semua syarat di tabel, cara nilai diurai, dan bahwa variabel itu benar-benar menahan dialog 1 di akun yang flag-nya hidup. Tes di `launch.test.ts` memakai salinan aturan urai dan syarat dari biner, bukan Claude Code sendiri. Bukti akhirnya butir pemilik di tiket: bot dengan percakapan lebih tua dari 70 menit dan besar, `/restart <nama>`, laporan `Percakapan terakhir dilanjutkan.`
 
 ## Menjalankan banyak bot bersamaan (hasil spike 261112184702, Claude Code 2.1.322, bun 1.3.11)
 
