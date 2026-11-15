@@ -29,12 +29,12 @@ import { archiveBot, markStoppedForDelete, type ArchiveResult } from "./delete.t
 
 /** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
 export const COMMANDS = [
-  { command: "start", description: "Tampilkan daftar perintah" },
   { command: "help", description: "Tampilkan daftar perintah" },
   { command: "register", description: "Daftarkan bot baru: /register <nama> <token>" },
   { command: "list", description: "Daftar bot beserta keadaan nyatanya" },
   { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
-  { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama> [new]" },
+  { command: "restart", description: "Nyalakan ulang satu bot, percakapan dilanjutkan: /restart <nama>" },
+  { command: "new", description: "Mulai percakapan baru di satu bot (dengan konfirmasi): /new <nama>" },
   { command: "logs", description: "Baris terakhir layar satu bot: /logs <nama> [n]" },
   { command: "keys", description: "Kirim tombol ke sesi satu bot: /keys <nama> <tombol...>" },
   { command: "quota", description: "Sisa kuota akun Claude (5 jam/7 hari)" },
@@ -68,7 +68,7 @@ export type MasterBotOptions = {
   registryHooks?: WriteHooks;
   /**
    * Menyalakan satu bot (asli: launchBot dengan realLaunchDeps). `mode`:
-   * "new" untuk /register dan /restart <nama> new, "continue" untuk /restart <nama>.
+   * "new" untuk /register dan /new <nama>, "continue" untuk /restart <nama>.
    */
   launch: (name: string, mode: ConversationMode) => Promise<LaunchResult>;
   /**
@@ -97,15 +97,15 @@ export type MasterBotOptions = {
   reportRetry?: RetryPolicy;
   /** Kait untuk tes penulisan access.json (/allow, /revoke). */
   accessHooks?: AccessWriteHooks;
-  /** Jam untuk masa berlaku tombol /delete dan cap waktu arsip; diganti di tes. */
+  /** Jam untuk masa berlaku tombol konfirmasi (/delete, /new) dan cap waktu arsip; diganti di tes. */
   now?: () => number;
-  /** Masa berlaku tombol konfirmasi /delete; default DELETE_CONFIRM_MS. */
+  /** Masa berlaku tombol konfirmasi /delete dan /new; default DELETE_CONFIRM_MS. */
   deleteConfirmMs?: number;
   /** Kait tes /delete: dipanggil tepat sebelum folder bot dipindah ke arsip. */
   beforeArchive?: (from: string, to: string) => void;
 };
 
-/** Tombol konfirmasi /delete berlaku 5 menit dan hanya sekali pakai (A1). */
+/** Tombol konfirmasi (/delete, /new) berlaku 5 menit dan hanya sekali pakai (A1). */
 export const DELETE_CONFIRM_MS = 5 * 60_000;
 
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -121,7 +121,7 @@ export function launchReport(
   username: string,
   res: LaunchResult,
   statusRecorded = true,
-  /** Mode yang diminta /restart; null (untuk /register) berarti percakapan tidak disebut. */
+  /** Mode yang diminta /restart ("continue") atau /new ("new"); null (untuk /register) berarti percakapan tidak disebut. */
   mode: ConversationMode | null = null,
 ): string {
   const who = `@${escapeHtml(username)} ('${name}')`;
@@ -194,13 +194,27 @@ export function restartBlockedReport(name: string, username: string, r: StopResu
 
 export const STOP_USAGE = "Cara pakai: /stop <nama>\nNama hanya huruf kecil, angka, dan '-'.";
 export const RESTART_USAGE =
-  "Cara pakai: /restart <nama> [new]\nNama hanya huruf kecil, angka, dan '-'.\n" +
-  "Tanpa 'new', percakapan terakhir bot dilanjutkan; dengan 'new', bot mulai dari percakapan kosong.";
+  "Cara pakai: /restart <nama>\nNama hanya huruf kecil, angka, dan '-'.\n" +
+  "Percakapan terakhir bot dilanjutkan. Untuk percakapan baru: /new <nama>";
+export const NEW_USAGE =
+  "Cara pakai: /new <nama>\nNama hanya huruf kecil, angka, dan '-'.\n" +
+  "Bot dinyalakan ulang dengan percakapan kosong, setelah dikonfirmasi. Untuk melanjutkan percakapan terakhir: /restart <nama>";
+export const NEW_EXPIRED = "Konfirmasi ini sudah kedaluwarsa atau sudah dipakai. Tidak ada yang diubah. Kirim /new <nama> lagi kalau masih perlu.";
 
-/** Balasan pertama /restart: menyebut percakapan mana yang akan dipakai. */
+/** Pertanyaan konfirmasi /new (HTML). */
+export function newQuestion(name: string, username: string): string {
+  return (
+    `Mulai percakapan baru di bot @${escapeHtml(username)} ('${name}')?\n\n` +
+    `Bot dinyalakan ulang dan mulai dari percakapan kosong: ia tidak ingat percakapan sebelumnya. ` +
+    `Percakapan lama tidak dihapus dari server. Untuk menyalakan ulang sambil melanjutkan percakapan terakhir, pakai /restart ${name}.\n\n` +
+    `Tombol berlaku 5 menit.`
+  );
+}
+
+/** Balasan pertama /restart dan /new (setelah dikonfirmasi): menyebut percakapan mana yang akan dipakai. */
 export function restartingText(name: string, mode: ConversationMode): string {
   return mode === "continue"
-    ? `Menyalakan ulang '${name}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /restart ${name} new`
+    ? `Menyalakan ulang '${name}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /new ${name}`
     : `Menyalakan ulang '${name}' dengan percakapan baru...`;
 }
 export const DELETE_USAGE = "Cara pakai: /delete <nama>\nNama hanya huruf kecil, angka, dan '-'.";
@@ -288,7 +302,11 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     opts.log(`update diabaikan dari ${senderIdForLog(ctx.update)}`);
   });
 
-  bot.command(["start", "help"], (ctx) => ctx.reply(helpText()));
+  bot.command("help", (ctx) => ctx.reply(helpText()));
+  // /start bukan perintah master-bot lagi (keputusan pemilik 2026-11-15, tiket
+  // 261115202401). Telegram tetap mengirimnya saat tombol Start ditekan, jadi
+  // ditelan di sini: tanpa balasan, tanpa perubahan apa pun.
+  bot.command("start", () => {});
 
   // /list hanya membaca: registry, folder bots/, sesi tmux, dan bot.pid.
   bot.command("list", async (ctx) => {
@@ -496,37 +514,41 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     }
   });
 
-  bot.command("restart", async (ctx) => {
-    // Argumen kedua hanya boleh 'new' (keputusan pemilik 2026-11-15, tiket 261115100301).
-    const words = (typeof ctx.match === "string" ? ctx.match : "").trim().split(/\s+/).filter(Boolean);
-    const mode: ConversationMode = words.length === 2 ? "new" : "continue";
-    const found =
-      words.length > 2 || (words.length === 2 && words[1] !== "new")
-        ? { reply: RESTART_USAGE }
-        : lookup(words[0] ?? "", RESTART_USAGE, "Tidak ada yang dinyalakan ulang.");
-    if ("reply" in found) {
-      await ctx.reply(found.reply);
-      return;
-    }
-    const { name, username } = found;
+  /**
+   * Henti lalu nyala untuk /restart ("continue") dan /new ("new", setelah
+   * dikonfirmasi): kunci, balasan pertama, laporan, dan status yang sama.
+   */
+  const restartBot = async (reply: (text: string) => Promise<unknown>, name: string, username: string, mode: ConversationMode) => {
     const release = locks.claim(name, "dinyalakan ulang");
     if (!release) {
-      await ctx.reply(busyText(name, locks.busyWith(name)!));
+      await reply(busyText(name, locks.busyWith(name)!));
       return;
     }
     try {
-      await ctx.reply(restartingText(name, mode));
+      await reply(restartingText(name, mode));
     } finally {
       inBackground(release, async () => {
         const res = await safeStop(name);
         if (!isClean(res)) {
-          opts.log(`/restart '${name}' batal: bot lama tidak bersih dimatikan`);
+          opts.log(`/${mode === "new" ? "new" : "restart"} '${name}' batal: bot lama tidak bersih dimatikan`);
           await sendReport("penyalaan", name, restartBlockedReport(name, username, res));
           return;
         }
         await launchAndReport(name, username, mode);
       });
     }
+  };
+
+  // /restart selalu melanjutkan percakapan terakhir. Argumen kedua apa pun
+  // (juga 'new', yang dulu berlaku) dijawab cara pakai; percakapan baru lewat
+  // /new (keputusan pemilik 2026-11-15, tiket 261115202401).
+  bot.command("restart", async (ctx) => {
+    const found = lookup(ctx.match, RESTART_USAGE, "Tidak ada yang dinyalakan ulang.");
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    await restartBot((t) => ctx.reply(t), found.name, found.username, "continue");
   });
 
   // /allow dan /revoke (tiket 261112225307): hanya allowFrom di access.json
@@ -601,14 +623,28 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     await ctx.reply(accessText(name, username, read.access, opts.ownerId));
   });
 
-  // /delete (tiket 261112225306): tidak ada yang berubah sebelum pemilik
-  // menekan tombol Hapus. Setiap tombol sekali pakai dan berlaku terbatas.
+  // Konfirmasi dengan dua tombol, dipakai /delete (tiket 261112225306) dan /new
+  // (tiket 261115202401): tidak ada yang berubah sebelum pemilik menekan tombol
+  // lanjut. Setiap tombol sekali pakai dan berlaku terbatas.
   const now = opts.now ?? Date.now;
   const confirmMs = opts.deleteConfirmMs ?? DELETE_CONFIRM_MS;
   // Tombol terikat pada bot yang ditanyakan (telegramId + createdAt), bukan
   // hanya nama: nama bisa dihapus lalu didaftarkan ulang selama tombol berlaku.
-  type Pending = { name: string; telegramId: unknown; createdAt: unknown; expires: number };
-  const pendingDeletes = new Map<string, Pending>();
+  type ConfirmKind = "del" | "new";
+  type Pending = { kind: ConfirmKind; name: string; telegramId: unknown; createdAt: unknown; expires: number };
+  type Reply = (text: string) => Promise<unknown>;
+  type Confirmation = {
+    command: string;
+    question: (name: string, username: string) => string;
+    yesLabel: string;
+    expired: string;
+    cancelled: (name: string) => string;
+    /** Akhiran balasan "tidak terdaftar". */
+    nothing: string;
+    /** Dijalankan setelah tombol lanjut lolos semua cek. */
+    run: (reply: Reply, name: string, username: string, p: Pending) => Promise<void>;
+  };
+  const pending = new Map<string, Pending>();
   /** Identitas entri registry bot itu sekarang, atau null kalau tidak terbaca/tidak ada. */
   const identityOf = (name: string): { telegramId: unknown; createdAt: unknown } | null => {
     try {
@@ -620,81 +656,14 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     }
   };
 
-  bot.command("delete", async (ctx) => {
-    const found = lookup(ctx.match, DELETE_USAGE, "Tidak ada yang dihapus.");
-    if ("reply" in found) {
-      await ctx.reply(found.reply);
-      return;
-    }
-    const { name, username } = found;
-    const busy = locks.busyWith(name);
-    if (busy) {
-      await ctx.reply(busyText(name, busy));
-      return;
-    }
-    for (const [id, p] of pendingDeletes) if (p.expires <= now()) pendingDeletes.delete(id);
-    // lookup sudah memastikan bot terdaftar. Kalau registry berubah di antara
-    // keduanya, identitas kosong tidak pernah cocok saat tombol ditekan.
-    const identity = identityOf(name) ?? { telegramId: null, createdAt: null };
-    const id = randomBytes(8).toString("hex");
-    pendingDeletes.set(id, { name, ...identity, expires: now() + confirmMs });
-    await ctx.reply(deleteQuestion(name, username), {
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "Hapus", callback_data: `del:yes:${id}` },
-          { text: "Batal", callback_data: `del:no:${id}` },
-        ]],
-      },
-    });
-  });
-
-  bot.callbackQuery(/^del:(yes|no):([0-9a-f]{16})$/, async (ctx) => {
-    const [, answer, id] = ctx.match as RegExpMatchArray;
-    const p = pendingDeletes.get(id!);
-    // Sekali pakai: diambil dari daftar apa pun jawabannya.
-    pendingDeletes.delete(id!);
-    const clearButtons = async () => {
-      try {
-        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
-      } catch (err) {
-        opts.log(`tombol /delete gagal dihapus: ${describeError(err)}`);
-      }
-    };
-    if (!p || p.expires <= now()) {
-      await ctx.answerCallbackQuery({ text: "Kedaluwarsa" });
-      await clearButtons();
-      await ctx.reply(DELETE_EXPIRED);
-      return;
-    }
-    const { name } = p;
-    await ctx.answerCallbackQuery();
-    await clearButtons();
-    if (answer !== "yes") {
-      await ctx.reply(`Penghapusan '${name}' dibatalkan. Tidak ada yang diubah.`);
-      return;
-    }
-    // Dicek ulang: bot bisa sudah dihapus lewat konfirmasi lain.
-    const again = lookupName(name, "Tidak ada yang dihapus.");
-    if ("reply" in again) {
-      await ctx.reply(again.reply);
-      return;
-    }
-    const { username } = again;
-    const current = identityOf(name);
-    if (!current || current.telegramId !== p.telegramId || current.createdAt !== p.createdAt) {
-      // Bot yang ditanyakan sudah dihapus dan nama itu kini milik bot lain.
-      opts.log(`/delete '${name}' ditolak: tombol untuk bot lama, nama itu kini didaftarkan ulang`);
-      await ctx.reply(DELETE_EXPIRED);
-      return;
-    }
+  const runDelete = async (reply: Reply, name: string, username: string, p: Pending) => {
     const release = locks.claim(name, "dihapus");
     if (!release) {
-      await ctx.reply(busyText(name, locks.busyWith(name)!));
+      await reply(busyText(name, locks.busyWith(name)!));
       return;
     }
     try {
-      await ctx.reply(`Menghapus '${name}'...`);
+      await reply(`Menghapus '${name}'...`);
     } finally {
       inBackground(release, async () => {
         const expectId = { telegramId: p.telegramId, createdAt: p.createdAt };
@@ -729,7 +698,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
             opts.log(`/delete '${name}' error: ${describeError(err)}`);
           }
           // Tombol lain untuk bot yang sudah dihapus tidak boleh berlaku lagi.
-          if (res.ok) for (const [k, q] of pendingDeletes) if (q.name === name) pendingDeletes.delete(k);
+          if (res.ok) for (const [k, q] of pending) if (q.name === name) pending.delete(k);
           opts.log(res.ok ? `/delete '${name}': dihapus, arsip ${res.archivedTo ?? "(tidak ada folder)"}` : `/delete '${name}' gagal: ${res.reason}`);
         } else {
           opts.log(`/delete '${name}' batal: bot tidak bersih dimatikan`);
@@ -737,6 +706,125 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
         await sendReport("penghapusan", name, deleteReport(name, username, stop, res));
       });
     }
+  };
+
+  const confirmations: Record<ConfirmKind, Confirmation> = {
+    del: {
+      command: "delete",
+      question: deleteQuestion,
+      yesLabel: "Hapus",
+      expired: DELETE_EXPIRED,
+      cancelled: (name) => `Penghapusan '${name}' dibatalkan. Tidak ada yang diubah.`,
+      nothing: "Tidak ada yang dihapus.",
+      run: runDelete,
+    },
+    new: {
+      command: "new",
+      question: newQuestion,
+      yesLabel: "Mulai baru",
+      expired: NEW_EXPIRED,
+      cancelled: (name) => `Percakapan baru untuk '${name}' dibatalkan. Tidak ada yang diubah.`,
+      nothing: "Tidak ada yang dinyalakan ulang.",
+      run: (reply, name, username) => restartBot(reply, name, username, "new"),
+    },
+  };
+
+  /**
+   * Mengirim pertanyaan konfirmasi untuk bot terdaftar `name`. Tidak mengubah
+   * apa pun; pekerjaannya baru jalan dari tombol lanjut. Bisa dipanggil dari
+   * perintah yang diketik maupun dari tempat lain (mis. tombol pemilih bot).
+   */
+  const askConfirm = async (
+    reply: (text: string, other?: { parse_mode: "HTML"; reply_markup: { inline_keyboard: { text: string; callback_data: string }[][] } }) => Promise<unknown>,
+    kind: ConfirmKind,
+    name: string,
+    username: string,
+  ) => {
+    const c = confirmations[kind];
+    const busy = locks.busyWith(name);
+    if (busy) {
+      await reply(busyText(name, busy));
+      return;
+    }
+    for (const [id, p] of pending) if (p.expires <= now()) pending.delete(id);
+    // Pemanggil sudah memastikan bot terdaftar. Kalau registry berubah di
+    // antara keduanya, identitas kosong tidak pernah cocok saat tombol ditekan.
+    const identity = identityOf(name) ?? { telegramId: null, createdAt: null };
+    const id = randomBytes(8).toString("hex");
+    pending.set(id, { kind, name, ...identity, expires: now() + confirmMs });
+    await reply(c.question(name, username), {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[
+          { text: c.yesLabel, callback_data: `${kind}:yes:${id}` },
+          { text: "Batal", callback_data: `${kind}:no:${id}` },
+        ]],
+      },
+    });
+  };
+
+  bot.command("delete", async (ctx) => {
+    const found = lookup(ctx.match, DELETE_USAGE, confirmations.del.nothing);
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    await askConfirm((t, o) => ctx.reply(t, o), "del", found.name, found.username);
+  });
+
+  // /new (tiket 261115202401): percakapan kosong, dengan konfirmasi yang sama
+  // seperti /delete; setelah dikonfirmasi langkahnya sama dengan /restart.
+  bot.command("new", async (ctx) => {
+    const found = lookup(ctx.match, NEW_USAGE, confirmations.new.nothing);
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    await askConfirm((t, o) => ctx.reply(t, o), "new", found.name, found.username);
+  });
+
+  bot.callbackQuery(/^(del|new):(yes|no):([0-9a-f]{16})$/, async (ctx) => {
+    const [, kind, answer, id] = ctx.match as RegExpMatchArray;
+    const c = confirmations[kind as ConfirmKind];
+    const found = pending.get(id!);
+    // Tombol hanya berlaku untuk perintah yang menanyakannya.
+    const p = found && found.kind === kind ? found : undefined;
+    // Sekali pakai: diambil dari daftar apa pun jawabannya.
+    if (p) pending.delete(id!);
+    const clearButtons = async () => {
+      try {
+        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+      } catch (err) {
+        opts.log(`tombol /${c.command} gagal dihapus: ${describeError(err)}`);
+      }
+    };
+    if (!p || p.expires <= now()) {
+      await ctx.answerCallbackQuery({ text: "Kedaluwarsa" });
+      await clearButtons();
+      await ctx.reply(c.expired);
+      return;
+    }
+    const { name } = p;
+    await ctx.answerCallbackQuery();
+    await clearButtons();
+    if (answer !== "yes") {
+      await ctx.reply(c.cancelled(name));
+      return;
+    }
+    // Dicek ulang: bot bisa sudah dihapus lewat konfirmasi lain.
+    const again = lookupName(name, c.nothing);
+    if ("reply" in again) {
+      await ctx.reply(again.reply);
+      return;
+    }
+    const current = identityOf(name);
+    if (!current || current.telegramId !== p.telegramId || current.createdAt !== p.createdAt) {
+      // Bot yang ditanyakan sudah dihapus dan nama itu kini milik bot lain.
+      opts.log(`/${c.command} '${name}' ditolak: tombol untuk bot lama, nama itu kini didaftarkan ulang`);
+      await ctx.reply(c.expired);
+      return;
+    }
+    await c.run((t) => ctx.reply(t), name, again.username, p);
   });
 
   // Tombol lain yang tidak dikenali (mis. dari versi lama): dijawab supaya

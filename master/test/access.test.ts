@@ -54,7 +54,21 @@ describe("master-bot tidak membalas akun lain", () => {
 });
 
 describe("pemilik dilayani", () => {
-  for (const cmd of ["/start", "/help"]) {
+  // Tiket 261115202401: /start bukan perintah master-bot lagi; ditelan diam-diam.
+  for (const cmd of ["/start", "/start apa-saja"]) {
+    test(`${cmd} dari pemilik: tidak dibalas, tidak ada panggilan Telegram, tidak dicatat sebagai diabaikan`, async () => {
+      const { tg, bot, logs } = setup();
+      try {
+        await bot.handleUpdate(ownerDm(cmd));
+        expect(tg.calls).toEqual([]);
+        expect(logs).toEqual([]);
+      } finally {
+        tg.stop();
+      }
+    });
+  }
+
+  for (const cmd of ["/help"]) {
     test(`${cmd} dibalas dengan daftar perintah`, async () => {
       const { tg, bot } = setup();
       try {
@@ -62,8 +76,9 @@ describe("pemilik dilayani", () => {
         expect(tg.calls.map((c) => c.method)).toEqual(["sendMessage"]);
         const p = tg.calls[0]!.params;
         expect(p.chat_id).toBe(OWNER);
-        expect(String(p.text)).toContain("/start");
+        expect(String(p.text)).not.toContain("/start");
         expect(String(p.text)).toContain("/help");
+        expect(String(p.text)).toContain("/new - ");
         expect(String(p.text)).toContain("/register");
         expect(JSON.stringify(p)).not.toContain(TOKEN);
       } finally {
