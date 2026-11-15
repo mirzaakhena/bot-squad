@@ -63,9 +63,10 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] /new <nama> yang diketik lengkap juga bertanya dulu dengan tombol konfirmasi, sama seperti lewat tombol pemilih bot nanti
+- A1 [confirmed] /new <nama> yang diketik lengkap juga bertanya dulu dengan tombol konfirmasi, sama seperti lewat tombol pemilih bot nanti
   Why: Pemilik menjawab soal konfirmasi dalam konteks tombol pemilih bot; disamakan dengan /delete <nama> supaya satu perilaku
   If wrong: Di perintah /new (master/src/bot.ts) panggil restartBot(..., "new") langsung alih-alih askConfirm, dan sesuaikan master/test/new.test.ts
+  Confirmed by owner, 2026-11-15
 
 ## Manual checks
 - M1 [waiting] (item 10) 1. Hentikan master-bot yang berjalan (Ctrl+C), lalu dari root repo jalankan: bun run --cwd master start.

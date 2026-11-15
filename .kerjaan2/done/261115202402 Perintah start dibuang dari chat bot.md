@@ -53,9 +53,10 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] /start ditelan untuk siapa pun dan di chat apa pun (juga grup dan /start dari orang tak diizinkan), tercatat tidak-diteruskan
+- A1 [confirmed] /start ditelan untuk siapa pun dan di chat apa pun (juga grup dan /start dari orang tak diizinkan), tercatat tidak-diteruskan
   Why: Perilaku ini sudah berlaku sebelum tiket untuk pengirim tak diizinkan dan grup (penangan perintah menelannya); tiket meminta 'seperti sekarang'
   If wrong: Batasi penangan start di plugin/server.ts ke chat pribadi dan teruskan sisanya ke next()
+  Confirmed by owner, 2026-11-15
 
 ## Handoff
 Di plugin/server.ts penangan /start kini kosong (bot.command('start', () => {})): /start, /start <teks>, /start@<bot> ditelan tanpa balasan, tanpa typing dan reaksi, tidak diteruskan ke Claude, dan tercatat tidak-diteruskan di plugin.log lewat middleware pencatat. Baris start dibuang dari setMyCommands (all_private_chats: help, status, context) dan dari teks /help. Jangan hapus penangan kosong itu: tanpa dia /start dari tombol Start Telegram menjadi pesan biasa dan memakai giliran Claude. Tes: plugin/test/commands.test.ts. Dokumen: docs/fitur-chat-bot.md, docs/log-bot.md, CLAUDE.md. master/ tidak disentuh.

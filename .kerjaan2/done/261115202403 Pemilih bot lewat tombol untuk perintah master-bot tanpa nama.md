@@ -65,15 +65,18 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Setelah tombol ditekan, pesan pertanyaan diganti seluruhnya dengan apa yang dipilih ('/logs: dipilih bot-01.' atau '/logs dibatalkan. Tidak ada yang diubah.'), bukan ditambahi di bawah teks lama
+- A1 [confirmed] Setelah tombol ditekan, pesan pertanyaan diganti seluruhnya dengan apa yang dipilih ('/logs: dipilih bot-01.' atau '/logs dibatalkan. Tidak ada yang diubah.'), bukan ditambahi di bawah teks lama
   Why: Tiket meminta tombol hilang dan pesannya menyebut pilihan; satu editMessageText melakukan keduanya dan chat jadi ringkas
   If wrong: Ubah teks di pickedBotText/pickedUserText/pickCancelledText di master/src/picker.ts
-- A2 [unseen] Kalau bot terdaftar (atau user_id) lebih dari 99, hanya 99 pertama yang jadi tombol dan pesannya menyuruh mengetik nama untuk sisanya
+  Confirmed by owner, 2026-11-15
+- A2 [confirmed] Kalau bot terdaftar (atau user_id) lebih dari 99, hanya 99 pertama yang jadi tombol dan pesannya menyuruh mengetik nama untuk sisanya
   Why: Telegram membatasi 100 tombol per pesan, satu dipakai cancel
   If wrong: Ganti PICK_MAX di master/src/picker.ts atau tambahkan halaman
-- A3 [unseen] Tombol pemilih hilang kalau master-bot dinyalakan ulang (dijawab kedaluwarsa), sama seperti tombol konfirmasi /delete
+  Confirmed by owner, 2026-11-15
+- A3 [confirmed] Tombol pemilih hilang kalau master-bot dinyalakan ulang (dijawab kedaluwarsa), sama seperti tombol konfirmasi /delete
   Why: Catatan tombol disimpan di memori, mengikuti mekanisme konfirmasi yang ada
   If wrong: Simpan catatan pemilih ke berkas di folder data
+  Confirmed by owner, 2026-11-15
 
 ## Manual checks
 - M1 [waiting] (item 10) 1. Nyalakan ulang master-bot (bun run --cwd master start) supaya kode baru dipakai.
@@ -100,4 +103,5 @@ Perintah /stop, /restart, /new, /logs, /access, /delete, /revoke tanpa argumen k
   note: registry berisi nama tak sah (mis. '../luar') tampil sebagai tombol dan pekerjaannya jalan lewat tombol, padahal diketik ditolak; hanya pada registry yang diedit tangan, dicatat sebagai F1.
 
 ## Follow-ups
-- F1 [open] Pemilih bot (master/src/picker.ts) menampilkan semua kunci registry.json sebagai tombol, juga nama yang tidak lolos NAME_RULE (mis. '../luar' di registry yang diedit tangan). Perintah yang diketik menolaknya dengan cara pakai, tetapi lewat tombol pekerjaannya jalan: /stop mencatat 'stopped', /restart dan /new memanggil penyalaan, /access dan /revoke membaca atau menulis access.json di luar bots/. stop.ts, launch.ts, delete.ts sungguhan menolak nama tak sah sendiri, jadi dampaknya terbatas. Usul: pemilih tidak menampilkan atau menolak nama yang tidak lolos NAME_RULE, dengan tes registry berisi kunci '../x'.
+- F1 [ticketed] Pemilih bot (master/src/picker.ts) menampilkan semua kunci registry.json sebagai tombol, juga nama yang tidak lolos NAME_RULE (mis. '../luar' di registry yang diedit tangan). Perintah yang diketik menolaknya dengan cara pakai, tetapi lewat tombol pekerjaannya jalan: /stop mencatat 'stopped', /restart dan /new memanggil penyalaan, /access dan /revoke membaca atau menulis access.json di luar bots/. stop.ts, launch.ts, delete.ts sungguhan menolak nama tak sah sendiri, jadi dampaknya terbatas. Usul: pemilih tidak menampilkan atau menolak nama yang tidak lolos NAME_RULE, dengan tes registry berisi kunci '../x'.
+  → 261115210901
