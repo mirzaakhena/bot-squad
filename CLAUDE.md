@@ -75,6 +75,7 @@ bun run --cwd master start
 - Perintah saat ini: `/start`, `/help`, `/register <nama> <token>`, `/list`, `/stop <nama>`, `/restart <nama> [new]`, `/logs <nama> [n]`, `/quota`, `/allow <nama> <user_id>`, `/revoke <nama> <user_id>`, `/access <nama>`, dan `/delete <nama>`. Perilaku rincinya di `docs/master-bot.md`.
 - Menyalakan satu bot tanpa master-bot: `scripts/start-bot.sh <nama-bot>` (kode yang sama, `master/src/launch.ts`; rincian di `docs/menyalakan-bot.md`).
 - Tes: `bun test` dari root repo. Tes memakai server Telegram tiruan (`master/test/fake-telegram.ts`), jadi tidak butuh token asli. Tes plugin dilewati kalau `plugin/node_modules` belum dipasang (`bun install --cwd plugin`). Rincian di `docs/tes.md`.
+- Folder `master/test/` dan `plugin/test/` dikecualikan dari secret scanning GitHub (`.github/secret_scanning.yml`): hanya boleh berisi token tiruan, token asli tidak akan terdeteksi. Lihat `docs/tes.md`.
 
 ## Jebakan yang berlaku lintas pekerjaan
 
@@ -96,7 +97,7 @@ bot-squad hanya mendukung beberapa perintah chat bot yang dipilih pemilik karena
 
 ## Bot berkirim pesan ke bot lain: dibatalkan
 
-Dibatalkan pemilik (2026-11-15): tidak ada fitur bot-squad untuk ini. Pemilik melakukannya manual lewat session-id (bot tujuan menyebut session-id-nya, lalu bot pengirim diminta menghubunginya dengan session-id itu). Riwayat riset dan rancangannya ada di tiket 261112230309 dan 261113230601.
+Dibatalkan pemilik (2026-11-15): tidak ada fitur bot-squad untuk ini. Tidak diperlukan: bot sudah bisa saling berkirim pesan dengan fitur bawaan Claude Code, cukup pemilik menyebut nama bot tujuan (terbukti dipakai pemilik, 2026-11-15). Bot pengirim menjalankan `ListAgents`, mencari baris yang kolom tmux-nya nama bot tujuan (nama sesi tmux selalu sama dengan nama bot), lalu mengirim ke nama sesi di baris itu. Session-id bukan alamat dan `status.json` tidak dipakai. Riwayat riset dan rancangannya ada di tiket 261112230309 dan 261113230601.
 
 ## Concern yang masih terbuka
 
