@@ -18,7 +18,7 @@ export const TELEGRAM_MAX_CHARS = 4096;
  * sebelum Telegram mengurai tag), jadi selalu di bawah 4096 apa pun cara
  * Telegram menghitungnya.
  */
-const REPLY_BUDGET = 4000;
+const DEFAULT_REPLY_BUDGET = 4000;
 
 export const LOGS_USAGE =
   `Cara pakai: /logs <nama> [n]\n` +
@@ -180,6 +180,8 @@ export type LogsDeps = {
   /** Token master-bot; ikut disensor. */
   masterToken: string;
   log: Logger;
+  /** Batas panjang balasan (teks HTML mentah); default REPLY_BUDGET. Dipakai /keys yang menambah kepala. */
+  budget?: number;
 };
 
 /**
@@ -220,6 +222,7 @@ export async function logsReport(name: string, username: string, wanted: number,
   const render = (shown: string[]) =>
     lines.length === 0 ? head(0) + note : `${head(shown.length)}\n<pre>${escapeHtml(shown.join("\n"))}</pre>${note}`;
 
+  const REPLY_BUDGET = d.budget ?? DEFAULT_REPLY_BUDGET;
   let shown = [...lines];
   let text = render(shown);
   while (shown.length > 1 && text.length > REPLY_BUDGET) {

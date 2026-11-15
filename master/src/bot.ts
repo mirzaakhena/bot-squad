@@ -7,6 +7,7 @@ import { readRegistry, setBotStatus, type BotStatus, type WriteHooks } from "./r
 import { conversationNote, isAlive, realTmux, type ConversationMode, type LaunchResult } from "./launch.ts";
 import { listReport, type ProbeDeps } from "./list.ts";
 import { LOGS_USAGE, logsReport, parseLogsArgs } from "./logs.ts";
+import { KEYS_USAGE, parseKeysArgs, realSendKey, sendKeysAndReport, type KeyName } from "./keys.ts";
 import { quotaReport } from "./quota.ts";
 import { busyText, createBotLocks, type BotLocks } from "./busy.ts";
 import { isClean, type StopResult } from "./stop.ts";
@@ -35,6 +36,7 @@ export const COMMANDS = [
   { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
   { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama> [new]" },
   { command: "logs", description: "Baris terakhir layar satu bot: /logs <nama> [n]" },
+  { command: "keys", description: "Kirim tombol ke sesi satu bot: /keys <nama> <tombol...>" },
   { command: "quota", description: "Sisa kuota akun Claude (5 jam/7 hari)" },
   { command: "allow", description: "Izinkan orang lain memakai satu bot: /allow <nama> <user_id>" },
   { command: "revoke", description: "Cabut akses orang lain ke satu bot: /revoke <nama> <user_id>" },
@@ -87,6 +89,10 @@ export type MasterBotOptions = {
   probe?: Omit<ProbeDeps, "dataDir">;
   /** Membaca layar sesi tmux untuk /logs; default realTmux.capture. Diganti di tes. */
   capture?: (name: string) => Promise<string | null>;
+  /** Mengirim satu tombol ke sesi tmux untuk /keys; default realSendKey. Diganti di tes. */
+  sendKey?: (name: string, key: KeyName) => Promise<boolean>;
+  /** Jeda /keys (antartombol dan sebelum layar dibaca); diganti di tes. */
+  keysTiming?: { gapMs?: number; settleMs?: number };
   /** Jeda kirim ulang laporan penyalaan; diganti di tes. */
   reportRetry?: RetryPolicy;
   /** Kait untuk tes penulisan access.json (/allow, /revoke). */
@@ -252,6 +258,19 @@ export function deleteReport(name: string, username: string, stop: StopResult, r
   return parts.join("\n\n");
 }
 
+/** Tidur yang selesai lebih awal kalau signal dibatalkan. */
+const abortableSleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+
 const DELETE_FAILED =
   "Peringatan: pesan yang berisi token gagal dihapus dari chat. Hapus pesan itu sendiri.";
 
@@ -402,6 +421,50 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       return { wasRunning: false, killed: [], sessionLeft: false, pidsLeft: [], error: "error di master-bot saat menghentikan" };
     }
   };
+
+  // /keys (tiket 261115195101): tombol dari daftar tertutup ke sesi satu bot.
+  // Kunci bot dipegang selama tombol dikirim, jadi tidak bentrok dengan
+  // penyalaan (master-bot sendiri membaca layar dan menekan Enter saat itu),
+  // /stop, /delete, atau /keys lain untuk bot yang sama.
+  bot.command("keys", async (ctx) => {
+    const args = parseKeysArgs(ctx.match);
+    if (!args || !NAME_RULE.test(args.name)) {
+      await ctx.reply(KEYS_USAGE);
+      return;
+    }
+    const found = lookupName(args.name, "Tidak ada tombol yang dikirim.");
+    if ("reply" in found) {
+      await ctx.reply(found.reply);
+      return;
+    }
+    const { name, username } = found;
+    const release = locks.claim(name, "dikirimi tombol");
+    if (!release) {
+      await ctx.reply(busyText(name, locks.busyWith(name)!));
+      return;
+    }
+    inBackground(release, async () => {
+      const probe = opts.probe ?? { tmux: realTmux, isAlive };
+      let text: string;
+      try {
+        text = await sendKeysAndReport(name, username, args.keys, {
+          dataDir: opts.dataDir,
+          tmux: { hasSession: (n) => probe.tmux.hasSession(n), capture: opts.capture ?? realTmux.capture },
+          isAlive: probe.isAlive,
+          masterToken: opts.token,
+          log: opts.log,
+          sendKey: opts.sendKey ?? realSendKey,
+          sleep: abortableSleep,
+          signal: opts.signal,
+          ...opts.keysTiming,
+        });
+      } catch (err) {
+        opts.log(`/keys '${name}' error: ${describeError(err)}`);
+        text = `Perintah /keys untuk '${name}' gagal karena error di master-bot. Lihat layarnya dengan /logs ${name}.`;
+      }
+      await sendReport("tombol", name, text);
+    });
+  });
 
   bot.command("stop", async (ctx) => {
     const found = lookup(ctx.match, STOP_USAGE, "Tidak ada yang dihentikan.");

@@ -54,3 +54,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Footer Claude Code 2.1.325 bisa dua baris ('bypass permissions on' lalu '◐ medium · /effort'), dan dengan --continue isi percakapan lama tampil di layar: deteksi layar jangan mengandalkan baris terakhir atau teks di seluruh pane
 - claude sungguhan bisa diuji tanpa login: HOME sementara dengan .claude.json {hasCompletedOnboarding:true}; --continue dan transkrip buatan di ~/.claude/projects jalan, channel dan giliran AI tidak
 - Variabel int Claude Code 2.1.325 diurai parseInt; nilai bukan angka terhingga dibuang diam-diam (bawaan dipakai). Tanpa login flag server mati, jadi dialog di balik flag tidak bisa dipancing di uji.
+- tmux send-keys untuk karakter dari pemilik: petakan dari daftar tertutup dan kirim harfiah dengan -l; uji dengan penerima mode raw (bun, process.stdin.setRawMode) yang mencatat hex per potongan
