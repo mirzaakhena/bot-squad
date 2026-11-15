@@ -141,7 +141,7 @@ export async function waitForCapture<T>(read: () => T | null, opts: WaitOptions)
 // ---------------------------------------------------------------------------
 // Siapa yang boleh memakai /context (keputusan pemilik Q1): hanya pengirim di
 // allowFrom bot ini, di chat pribadi. Selain itu tidak dibalas sama sekali,
-// apa pun dmPolicy-nya (pairing tidak meloloskan apa-apa di sini).
+// apa pun dmPolicy-nya.
 
 export function contextAllowed(
   chatType: string | undefined,
