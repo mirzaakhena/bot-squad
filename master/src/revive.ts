@@ -1,4 +1,4 @@
-import { runningReason, type LaunchDeps, type LaunchResult } from "./launch.ts";
+import { conversationNote, runningReason, type Conversation, type ConversationMode, type LaunchDeps, type LaunchResult } from "./launch.ts";
 import { busyText, type BotLocks } from "./busy.ts";
 import { describeError, type Logger } from "./log.ts";
 import { readRegistry, setBotStatus, type BotStatus, type WriteHooks } from "./registry.ts";
@@ -16,7 +16,7 @@ import { sendWithRetry, type RetryPolicy } from "./retry.ts";
 export type ReviveDeps = {
   dataDir: string;
   /** Menyalakan satu bot (asli: launchBot dengan realLaunchDeps). Tidak boleh dianggap tidak melempar. */
-  launch: (name: string) => Promise<LaunchResult>;
+  launch: (name: string, mode: ConversationMode) => Promise<LaunchResult>;
   /** Cek "sudah berjalan" untuk bot yang tidak dinyalakan; sama dengan launch.ts. */
   probe: Pick<LaunchDeps, "tmux" | "isAlive">;
   /** BotLocks milik master-bot ini (objek yang sama dengan /stop dan /restart). */
@@ -26,7 +26,7 @@ export type ReviveDeps = {
 };
 
 export type ReviveEntry = { name: string; username: string } & (
-  | { kind: "revived"; statusRecorded: boolean }
+  | { kind: "revived"; statusRecorded: boolean; conversation?: Conversation }
   | { kind: "failed"; reason: string; sessionAlive: boolean; statusRecorded: boolean }
   | { kind: "left"; why: string; hint?: string }
 );
@@ -89,15 +89,21 @@ async function reviveOne(name: string, username: string, status: string, d: Revi
   try {
     let res: LaunchResult;
     try {
-      res = await d.launch(name);
+      // Penyalaan otomatis melanjutkan percakapan terakhir (tiket 261115100301).
+      res = await d.launch(name, "continue");
     } catch (err) {
       d.log(`penyalaan otomatis '${name}' error: ${describeError(err)}`);
       res = { kind: "failed", reason: "error di master-bot saat menyalakan", sessionAlive: false };
     }
-    d.log(`penyalaan otomatis '${name}': ${res.kind}${res.kind === "active" ? "" : ` (${res.reason})`}`);
+    d.log(
+      `penyalaan otomatis '${name}': ${res.kind}` +
+        (res.kind === "active" ? (res.conversation ? ` (${conversationNote(res.conversation)})` : "") : ` (${res.reason})`),
+    );
     if (res.kind === "already-running") return { ...base, kind: "left", why: `sudah berjalan (${res.reason})` };
     const statusRecorded = await record(name, res.kind === "active" ? "active" : "failed", d);
-    if (res.kind === "active") return { ...base, kind: "revived", statusRecorded };
+    if (res.kind === "active") {
+      return { ...base, kind: "revived", statusRecorded, ...(res.conversation ? { conversation: res.conversation } : {}) };
+    }
     return { ...base, kind: "failed", reason: res.reason, sessionAlive: res.sessionAlive, statusRecorded };
   } finally {
     release();
@@ -116,6 +122,7 @@ async function record(name: string, status: BotStatus, d: ReviveDeps): Promise<b
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 const who = (e: ReviveEntry) => (e.username ? `@${esc(e.username)} ('${e.name}')` : `'${e.name}'`);
 
 /** Pesan ringkasan (HTML), atau null kalau tidak ada yang perlu dikirim (registry kosong). */
@@ -130,7 +137,14 @@ export function reviveReport(o: ReviveOutcome): string | null {
   const parts = [`master-bot menyala. Keadaan ${o.entries.length} bot terdaftar:`];
   if (revived.length > 0) {
     parts.push(
-      ["Dinyalakan ulang:", ...revived.map((e) => `- ${who(e)}${e.statusRecorded ? "" : `. ${STATUS_NOT_RECORDED}`}`)].join("\n"),
+      [
+        "Dinyalakan ulang:",
+        ...revived.map(
+          (e) =>
+            `- ${who(e)}${e.conversation ? `: ${lowerFirst(esc(conversationNote(e.conversation)).replace(/\.$/, ""))}` : ""}` +
+            (e.statusRecorded ? "" : `. ${STATUS_NOT_RECORDED}`),
+        ),
+      ].join("\n"),
     );
   }
   if (failed.length > 0) {

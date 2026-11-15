@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMasterBot, launchReport } from "../src/bot.ts";
-import type { LaunchResult } from "../src/launch.ts";
+import type { ConversationMode, LaunchResult } from "../src/launch.ts";
 import { readRegistry } from "../src/registry.ts";
 import { ME, ok, startFakeTelegram } from "./fake-telegram.ts";
 import { OWNER, ownerDm } from "./updates.ts";
@@ -27,7 +27,7 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-function makeBot(launch: (name: string) => Promise<LaunchResult>) {
+function makeBot(launch: (name: string, mode: ConversationMode) => Promise<LaunchResult>) {
   const pending: Promise<void>[] = [];
   const bot = createMasterBot({
     token: MASTER,
@@ -48,13 +48,18 @@ const messages = () => tg.calls.filter((c) => c.method === "sendMessage");
 describe("/register menyalakan bot", () => {
   test("berhasil: 'menyalakan', lalu 'aktif'; status active", async () => {
     const launched: string[] = [];
-    const { bot, settle } = makeBot(async (name) => {
+    const modes: string[] = [];
+    const { bot, settle } = makeBot(async (name, mode) => {
       launched.push(name);
-      return { kind: "active", pid: 4242 };
+      modes.push(mode);
+      return { kind: "active", pid: 4242, conversation: { kind: "new", why: "requested" } };
     });
     await bot.handleUpdate(ownerDm(`/register bot-01 ${GOOD}`));
     await settle();
     expect(launched).toEqual(["bot-01"]);
+    // Bot baru selalu mulai dari percakapan kosong (tiket 261115100301), dan laporannya tidak membahas percakapan.
+    expect(modes).toEqual(["new"]);
+    expect(String(messages()[1]!.params.text)).not.toMatch(/percakapan/i);
     const m = messages();
     expect(m).toHaveLength(2);
     expect(String(m[0]!.params.text)).toContain("Menyalakan 'bot-01'");

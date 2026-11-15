@@ -92,7 +92,7 @@ async function serve(
     client: opts.client,
     dataDir: dir,
     signal: opts.signal,
-    launch: (name) => launchBot(name, launchDeps),
+    launch: (name, mode) => launchBot(name, launchDeps, mode),
     stop: (name) => stopBot(name, stopDeps),
     locks,
     probe,
@@ -171,7 +171,7 @@ async function serve(
     track(
       reviveAndReport({
         dataDir: dir,
-        launch: (name) => launchBot(name, launchDeps),
+        launch: (name, mode) => launchBot(name, launchDeps, mode),
         probe,
         locks,
         log,

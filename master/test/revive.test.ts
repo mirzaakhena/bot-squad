@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GrammyError } from "grammy";
 import { createBotLocks, type BotLocks } from "../src/busy.ts";
-import type { LaunchResult } from "../src/launch.ts";
+import type { ConversationMode, LaunchResult } from "../src/launch.ts";
 import { readRegistry, registryPath, writeRegistry, type BotStatus } from "../src/registry.ts";
 import { reviveAndReport, reviveBots, reviveReport, type ReviveDeps } from "../src/revive.ts";
 import { STATUS_NOT_RECORDED } from "../src/bot.ts";
@@ -45,6 +45,7 @@ function deps(o: {
   tmuxThrows?: boolean;
 }) {
   const launched: string[] = [];
+  const modes: ConversationMode[] = [];
   const running = new Set(o.running ?? []);
   const d: ReviveDeps = {
     dataDir: home,
@@ -59,8 +60,9 @@ function deps(o: {
       } as any,
       isAlive: () => false,
     },
-    launch: async (name) => {
+    launch: async (name, mode) => {
       launched.push(name);
+      modes.push(mode);
       if (running.has(name)) return { kind: "already-running", reason: `sesi tmux '${name}' sudah hidup` };
       return o.launch ? o.launch(name) : { kind: "active", pid: 4242 };
     },
@@ -72,7 +74,7 @@ function deps(o: {
         }
       : undefined,
   };
-  return { d, launched };
+  return { d, launched, modes };
 }
 
 /** Menjalankan reviveAndReport dan mengembalikan pesan yang dikirim. */
@@ -351,5 +353,41 @@ describe("pesan ringkasan", () => {
     const out = await reviveBots(d);
     expect(out.kind).toBe("done");
     expect(reviveReport(out)).toContain("- @rv_1_bot ('rv-1'): error di master-bot saat menyalakan.");
+  });
+});
+
+describe("percakapan saat penyalaan otomatis (261115100301)", () => {
+  test("setiap bot dinyalakan dengan mode continue", async () => {
+    seed({ "rv-m1": "active", "rv-m2": "registered", "rv-m3": "stopped", "rv-m4": "failed" });
+    const { d, launched, modes } = deps({});
+    await runReport(d);
+    expect(launched.sort()).toEqual(["rv-m1", "rv-m2"]);
+    expect(modes).toEqual(["continue", "continue"]);
+  });
+
+  test("ringkasan menyebut percakapan tiap bot: dilanjutkan, belum ada, gagal dilanjutkan", async () => {
+    seed({ "rv-n1": "active", "rv-n2": "active", "rv-n3": "active", "rv-n4": "active" });
+    const { d } = deps({
+      launch: async (n) =>
+        n === "rv-n1"
+          ? { kind: "active", pid: 1, conversation: { kind: "continued" } }
+          : n === "rv-n2"
+            ? { kind: "active", pid: 1, conversation: { kind: "new", why: "no-history" } }
+            : n === "rv-n3"
+              ? { kind: "active", pid: 1, conversation: { kind: "new", why: "continue-failed", reason: "dialog <x>" } }
+              : { kind: "active", pid: 1 },
+    });
+    const sent = await runReport(d);
+    expect(sent[0]).toContain(
+      [
+        "Dinyalakan ulang:",
+        "- @rv_n1_bot ('rv-n1'): percakapan terakhir dilanjutkan",
+        "- @rv_n2_bot ('rv-n2'): percakapan baru dimulai: belum ada percakapan sebelumnya di folder kerja bot ini",
+        "- @rv_n3_bot ('rv-n3'): percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (dialog &lt;x&gt;)",
+        "- @rv_n4_bot ('rv-n4')",
+      ].join("\n"),
+    );
+    expect(sent[0]).not.toContain("Gagal dinyalakan ulang");
+    for (const n of ["rv-n1", "rv-n2", "rv-n3", "rv-n4"]) expect(status(n)).toBe("active");
   });
 });
