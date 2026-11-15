@@ -6,7 +6,7 @@ import { NAME_RULE, parseRegisterArgs, registerBot, USAGE } from "./register.ts"
 import { readRegistry, setBotStatus, type BotStatus, type WriteHooks } from "./registry.ts";
 import { conversationNote, isAlive, realTmux, type ConversationMode, type LaunchResult } from "./launch.ts";
 import { listReport, type ProbeDeps } from "./list.ts";
-import { LOGS_USAGE, logsReport, parseLogsArgs } from "./logs.ts";
+import { LOGS_DEFAULT_LINES, LOGS_USAGE, logsReport, parseLogsArgs } from "./logs.ts";
 import { KEYS_USAGE, parseKeysArgs, realSendKey, sendKeysAndReport, type KeyName } from "./keys.ts";
 import { quotaReport } from "./quota.ts";
 import { busyText, createBotLocks, type BotLocks } from "./busy.ts";
@@ -26,6 +26,7 @@ import {
 } from "./allow.ts";
 import { randomBytes } from "node:crypto";
 import { archiveBot, markStoppedForDelete, type ArchiveResult } from "./delete.ts";
+import { createPicker, PICK_DATA, type PickCommand } from "./picker.ts";
 
 /** Perintah yang sudah berfungsi. Daftar ini juga menjadi menu perintah (lihat menu.ts). */
 export const COMMANDS = [
@@ -44,12 +45,20 @@ export const COMMANDS = [
   { command: "delete", description: "Hapus satu bot (dengan konfirmasi): /delete <nama>" },
 ] as const;
 
+/** Catatan /help tentang pemilih bot (tiket 261115202403). */
+export const HELP_PICKER_NOTE =
+  "Nama boleh dikosongkan untuk /stop, /restart, /new, /logs, /access, /delete, dan /revoke: " +
+  "master-bot menampilkan bot terdaftar sebagai tombol (untuk /revoke, lalu user_id-nya). " +
+  "Perintah lain tetap diketik lengkap.";
+
 export function helpText(): string {
   return [
     "master-bot: panel kontrol bot-squad.",
     "",
     "Perintah yang tersedia:",
     ...COMMANDS.map((c) => `/${c.command} - ${c.description}`),
+    "",
+    HELP_PICKER_NOTE,
   ].join("\n");
 }
 
@@ -291,6 +300,37 @@ const DELETE_FAILED =
 export function createMasterBot(opts: MasterBotOptions): Bot {
   const bot = new Bot(opts.token, { client: opts.client, botInfo: opts.botInfo });
   const locks = opts.locks ?? createBotLocks();
+  const now = opts.now ?? Date.now;
+  const confirmMs = opts.deleteConfirmMs ?? DELETE_CONFIRM_MS;
+
+  /** Tempat membalas: pesan perintah, atau pesan bertombol yang ditekan. */
+  type Chat = { reply: (text: string, other?: any) => Promise<unknown> };
+  const wordsOf = (match: unknown) => (typeof match === "string" ? match : "").trim().split(/\s+/).filter(Boolean);
+  /**
+   * Pekerjaan tiap perintah yang butuh satu nama bot. Dipanggil dari perintah
+   * yang diketik (`named`) dan dari tombol pemilih bot (picker.ts), jadi
+   * hasilnya sama persis.
+   */
+  const actions = {} as Record<Exclude<PickCommand, "revoke">, (chat: Chat, name: string) => Promise<void>>;
+  /**
+   * Mendaftarkan perintah `/<command> <nama>`: tanpa argumen menampilkan
+   * pemilih bot, argumen salah bentuk dijawab cara pakai, selain itu `run`.
+   */
+  const named = (command: Exclude<PickCommand, "revoke" | "logs">, usage: string, run: (chat: Chat, name: string) => Promise<void>) => {
+    actions[command] = run;
+    bot.command(command, async (ctx) => {
+      const words = wordsOf(ctx.match);
+      if (words.length === 0) {
+        await picker.ask((t, o) => ctx.reply(t, o), command);
+        return;
+      }
+      if (words.length !== 1 || !NAME_RULE.test(words[0]!)) {
+        await ctx.reply(usage);
+        return;
+      }
+      await run(ctx, words[0]!);
+    });
+  };
 
   // Penjaga akses: harus middleware pertama. Update yang bukan dari pemilik di
   // chat pribadi dibuang tanpa balasan, dan log tidak memuat isi pesan.
@@ -316,16 +356,15 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   });
 
   // /logs hanya membaca layar (tanpa BotLocks): tidak bentrok dengan penyalaan.
-  bot.command("logs", async (ctx) => {
-    const args = parseLogsArgs(ctx.match);
-    const found = args ? lookup(args.name, LOGS_USAGE, "Tidak ada layar yang ditampilkan.") : { reply: LOGS_USAGE };
+  const showLogs = async (ctx: Chat, name: string, lines: number) => {
+    const found = lookupName(name, "Tidak ada layar yang ditampilkan.");
     if ("reply" in found) {
       await ctx.reply(found.reply);
       return;
     }
     const probe = opts.probe ?? { tmux: realTmux, isAlive };
     const capture = opts.capture ?? realTmux.capture;
-    const text = await logsReport(found.name, found.username, args!.lines, {
+    const text = await logsReport(found.name, found.username, lines, {
       dataDir: opts.dataDir,
       tmux: { hasSession: (n) => probe.tmux.hasSession(n), capture },
       isAlive: probe.isAlive,
@@ -333,6 +372,19 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       log: opts.log,
     });
     await ctx.reply(text, { parse_mode: "HTML" });
+  };
+  actions.logs = (chat, name) => showLogs(chat, name, LOGS_DEFAULT_LINES);
+  bot.command("logs", async (ctx) => {
+    if (wordsOf(ctx.match).length === 0) {
+      await picker.ask((t, o) => ctx.reply(t, o), "logs");
+      return;
+    }
+    const args = parseLogsArgs(ctx.match);
+    if (!args || !NAME_RULE.test(args.name)) {
+      await ctx.reply(LOGS_USAGE);
+      return;
+    }
+    await showLogs(ctx, args.name, args.lines);
   });
 
   // /quota hanya membaca registry.json dan status.json bot terdaftar (tanpa BotLocks).
@@ -411,13 +463,6 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     await sendReport("penyalaan", name, launchReport(name, username, res, statusRecorded, mode));
   };
 
-  /** Hasil cek nama untuk /stop dan /restart: bot terdaftar beserta username-nya, atau balasan penolakan. */
-  const lookup = (match: unknown, usage: string, nothing: string): { name: string; username: string } | { reply: string } => {
-    const words = (typeof match === "string" ? match : "").trim().split(/\s+/).filter(Boolean);
-    if (words.length !== 1 || !NAME_RULE.test(words[0]!)) return { reply: usage };
-    return lookupName(words[0]!, nothing);
-  };
-
   /** Bot terdaftar beserta username-nya, atau balasan penolakan. Nama sudah lolos NAME_RULE. */
   const lookupName = (name: string, nothing: string): { name: string; username: string } | { reply: string } => {
     let bots;
@@ -484,8 +529,8 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     });
   });
 
-  bot.command("stop", async (ctx) => {
-    const found = lookup(ctx.match, STOP_USAGE, "Tidak ada yang dihentikan.");
+  named("stop", STOP_USAGE, async (ctx, asked) => {
+    const found = lookupName(asked, "Tidak ada yang dihentikan.");
     if ("reply" in found) {
       await ctx.reply(found.reply);
       return;
@@ -542,8 +587,8 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   // /restart selalu melanjutkan percakapan terakhir. Argumen kedua apa pun
   // (juga 'new', yang dulu berlaku) dijawab cara pakai; percakapan baru lewat
   // /new (keputusan pemilik 2026-11-15, tiket 261115202401).
-  bot.command("restart", async (ctx) => {
-    const found = lookup(ctx.match, RESTART_USAGE, "Tidak ada yang dinyalakan ulang.");
+  named("restart", RESTART_USAGE, async (ctx, asked) => {
+    const found = lookupName(asked, "Tidak ada yang dinyalakan ulang.");
     if ("reply" in found) {
       await ctx.reply(found.reply);
       return;
@@ -553,15 +598,8 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
 
   // /allow dan /revoke (tiket 261112225307): hanya allowFrom di access.json
   // bot yang disebut yang berubah. Master-bot tetap hanya melayani pemilik.
-  const accessCommand = (op: "allow" | "revoke") => async (ctx: { match: unknown; reply: (t: string) => Promise<unknown> }) => {
-    const usage = op === "allow" ? ALLOW_USAGE : REVOKE_USAGE;
-    const words = (typeof ctx.match === "string" ? ctx.match : "").trim().split(/\s+/).filter(Boolean);
-    if (words.length !== 2 || !NAME_RULE.test(words[0]!) || !isUserId(words[1]!)) {
-      await ctx.reply(usage);
-      return;
-    }
-    const userId = words[1]!;
-    const found = lookupName(words[0]!, "Tidak ada yang diubah.");
+  const changeAndReply = async (ctx: Chat, op: "allow" | "revoke", asked: string, userId: string) => {
+    const found = lookupName(asked, "Tidak ada yang diubah.");
     if ("reply" in found) {
       await ctx.reply(found.reply);
       return;
@@ -603,12 +641,25 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     }
     await ctx.reply(text);
   };
+  const accessCommand = (op: "allow" | "revoke") => async (ctx: { match: unknown; reply: (t: string, o?: any) => Promise<unknown> }) => {
+    const words = wordsOf(ctx.match);
+    // Hanya /revoke yang punya pemilih; /allow tetap diketik lengkap (keputusan pemilik).
+    if (op === "revoke" && words.length === 0) {
+      await picker.ask((t, o) => ctx.reply(t, o), "revoke");
+      return;
+    }
+    if (words.length !== 2 || !NAME_RULE.test(words[0]!) || !isUserId(words[1]!)) {
+      await ctx.reply(op === "allow" ? ALLOW_USAGE : REVOKE_USAGE);
+      return;
+    }
+    await changeAndReply(ctx, op, words[0]!, words[1]!);
+  };
   bot.command("allow", accessCommand("allow"));
   bot.command("revoke", accessCommand("revoke"));
 
   // /access hanya membaca access.json bot itu.
-  bot.command("access", async (ctx) => {
-    const found = lookup(ctx.match, ACCESS_USAGE, "");
+  named("access", ACCESS_USAGE, async (ctx, asked) => {
+    const found = lookupName(asked, "");
     if ("reply" in found) {
       await ctx.reply(found.reply.trim());
       return;
@@ -626,8 +677,6 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   // Konfirmasi dengan dua tombol, dipakai /delete (tiket 261112225306) dan /new
   // (tiket 261115202401): tidak ada yang berubah sebelum pemilik menekan tombol
   // lanjut. Setiap tombol sekali pakai dan berlaku terbatas.
-  const now = opts.now ?? Date.now;
-  const confirmMs = opts.deleteConfirmMs ?? DELETE_CONFIRM_MS;
   // Tombol terikat pada bot yang ditanyakan (telegramId + createdAt), bukan
   // hanya nama: nama bisa dihapus lalu didaftarkan ulang selama tombol berlaku.
   type ConfirmKind = "del" | "new";
@@ -763,8 +812,8 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     });
   };
 
-  bot.command("delete", async (ctx) => {
-    const found = lookup(ctx.match, DELETE_USAGE, confirmations.del.nothing);
+  named("delete", DELETE_USAGE, async (ctx, asked) => {
+    const found = lookupName(asked, confirmations.del.nothing);
     if ("reply" in found) {
       await ctx.reply(found.reply);
       return;
@@ -774,8 +823,8 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
 
   // /new (tiket 261115202401): percakapan kosong, dengan konfirmasi yang sama
   // seperti /delete; setelah dikonfirmasi langkahnya sama dengan /restart.
-  bot.command("new", async (ctx) => {
-    const found = lookup(ctx.match, NEW_USAGE, confirmations.new.nothing);
+  named("new", NEW_USAGE, async (ctx, asked) => {
+    const found = lookupName(asked, confirmations.new.nothing);
     if ("reply" in found) {
       await ctx.reply(found.reply);
       return;
@@ -826,6 +875,19 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     }
     await c.run((t) => ctx.reply(t), name, again.username, p);
   });
+
+  // Pemilih bot (tiket 261115202403): tombol hanya memilih; pekerjaannya
+  // fungsi yang sama dengan perintah yang diketik lengkap.
+  const picker = createPicker({
+    dataDir: opts.dataDir,
+    ownerId: opts.ownerId,
+    log: opts.log,
+    now,
+    ttlMs: confirmMs,
+    actions,
+    revoke: (chat, name, userId) => changeAndReply(chat, "revoke", name, userId),
+  });
+  bot.callbackQuery(PICK_DATA, (ctx) => picker.handle(ctx));
 
   // Tombol lain yang tidak dikenali (mis. dari versi lama): dijawab supaya
   // tidak berputar terus, tanpa mengubah apa pun.

@@ -370,7 +370,7 @@ describe("tombol /new: sekali pakai, 5 menit, hanya pemilik, terikat pada bot", 
 
 describe("/new ditolak seperti /restart", () => {
   for (const [label, arg] of [
-    ["tanpa nama", ""],
+    // Tanpa argumen sama sekali: pemilih bot (tiket 261115202403, picker.test.ts).
     ["nama tak sah", "Nw-F"],
     ["path", "../nw-f"],
     ["dua kata", "nw-f nw-g"],
