@@ -297,14 +297,35 @@ const abortableSleep = (ms: number, signal?: AbortSignal) =>
 const DELETE_FAILED =
   "Peringatan: pesan yang berisi token gagal dihapus dari chat. Hapus pesan itu sendiri.";
 
+/**
+ * Satu-satunya gerbang aturan nama untuk perintah yang butuh nama bot (tiket
+ * 261115210901). Perintah yang diketik dan tombol pemilih bot sama-sama
+ * memanggil fungsi hasil bungkusan ini, jadi nama yang tidak lolos NAME_RULE
+ * (mis. `../luar` dari registry yang diedit tangan) dijawab cara pakai sebelum
+ * registry, berkas, sesi, atau proses apa pun disentuh, dari jalur mana pun.
+ */
+export function withNameRule<A extends unknown[]>(
+  usage: string,
+  work: (chat: NameChat, name: string, ...rest: A) => Promise<void>,
+): (chat: NameChat, name: string, ...rest: A) => Promise<void> {
+  return async (chat, name, ...rest) => {
+    if (typeof name !== "string" || !NAME_RULE.test(name)) {
+      await chat.reply(usage);
+      return;
+    }
+    await work(chat, name, ...rest);
+  };
+}
+/** Tempat membalas: pesan perintah, atau pesan bertombol yang ditekan. */
+export type NameChat = { reply: (text: string, other?: any) => Promise<unknown> };
+
 export function createMasterBot(opts: MasterBotOptions): Bot {
   const bot = new Bot(opts.token, { client: opts.client, botInfo: opts.botInfo });
   const locks = opts.locks ?? createBotLocks();
   const now = opts.now ?? Date.now;
   const confirmMs = opts.deleteConfirmMs ?? DELETE_CONFIRM_MS;
 
-  /** Tempat membalas: pesan perintah, atau pesan bertombol yang ditekan. */
-  type Chat = { reply: (text: string, other?: any) => Promise<unknown> };
+  type Chat = NameChat;
   const wordsOf = (match: unknown) => (typeof match === "string" ? match : "").trim().split(/\s+/).filter(Boolean);
   /**
    * Pekerjaan tiap perintah yang butuh satu nama bot. Dipanggil dari perintah
@@ -316,7 +337,8 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
    * Mendaftarkan perintah `/<command> <nama>`: tanpa argumen menampilkan
    * pemilih bot, argumen salah bentuk dijawab cara pakai, selain itu `run`.
    */
-  const named = (command: Exclude<PickCommand, "revoke" | "logs">, usage: string, run: (chat: Chat, name: string) => Promise<void>) => {
+  const named = (command: Exclude<PickCommand, "revoke" | "logs">, usage: string, work: (chat: Chat, name: string) => Promise<void>) => {
+    const run = withNameRule(usage, work);
     actions[command] = run;
     bot.command(command, async (ctx) => {
       const words = wordsOf(ctx.match);
@@ -324,7 +346,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
         await picker.ask((t, o) => ctx.reply(t, o), command);
         return;
       }
-      if (words.length !== 1 || !NAME_RULE.test(words[0]!)) {
+      if (words.length !== 1) {
         await ctx.reply(usage);
         return;
       }
@@ -356,7 +378,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   });
 
   // /logs hanya membaca layar (tanpa BotLocks): tidak bentrok dengan penyalaan.
-  const showLogs = async (ctx: Chat, name: string, lines: number) => {
+  const showLogs = withNameRule(LOGS_USAGE, async (ctx: Chat, name: string, lines: number) => {
     const found = lookupName(name, "Tidak ada layar yang ditampilkan.");
     if ("reply" in found) {
       await ctx.reply(found.reply);
@@ -372,7 +394,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       log: opts.log,
     });
     await ctx.reply(text, { parse_mode: "HTML" });
-  };
+  });
   actions.logs = (chat, name) => showLogs(chat, name, LOGS_DEFAULT_LINES);
   bot.command("logs", async (ctx) => {
     if (wordsOf(ctx.match).length === 0) {
@@ -380,7 +402,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       return;
     }
     const args = parseLogsArgs(ctx.match);
-    if (!args || !NAME_RULE.test(args.name)) {
+    if (!args) {
       await ctx.reply(LOGS_USAGE);
       return;
     }
@@ -598,7 +620,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
 
   // /allow dan /revoke (tiket 261112225307): hanya allowFrom di access.json
   // bot yang disebut yang berubah. Master-bot tetap hanya melayani pemilik.
-  const changeAndReply = async (ctx: Chat, op: "allow" | "revoke", asked: string, userId: string) => {
+  const changeAccessAndReply = async (ctx: Chat, asked: string, op: "allow" | "revoke", userId: string) => {
     const found = lookupName(asked, "Tidak ada yang diubah.");
     if ("reply" in found) {
       await ctx.reply(found.reply);
@@ -641,6 +663,10 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     }
     await ctx.reply(text);
   };
+  const changeAndReply = {
+    allow: withNameRule(ALLOW_USAGE, (ctx: Chat, name: string, userId: string) => changeAccessAndReply(ctx, name, "allow", userId)),
+    revoke: withNameRule(REVOKE_USAGE, (ctx: Chat, name: string, userId: string) => changeAccessAndReply(ctx, name, "revoke", userId)),
+  };
   const accessCommand = (op: "allow" | "revoke") => async (ctx: { match: unknown; reply: (t: string, o?: any) => Promise<unknown> }) => {
     const words = wordsOf(ctx.match);
     // Hanya /revoke yang punya pemilih; /allow tetap diketik lengkap (keputusan pemilik).
@@ -648,11 +674,11 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       await picker.ask((t, o) => ctx.reply(t, o), "revoke");
       return;
     }
-    if (words.length !== 2 || !NAME_RULE.test(words[0]!) || !isUserId(words[1]!)) {
+    if (words.length !== 2 || !isUserId(words[1]!)) {
       await ctx.reply(op === "allow" ? ALLOW_USAGE : REVOKE_USAGE);
       return;
     }
-    await changeAndReply(ctx, op, words[0]!, words[1]!);
+    await changeAndReply[op](ctx, words[0]!, words[1]!);
   };
   bot.command("allow", accessCommand("allow"));
   bot.command("revoke", accessCommand("revoke"));
@@ -885,7 +911,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     now,
     ttlMs: confirmMs,
     actions,
-    revoke: (chat, name, userId) => changeAndReply(chat, "revoke", name, userId),
+    revoke: (chat, name, userId) => changeAndReply.revoke(chat, name, userId),
   });
   bot.callbackQuery(PICK_DATA, (ctx) => picker.handle(ctx));
 
