@@ -1,0 +1,20 @@
+# Concern yang harus ditangani
+
+Daftar lengkap concern proyek beserta keadaannya; ringkasan yang masih terbuka ada di `CLAUDE.md`.
+
+Rincian ini dipindahkan apa adanya dari `CLAUDE.md` (tiket 261115094501). Rujukan `lihat "<judul bagian>"` yang tidak ada di berkas ini menunjuk ke bagian di berkas `docs/` lain; cari lewat daftar isi di `CLAUDE.md`.
+
+## Concern yang harus ditangani
+
+1. **Keamanan token**: pesan berisi token di chat master-bot sebaiknya langsung dihapus setelah dibaca. Simpan token dengan permission `0600`.
+2. **Prompt interaktif saat start** (sudah diuji di Claude Code 2.1.322, lihat "Menyalakan satu bot"). Ada tiga prompt: trust folder dicegah dengan menandai `~/.bot-squad/bots` sebagai trusted di `~/.claude.json`, konfirmasi bypass permissions dicegah dengan `--settings '{"skipDangerousModePermissionPrompt":true}'`, dan konfirmasi development channel **tidak bisa dicegah**, jadi dijawab otomatis dengan `tmux send-keys Enter`. Yang masih rapuh:
+   - Jawaban otomatis dan deteksi "siap" bergantung pada teks di layar (`I am using this for local development`, `bypass permissions on`). Teks ini bisa berubah di versi Claude Code berikutnya. Uji ulang setiap kali Claude Code di-upgrade.
+   - Penulisan trust ke `~/.claude.json` belum pernah dijalankan dalam spike ini, karena izin agen menolak perubahan konfigurasi Claude. Yang terbukti hanya pewarisan trust dari folder induk. File itu juga ditulis ulang oleh setiap sesi Claude yang sedang berjalan, jadi master sebaiknya menulisnya sekali saat setup, ketika belum ada bot yang hidup.
+   - Di server baru, login akun Claude dan onboarding pertama (tema, dll.) belum diuji. Kemungkinan ini langkah manual satu kali.
+3. **Ketahanan**: setelah reboot atau crash, master mencocokkan `registry.json` dengan sesi tmux yang benar-benar hidup saat menyala, lalu menghidupkan ulang bot yang mati (tiket 261112225304, lihat "Penyalaan otomatis"). Master-bot sendiri belum dinyalakan otomatis setelah reboot (perlu systemd/launchd atau sejenisnya).
+4. **Kuota bersama**: semua bot memakai satu akun Claude. Sisa kuota bisa dibaca dari `rate_limits` di `status.json` bot (lihat "Membaca kuota akun Claude"); perintah `/quota` di master-bot menampilkannya (tiket 261113192501).
+5. **Penamaan plugin** (selesai, tiket 261112184703): plugin, server MCP, dan nama paket memakai `bot-squad`, dan folder state default menjadi `~/.claude/channels/bot-squad`, sehingga tidak bentrok dengan plugin Telegram resmi. Variabel lingkungan `TELEGRAM_*` sengaja tetap. Akibatnya, kalau kedua plugin dimuat di satu sesi, keduanya membaca token yang sama. Di bot hal itu tidak terjadi, karena `--setting-sources project,local` tidak memuat plugin user.
+6. **Plugin dan connector pemilik ikut termuat di bot**. `--setting-sources project,local` mencegah plugin dan hook dari `~/.claude/settings.json` (misalnya plugin WhatsApp) ikut masuk ke bot. Tetapi connector akun claude.ai (misalnya Claude Docs, Motion) dan MCP bawaan (claude-in-chrome) tetap termuat, dan bot berjalan bebas izin. Belum dicari cara mematikannya per bot.
+7. **Peringatan palsu di layar awal**: bot yang sehat tetap menampilkan peringatan kuning `plugin:<id>@inline · plugin not installed`, padahal channel berfungsi penuh. Peringatan ini hanya dicek terhadap plugin yang terpasang permanen. Saat runtime, channel tetap terdaftar (log debug: `Channel notifications registered`). Setelah rebrand peringatan ini **masih muncul**, sebagai `plugin:bot-squad@inline · plugin not installed` (diuji di Claude Code 2.1.322). Jangan memakai baris ini sebagai tanda gagal. Kalau `--debug-file` aktif, baris ini bisa tersembunyi di balik "1 more notice hidden".
+8. **Workspace di dalam repo git lain**: Claude memuat `CLAUDE.md` dan `.claude/` dari folder induk. Workspace bot jangan diletakkan di dalam proyek lain.
+9. **Pengaturan user tidak berlaku di bot**: karena `--setting-sources project,local`, model dan effort default dari `~/.claude/settings.json` tidak dipakai. Kalau perlu, berikan lewat `--settings` atau `--model`.

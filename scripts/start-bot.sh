@@ -3,7 +3,7 @@
 # Pemakaian: scripts/start-bot.sh <nama-bot>
 #
 # Pembungkus tipis: logikanya ada di master/src/launch.ts, yang juga dipakai
-# master-bot setelah /register (lihat CLAUDE.md, "Menyalakan satu bot").
+# master-bot setelah /register (lihat docs/menyalakan-bot.md, "Menyalakan satu bot").
 # Prasyarat:
 #   $BOT_SQUAD_HOME/master/.env            berisi OWNER_TELEGRAM_ID=<id>
 #   $BOT_SQUAD_HOME/bots/<nama>/state/.env berisi TELEGRAM_BOT_TOKEN=<token>
