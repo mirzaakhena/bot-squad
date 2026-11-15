@@ -48,12 +48,14 @@ Tiket ini hanya mengubah dokumen. Tidak ada kode, tes, atau perilaku yang beruba
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Tiga komentar di kode (plugin/server.ts, master/src/launch.ts, scripts/start-bot.sh) yang merujuk CLAUDE.md diubah supaya menunjuk berkas docs/; hanya teks komentar, tidak ada kode yang berubah.
+- A1 [confirmed] Tiga komentar di kode (plugin/server.ts, master/src/launch.ts, scripts/start-bot.sh) yang merujuk CLAUDE.md diubah supaya menunjuk berkas docs/; hanya teks komentar, tidak ada kode yang berubah.
   Why: Butir 'rujukan dari kode diarahkan ke docs' meminta ini, walau butir terakhir menyebut hanya dokumen yang berubah.
   If wrong: Kembalikan tiga baris komentar itu ke teks lama.
-- A2 [unseen] Bagian 'Concern yang harus ditangani' dan 'Fakta teknis dari plugin upstream' dipindah utuh ke docs/ (concern.md, menyalakan-bot.md); CLAUDE.md hanya memuat ringkasan concern yang masih terbuka dan jebakan lintas pekerjaan.
+  Confirmed by owner, 2026-11-15
+- A2 [confirmed] Bagian 'Concern yang harus ditangani' dan 'Fakta teknis dari plugin upstream' dipindah utuh ke docs/ (concern.md, menyalakan-bot.md); CLAUDE.md hanya memuat ringkasan concern yang masih terbuka dan jebakan lintas pekerjaan.
   Why: Kalau keduanya utuh di CLAUDE.md, batas 15 KB sulit dijaga dan isinya terduplikasi.
   If wrong: Salin kembali bagian itu dari docs/ ke CLAUDE.md.
+  Confirmed by owner, 2026-11-15
 
 ## Handoff
 CLAUDE.md diringkas dari 472 baris/92 KB menjadi 136 baris/12 KB: pedoman umum, jebakan lintas pekerjaan, concern terbuka, dan tabel daftar isi docs/. Rincian dipindah apa adanya (tanpa ditulis ulang) ke docs/master-bot.md, menyalakan-bot.md, fitur-chat-bot.md, log-bot.md, kuota.md, tes.md, concern.md. Rancangan bot berkirim pesan ke bot lain dan 'Status saat ini' dihapus. Tiga komentar kode kini merujuk docs/. Yang tidak boleh rusak: setiap berkas docs/ harus ada di tabel CLAUDE.md dan sebaliknya; rincian fitur baru masuk docs/, bukan CLAUDE.md; CLAUDE.md maksimal 150 baris dan 15 KB.

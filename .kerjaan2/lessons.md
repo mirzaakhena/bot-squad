@@ -51,3 +51,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Meta pesan ke Claude dibentuk di dua tempat sejak 261114101204: forwardMessage (pesan tunggal) dan forwardAlbum (album) di plugin/server.ts; atribut baru harus masuk keduanya
 - Tes server plugin (album-server, buttons-server, quote-server) membaca jawaban initialize tepat setelah 'polling as' tanpa menunggu; di bawah beban gagal acak 'init.result undefined', juga di main (2 dari 6). Tunggu pesan id 1 dulu.
 - Rincian fitur ditulis di docs/<topik>.md (daftar isi di CLAUDE.md); CLAUDE.md hanya pedoman umum, maks. 150 baris dan 15 KB
+- Footer Claude Code 2.1.325 bisa dua baris ('bypass permissions on' lalu '◐ medium · /effort'), dan dengan --continue isi percakapan lama tampil di layar: deteksi layar jangan mengandalkan baris terakhir atau teks di seluruh pane
