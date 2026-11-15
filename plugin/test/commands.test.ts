@@ -1,11 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 /**
- * Tiket 261112225309: /start, /help, /status di server plugin sungguhan
- * terhadap Telegram tiruan. Token palsu. Dilewati tanpa plugin/node_modules.
+ * Tiket 261112225309: /help, /status di server plugin sungguhan terhadap
+ * Telegram tiruan. Tiket 261115202402: /start bukan perintah lagi; ditelan
+ * diam-diam. Token palsu. Dilewati tanpa plugin/node_modules.
  */
 const PLUGIN = resolve(import.meta.dir, "..");
 const hasDeps = existsSync(join(PLUGIN, "node_modules", "grammy"));
@@ -26,6 +27,12 @@ function fakeTelegram() {
   let pending: unknown[] = [];
   const sent: Sent[] = [];
   const commands: unknown[] = [];
+  /** Semua panggilan selain getMe/getUpdates, untuk membuktikan "tidak ada apa pun". */
+  const calls: Array<{ method: string; body: unknown }> = [];
+  /** Menu per cakupan, seperti Telegram: setMyCommands menggantikan isi lama. */
+  const menus = new Map<string, Array<{ command: string }>>();
+  // Menu sisa versi lama plugin, masih memuat /start.
+  menus.set("all_private_chats", [{ command: "start" }, { command: "help" }, { command: "status" }, { command: "context" }]);
   const server = Bun.serve({
     // 127.0.0.1, bukan semua alamat: lihat komentar di master/test/fake-telegram.ts.
     hostname: "127.0.0.1",
@@ -42,19 +49,24 @@ function fakeTelegram() {
         pending = [];
         if (batch.length === 0) await Bun.sleep(20);
         result = batch;
-      } else if (method === "sendMessage") {
+      } else calls.push({ method, body });
+      if (method === "sendMessage") {
         sent.push(body as Sent);
         result = { message_id: 900 + sent.length, date: 0, chat: { id: (body as Sent).chat_id, type: "private" } };
-      } else if (method === "setMyCommands") commands.push(body);
+      } else if (method === "setMyCommands") {
+        commands.push(body);
+        const b = body as { commands: Array<{ command: string }>; scope?: { type: string } };
+        menus.set(b.scope?.type ?? "default", b.commands);
+      }
       return Response.json({ ok: true, result });
     },
   });
   cleanups.push(() => server.stop(true));
-  return { apiRoot: `http://127.0.0.1:${server.port}`, push: (u: unknown) => pending.push(u), sent, commands };
+  return { apiRoot: `http://127.0.0.1:${server.port}`, push: (u: unknown) => pending.push(u), sent, commands, calls, menus };
 }
 
 let updateId = 7000;
-function cmd(text: string, from: number, chat: { id: number; type: string }, username?: string) {
+function cmd(text: string, from: number, chat: { id: number; type: string }, username?: string, cmdLength = text.length) {
   ++updateId;
   return {
     update_id: updateId,
@@ -64,7 +76,7 @@ function cmd(text: string, from: number, chat: { id: number; type: string }, use
       chat: { ...chat, first_name: "u", title: "g" },
       from: { id: from, is_bot: false, first_name: "u", ...(username ? { username } : {}) },
       text,
-      entities: [{ type: "bot_command", offset: 0, length: text.length }],
+      entities: [{ type: "bot_command", offset: 0, length: cmdLength }],
     },
   };
 }
@@ -90,14 +102,18 @@ function startServer(state: string, apiRoot: string) {
     const dec = new TextDecoder();
     for await (const chunk of p.stderr as ReadableStream<Uint8Array>) err.push(dec.decode(chunk));
   })();
-  void (async () => { for await (const _ of p.stdout as ReadableStream<Uint8Array>) {} })();
+  const out: string[] = [];
+  void (async () => {
+    const dec = new TextDecoder();
+    for await (const chunk of p.stdout as ReadableStream<Uint8Array>) out.push(dec.decode(chunk));
+  })();
   const send = (msg: unknown) => {
     p.stdin!.write(JSON.stringify(msg) + "\n");
     p.stdin!.flush();
   };
   send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "uji", version: "1" } } });
   send({ jsonrpc: "2.0", method: "notifications/initialized" });
-  return { stderr: () => err.join("") };
+  return { stderr: () => err.join(""), stdout: () => out.join("") };
 }
 
 async function waitFor(cond: () => boolean, what: string, ms = 15_000) {
@@ -108,8 +124,13 @@ async function waitFor(cond: () => boolean, what: string, ms = 15_000) {
   }
 }
 
+const pesanLines = (state: string) => {
+  try { return readFileSync(join(state, "plugin.log"), "utf8").split("\n").filter((l) => l.split(" ")[1] === "pesan"); } catch { return []; }
+};
+const PRIVATE = { id: OWNER, type: "private" };
+
 for (const policy of ["allowlist", "pairing"]) {
-  test.skipIf(!hasDeps)(`/start /help /status dmPolicy ${policy}: pemilik dibalas tanpa pairing, orang lain dan grup tidak`, async () => {
+  test.skipIf(!hasDeps)(`/help /status dmPolicy ${policy}: pemilik dibalas tanpa pairing, orang lain dan grup tidak; /start ditelan`, async () => {
     const tg = fakeTelegram();
     const state = mkdtempSync(join(tmpdir(), "bot-squad-cmds-"));
     cleanups.push(() => rmSync(state, { recursive: true, force: true }));
@@ -118,28 +139,66 @@ for (const policy of ["allowlist", "pairing"]) {
     await waitFor(() => srv.stderr().includes("polling as @uji_cmd_bot"), "polling");
     await waitFor(() => tg.commands.length > 0, "menu");
     expect(JSON.stringify(tg.commands[0])).not.toMatch(/pairing/i);
+    // Menu yang ditulis saat menyala menggantikan menu lama yang memuat /start.
+    expect(tg.menus.get("all_private_chats")!.map((c) => c.command)).toEqual(["help", "status", "context"]);
+    for (const [, menu] of tg.menus) expect(menu.map((c) => c.command)).not.toContain("start");
 
     for (const c of ["/start", "/help", "/status"]) {
       tg.push(cmd(c, STRANGER, { id: STRANGER, type: "private" }, "orang"));
       tg.push(cmd(c, OWNER, { id: -100123, type: "supergroup" }));
       tg.push(cmd(c, STRANGER, { id: -100123, type: "group" }));
     }
-    await Bun.sleep(1000);
+    await waitFor(() => pesanLines(state).length === 9, "sembilan baris pesan");
+    await Bun.sleep(700);
     expect(tg.sent).toEqual([]);
+    // /start dari orang lain dan di grup: seperti sebelum tiket 261115202402,
+    // tidak dibalas dan tidak sampai ke Claude.
+    expect(pesanLines(state).filter((l) => l.includes("hasil=diteruskan"))).toEqual([]);
+    expect(srv.stdout()).not.toContain("notifications/claude/channel");
 
-    for (const c of ["/start", "/help", "/status"]) tg.push(cmd(c, OWNER, { id: OWNER, type: "private" }, "pemilik"));
-    await waitFor(() => tg.sent.length === 3, "tiga balasan");
+    // /start dari pemilik, dalam tiga bentuk: ditelan tanpa jejak di Telegram.
+    const before = tg.calls.length;
+    tg.push(cmd("/start", OWNER, PRIVATE, "pemilik"));
+    tg.push(cmd("/start halo apa kabar", OWNER, PRIVATE, "pemilik", "/start".length));
+    tg.push(cmd("/start@uji_cmd_bot", OWNER, PRIVATE, "pemilik"));
+    tg.push(cmd("/start@uji_cmd_bot payload123", OWNER, PRIVATE, "pemilik", "/start@uji_cmd_bot".length));
+    await waitFor(() => pesanLines(state).length === 13, "empat baris /start pemilik");
+    await Bun.sleep(1500);
+    // Tidak ada balasan, typing, reaksi, atau panggilan Telegram lain.
+    expect(tg.calls.slice(before)).toEqual([]);
+    expect(srv.stdout()).not.toContain("notifications/claude/channel");
+    const startLines = pesanLines(state).slice(9);
+    expect(startLines).toHaveLength(4);
+    for (const l of startLines) {
+      expect(l).toContain("hasil=tidak-diteruskan");
+      expect(l).toContain(`chat=${OWNER}`);
+    }
+    expect(readFileSync(join(state, "plugin.log"), "utf8")).not.toContain("/start");
+
+    for (const c of ["/help", "/status"]) tg.push(cmd(c, OWNER, PRIVATE, "pemilik"));
+    await waitFor(() => tg.sent.length === 2, "dua balasan");
     await Bun.sleep(300);
-    expect(tg.sent).toHaveLength(3);
+    expect(tg.sent).toHaveLength(2);
     for (const s of tg.sent) {
       expect(s.chat_id).toBe(OWNER);
       expect(s.text).not.toMatch(/pair|kode|6-char/i);
+      expect(s.text).not.toContain("/start");
     }
     expect(tg.sent[0]!.text).toContain("sesi Claude Code");
-    expect(tg.sent[1]!.text).toContain("sesi Claude Code");
-    expect(tg.sent[1]!.text).toContain("/context");
-    expect(tg.sent[2]!.text).toContain("diizinkan");
-    expect(tg.sent[2]!.text).toContain("@pemilik");
-    expect(tg.sent[2]!.text).toContain(String(OWNER));
-  }, 30_000);
+    expect(tg.sent[0]!.text).toContain("/status");
+    expect(tg.sent[0]!.text).toContain("/context");
+    expect(tg.sent[1]!.text).toContain("diizinkan");
+    expect(tg.sent[1]!.text).toContain("@pemilik");
+    expect(tg.sent[1]!.text).toContain(String(OWNER));
+
+    // Pesan biasa tetap diteruskan, dengan typing dan reaksi.
+    const biasa = cmd("halo bot", OWNER, PRIVATE, "pemilik", 0);
+    delete (biasa.message as { entities?: unknown }).entities;
+    tg.push(biasa);
+    await waitFor(() => srv.stdout().includes("notifications/claude/channel"), "pesan biasa diteruskan");
+    expect(srv.stdout()).toContain("halo bot");
+    expect(srv.stdout()).not.toContain("/start");
+    await waitFor(() => tg.calls.some((c) => c.method === "sendChatAction") && tg.calls.some((c) => c.method === "setMessageReaction"), "typing dan reaksi");
+    expect(pesanLines(state).at(-1)).toContain("hasil=diteruskan");
+  }, 40_000);
 }

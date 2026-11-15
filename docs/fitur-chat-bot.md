@@ -41,11 +41,12 @@ Claude bisa menawarkan pilihan berupa tombol, dan pemilik cukup menekan satu tom
 - Bot yang sudah berjalan baru mendapat fitur ini setelah dinyalakan ulang (`/restart`).
 - Tes: `plugin/test/buttons.test.ts` dan `plugin/test/buttons-server.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
 
-## /start, /help, /status di chat bot (tiket 261112225309)
+## /help, /status di chat bot; /start ditelan (tiket 261112225309, 261115202402)
 
-Tiga perintah bawaan plugin (`plugin/server.ts`) dijawab plugin sendiri dengan teks Bahasa Indonesia dan tidak dikirim ke Claude. `/start` dan `/help` menjelaskan bahwa pesan (teks dan foto) diteruskan ke sesi Claude Code bot itu dan balasannya kembali ke chat; `/help` juga mendaftar `/start`, `/status`, `/context`. `/status` menjawab bahwa pengirim diizinkan, lengkap dengan username dan ID-nya.
+Dua perintah bawaan plugin (`plugin/server.ts`) dijawab plugin sendiri dengan teks Bahasa Indonesia dan tidak dikirim ke Claude. `/help` menjelaskan bahwa pesan (teks dan foto) diteruskan ke sesi Claude Code bot itu dan balasannya kembali ke chat, lalu mendaftar `/status` dan `/context`. `/status` menjawab bahwa pengirim diizinkan, lengkap dengan username dan ID-nya.
 
 - **Siapa**: hanya pengirim di `allowFrom` bot itu, di chat pribadi, apa pun `dmPolicy`-nya (aturan yang sama dengan `/context`, `contextAllowed`). Orang lain, juga di grup, tidak dibalas sama sekali.
+- **`/start` bukan perintah lagi** (keputusan pemilik 2026-11-15, tiket 261115202402: tidak berguna, `/help` sudah menjelaskan hal yang sama). Tidak ada di menu bot maupun teks `/help`. Telegram tetap mengirim `/start` saat seseorang menekan tombol Start di chat bot, jadi plugin menelannya (`bot.command('start', () => {})`): `/start`, `/start <teks>`, dan `/start@<username bot>` tidak dibalas, tidak diteruskan ke Claude (tidak memakai giliran), tanpa "typing…" dan reaksi, dan tercatat di `plugin.log` sebagai `tidak-diteruskan`. Berlaku untuk siapa pun dan di chat apa pun, sama seperti sebelumnya untuk pengirim yang tidak diizinkan. Menu ditulis ulang setiap polling mulai (`setMyCommands` di cakupan `all_private_chats`: `help`, `status`, `context`), jadi menu lama yang memuat `/start` tergantikan begitu bot dinyalakan ulang (`/restart`); menu sisa khusus bahasa atau di cakupan lain tidak ditangani.
 - Tes: `plugin/test/commands.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
 
 ## Tanpa skill dan tanpa pairing (tiket 261115085701)
@@ -65,7 +66,7 @@ Keputusan pemilik (2026-11-15): warisan plugin resmi yang mengandaikan seseorang
 Setiap pesan yang diteruskan ke Claude (hasil `diteruskan` di `plugin.log`) langsung mendapat dua tanda di Telegram, supaya pemilik tahu pesannya sampai dan bot sedang bekerja. Kodenya `plugin/typing.ts`, dipakai dari `plugin/server.ts`; angkanya sama dengan mirza-bots.
 
 - **"typing…"** dikirim saat itu juga, lalu diulang setiap 4 detik (Telegram memadamkannya sendiri ~5 detik), sampai balasan pertama yang berhasil lewat alat `reply` ke chat itu (teks atau berkas). `react` dan `edit_message` tidak menghentikannya. Batas aman 300 detik sejak pesan masuk terakhir di chat itu, juga kalau Claude tidak pernah membalas; pesan baru saat masih menyala memperpanjang batas tanpa menambah timer. Gagal kirim (429, jaringan) ditelan dan tidak menggagalkan penerusan. Saat server plugin berhenti, semua timer dilepas.
-- **Tidak ada "typing…"** untuk pengirim di luar allowlist (`dibuang`), perintah plugin (`/start`, `/help`, `/status`, `/context`), dan jawaban izin `yes/no xxxxx` (tetap hanya ✅/❌).
+- **Tidak ada "typing…"** untuk pengirim di luar allowlist (`dibuang`), perintah plugin (`/help`, `/status`, `/context`), `/start` yang ditelan, dan jawaban izin `yes/no xxxxx` (tetap hanya ✅/❌).
 - **Reaksi tanda diterima**: `ackReaction` di `access.json`; kalau tidak diisi, plugin memakai 👀 (keputusan pemilik Q1), jadi semua bot mendapatkannya tanpa mengubah `access.json`. Bot yang sudah berjalan baru mendapatkannya setelah dinyalakan ulang (`/restart`). `ackReaction: ""` mematikannya; emoji lain harus ada di daftar reaksi Telegram. Reaksi dipasang sekali dan tidak dicopot setelah Claude membalas.
 - `BOT_SQUAD_TYPING_MAX_MS` hanya untuk tes (mempercepat batas 300 detik) dan hanya dibaca kalau `BOT_SQUAD_TELEGRAM_API_ROOT` diisi.
 - Tes: `plugin/test/typing.test.ts` (jam palsu, termasuk batas 300 detik) dan `plugin/test/typing-server.test.ts` (server plugin sungguhan terhadap Telegram tiruan, dilewati tanpa `plugin/node_modules`).
