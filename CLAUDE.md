@@ -93,7 +93,7 @@ bun run --cwd master start
 
 ## Prinsip: perintah terpilih, bukan semua slash Claude Code
 
-bot-squad hanya mendukung beberapa perintah chat bot yang dipilih pemilik karena penting dan sering dipakai (saat ini `/start`, `/help`, `/status`, `/context`). Slash command Claude Code lain (misalnya `/compact`, `/model`) **tidak** diteruskan ke sesi bot, juga tidak dengan tombol konfirmasi (tiket 261112230305 dibatalkan oleh pemilik, 2026-11-13). Perintah baru yang mengetik ke sesi Claude (interrupt, new, rename, branch/switch) ditambahkan satu per satu sebagai perintah khusus, menunggu rancangan mekanismenya (tiket 261112230302).
+bot-squad hanya mendukung beberapa perintah chat bot yang dipilih pemilik karena penting dan sering dipakai (saat ini `/help`, `/status`, `/context`; `/start` dibuang pemilik 2026-11-15 dan ditelan diam-diam, lihat `docs/fitur-chat-bot.md`). Slash command Claude Code lain (misalnya `/compact`, `/model`) **tidak** diteruskan ke sesi bot, juga tidak dengan tombol konfirmasi (tiket 261112230305 dibatalkan oleh pemilik, 2026-11-13). Perintah baru yang mengetik ke sesi Claude (interrupt, new, rename, branch/switch) ditambahkan satu per satu sebagai perintah khusus, menunggu rancangan mekanismenya (tiket 261112230302).
 
 ## Bot berkirim pesan ke bot lain: dibatalkan
 
@@ -118,7 +118,7 @@ Daftar lengkap dengan rinciannya di `docs/concern.md`. Yang masih terbuka:
 | :- | :- | :- |
 | `docs/master-bot.md` | Perilaku rinci master-bot: konfigurasi, kunci `master.pid`, berhenti dalam 5 detik, menu, setiap perintah (`/register` sampai `/delete`), penyalaan otomatis, `registry.json` | mengubah apa pun di `master/` atau menambah perintah master-bot |
 | `docs/menyalakan-bot.md` | Fakta plugin upstream, langkah `start-bot.sh`/`launch.ts`, cara memuat plugin sebagai channel, prompt saat start, banyak bot bersamaan, server plugin yatim dan pembersihannya | mengubah `master/src/launch.ts`, `strays.ts`, `scripts/`, cara start atau berhentinya `plugin/server.ts`, atau meng-upgrade Claude Code |
-| `docs/fitur-chat-bot.md` | Fitur plugin di chat bot: `/context` dan bridge statusline, Markdown dan pemotongan balasan, tombol pilihan, `/start` `/help` `/status`, tanpa skill dan pairing, typing dan reaksi, kutipan, dokumen besar, album, pengingat konteks | mengubah apa pun di `plugin/` atau `master/src/statusline.ts` |
+| `docs/fitur-chat-bot.md` | Fitur plugin di chat bot: `/context` dan bridge statusline, Markdown dan pemotongan balasan, tombol pilihan, `/help` `/status` (dan `/start` yang ditelan), tanpa skill dan pairing, typing dan reaksi, kutipan, dokumen besar, album, pengingat konteks | mengubah apa pun di `plugin/` atau `master/src/statusline.ts` |
 | `docs/log-bot.md` | Format dan peristiwa `state/plugin.log`, cara membaca keterlambatan pesan, kejadian keterlambatan pesan pertama | mengubah `plugin/log.ts` atau pencatatan di plugin, dan saat menyelidiki pesan terlambat atau gangguan polling |
 | `docs/kuota.md` | Riset sumber kuota akun Claude dan fakta `rate_limits` | mengubah `/quota`, `master/src/quota.ts`, atau pemakaian `status.json` |
 | `docs/tes.md` | Cara menjalankan tes, aturan server tiruan, langkah kalau tes gagal acak | menulis tes baru atau menyelidiki tes yang gagal acak |

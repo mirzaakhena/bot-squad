@@ -243,7 +243,7 @@ bot.use(async (ctx, next) => {
   try {
     await next()
   } finally {
-    // Plugin commands (/start, /help, /status, /context) and unsupported kinds.
+    // Plugin commands (/help, /status, /context), the swallowed /start, and unsupported kinds.
     if (!rec.logged) logInbound(ctx, 'tidak-diteruskan')
   }
 })
@@ -763,28 +763,24 @@ setInterval(() => {
 
 // Commands are DM-only. Responding in groups would confirm bot presence in
 // non-allowlisted groups and spam channels the operator never approved.
-// bot-squad (tiket 261112225309): /start, /help, /status hanya dibalas untuk
+// bot-squad (tiket 261112225309): /help, /status hanya dibalas untuk
 // pengirim di allowFrom di chat pribadi, apa pun dmPolicy-nya (sama dengan
 // /context); selain itu tidak dibalas sama sekali.
 function commandAllowed(ctx: Context): boolean {
   return contextAllowed(ctx.chat?.type, ctx.from?.id, loadAccess())
 }
 
-bot.command('start', async ctx => {
-  if (!commandAllowed(ctx)) return
-  await ctx.reply(
-    `Bot ini meneruskan pesanmu ke sesi Claude Code miliknya.\n\n` +
-    `Kirim pesan biasa di sini, lalu balasan Claude datang ke chat ini. ` +
-    `Ketik /help untuk daftar perintah.`
-  )
-})
+// bot-squad (tiket 261115202402, keputusan pemilik 2026-11-15): /start bukan
+// perintah lagi. Telegram tetap mengirimnya saat seseorang menekan tombol
+// Start, jadi ditelan di sini: tidak dibalas, tidak diteruskan ke Claude,
+// tanpa "typing…" dan reaksi. Tercatat di plugin.log sebagai tidak-diteruskan.
+bot.command('start', () => {})
 
 bot.command('help', async ctx => {
   if (!commandAllowed(ctx)) return
   await ctx.reply(
     `Pesan yang kamu kirim di sini diteruskan ke sesi Claude Code bot ini. ` +
     `Teks dan foto diteruskan; balasan dan reaksi kembali ke chat ini.\n\n` +
-    `/start — pengantar singkat\n` +
     `/status — cek apakah kamu diizinkan\n` +
     `/context — sisa konteks sesi dan kuota`
   )
@@ -1235,7 +1231,6 @@ void (async () => {
           process.stderr.write(`bot-squad channel: polling as @${info.username}\n`)
           void bot.api.setMyCommands(
             [
-              { command: 'start', description: 'Pengantar singkat' },
               { command: 'help', description: 'Apa yang bisa dilakukan bot ini' },
               { command: 'status', description: 'Cek apakah kamu diizinkan' },
               { command: 'context', description: 'Sisa konteks sesi dan kuota' },
