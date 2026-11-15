@@ -47,12 +47,14 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Satu kalimat di balasan /allow dan /access (catatan untuk dmPolicy selain allowlist, master/src/allow.ts) diganti: dulu 'Orang lain mungkin bisa meminta pairing ke bot ini', sekarang 'Plugin memperlakukannya sebagai allowlist: hanya orang di daftar ini yang dilayani'. Perilaku /allow, /revoke, /access tidak berubah.
+- A1 [confirmed] Satu kalimat di balasan /allow dan /access (catatan untuk dmPolicy selain allowlist, master/src/allow.ts) diganti: dulu 'Orang lain mungkin bisa meminta pairing ke bot ini', sekarang 'Plugin memperlakukannya sebagai allowlist: hanya orang di daftar ini yang dilayani'. Perilaku /allow, /revoke, /access tidak berubah.
   Why: Kalimat lama menjadi salah setelah pairing dibuang; hanya teks
   If wrong: Kembalikan satu baris di policyNote() master/src/allow.ts
-- A2 [unseen] Nilai dmPolicy selain 'disabled' (termasuk 'pairing', nilai tak dikenal, atau kosong) diperlakukan sebagai allowlist; access.json yang tidak ada atau rusak berarti tidak ada yang diizinkan. dmPolicy 'disabled' dan grup di access.json tetap bekerja seperti dulu.
+  Confirmed by owner, 2026-11-15
+- A2 [confirmed] Nilai dmPolicy selain 'disabled' (termasuk 'pairing', nilai tak dikenal, atau kosong) diperlakukan sebagai allowlist; access.json yang tidak ada atau rusak berarti tidak ada yang diizinkan. dmPolicy 'disabled' dan grup di access.json tetap bekerja seperti dulu.
   Why: Tiket meminta tidak ada balasan apa pun nilai dmPolicy; bawaan paling aman adalah menolak
   If wrong: Ubah normalisasi dmPolicy di readAccessFile() plugin/server.ts
+  Confirmed by owner, 2026-11-15
 
 ## Decisions
 - Plugin tidak lagi pernah menulis access.json (saveAccess dibuang bersama pending): satu-satunya penulis adalah master-bot, jadi tidak ada lagi tulis-bersamaan dengan /allow dan /revoke. Kolom pending di berkas lama dibiarkan.
