@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { botPaths, PLUGIN_DIR } from "../src/launch.ts";
+import { botPaths, PLUGIN_DIR, RESUME_THRESHOLD_ENV } from "../src/launch.ts";
 import { readRegistry } from "../src/registry.ts";
 import { findStrayServers, listServerProcesses } from "../src/strays.ts";
 import { ok, startFakeTelegram } from "./fake-telegram.ts";
@@ -94,7 +94,7 @@ setInterval(() => {
   // claude tiruan: langsung siap, menjalankan server plugin tiruan.
   script(
     "claude",
-    `echo "$*" >> "$TELEGRAM_STATE_DIR/argv.log"\necho "bypass permissions on"\nCLAUDE_PLUGIN_ROOT='${PLUGIN_DIR}' '${BUN}' '${join(home, "srv", "server.ts")}' "$(cat '${join(home, "mode")}')" &\nwhile :; do sleep 1; done`,
+    `echo "$*" >> "$TELEGRAM_STATE_DIR/argv.log"\necho "$CLAUDE_CODE_RESUME_THRESHOLD_MINUTES $CLAUDE_CODE_RESUME_TOKEN_THRESHOLD" >> "$TELEGRAM_STATE_DIR/env.log"\necho "bypass permissions on"\nCLAUDE_PLUGIN_ROOT='${PLUGIN_DIR}' '${BUN}' '${join(home, "srv", "server.ts")}' "$(cat '${join(home, "mode")}')" &\nwhile :; do sleep 1; done`,
   );
   tg = startFakeTelegram(MASTER, {}, { [BOT]: () => ok({ id: 5001, is_bot: true, first_name: "u", username: "uji_srp_bot" }) });
 });
@@ -247,6 +247,9 @@ describe.skipIf(!TMUX)("/stop dan /restart (proses sungguhan)", () => {
     expect(rs3[1]).toContain("Percakapan baru dimulai.");
     expect(rs3[1]).not.toContain("dilanjutkan");
     expect(continued()).toEqual([false, false, true, false]);
+    // Tiket 261115105101: /register dan setiap /restart membawa kedua ambang dialog resume.
+    const thresholds = `${RESUME_THRESHOLD_ENV.CLAUDE_CODE_RESUME_THRESHOLD_MINUTES} ${RESUME_THRESHOLD_ENV.CLAUDE_CODE_RESUME_TOKEN_THRESHOLD}`;
+    expect(readFileSync(join(state(NAME), "env.log"), "utf8").split("\n").filter(Boolean)).toEqual([thresholds, thresholds, thresholds, thresholds]);
     expect(readdirSync(project)).toHaveLength(1);
     await Bun.sleep(500);
     const pid4 = Number(readFileSync(botPaths(home, NAME).pidFile, "utf8"));

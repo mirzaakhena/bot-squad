@@ -53,3 +53,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Rincian fitur ditulis di docs/<topik>.md (daftar isi di CLAUDE.md); CLAUDE.md hanya pedoman umum, maks. 150 baris dan 15 KB
 - Footer Claude Code 2.1.325 bisa dua baris ('bypass permissions on' lalu '◐ medium · /effort'), dan dengan --continue isi percakapan lama tampil di layar: deteksi layar jangan mengandalkan baris terakhir atau teks di seluruh pane
 - claude sungguhan bisa diuji tanpa login: HOME sementara dengan .claude.json {hasCompletedOnboarding:true}; --continue dan transkrip buatan di ~/.claude/projects jalan, channel dan giliran AI tidak
+- Variabel int Claude Code 2.1.325 diurai parseInt; nilai bukan angka terhingga dibuang diam-diam (bawaan dipakai). Tanpa login flag server mati, jadi dialog di balik flag tidak bisa dipancing di uji.

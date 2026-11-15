@@ -103,7 +103,7 @@ Dibatalkan pemilik (2026-11-15): tidak ada fitur bot-squad untuk ini. Tidak dipe
 
 Daftar lengkap dengan rinciannya di `docs/concern.md`. Yang masih terbuka:
 
-- **Prompt saat start rapuh**: jawaban otomatis dan deteksi "siap" bergantung pada teks layar Claude Code (`I am using this for local development`, `bypass permissions on`). Uji ulang setiap kali Claude Code di-upgrade. Dialog melanjutkan percakapan lama (`--continue`) belum pernah terlihat di uji; kalau muncul, bot dinyalakan dengan percakapan kosong (`docs/menyalakan-bot.md`). Login dan onboarding di server baru belum diuji.
+- **Prompt saat start rapuh**: jawaban otomatis dan deteksi "siap" bergantung pada teks layar Claude Code (`I am using this for local development`, `bypass permissions on`). Uji ulang setiap kali Claude Code di-upgrade. Dialog melanjutkan percakapan lama (`--continue`) belum pernah terlihat di uji; satu dicegah lewat variabel lingkungan sesi bot, dua lainnya tidak, dan kalau muncul bot dinyalakan dengan percakapan kosong (`docs/menyalakan-bot.md`). Login dan onboarding di server baru belum diuji.
 - **Ketahanan**: master-bot sendiri belum dinyalakan otomatis setelah reboot (perlu systemd/launchd atau sejenisnya).
 - **Kuota bersama**: semua bot memakai satu akun Claude.
 - **Connector pemilik ikut termuat di bot**: connector akun claude.ai dan MCP bawaan tetap termuat di bot yang bebas izin; belum ada cara mematikannya per bot.

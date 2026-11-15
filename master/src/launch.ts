@@ -37,6 +37,25 @@ export const RESUME_DIALOG_LINES = 15;
 /** Footer Claude Code: baris mode izin, kadang diikuti satu baris petunjuk (mis. "◐ medium · /effort"). */
 export const FOOTER_LINES = 3;
 
+/**
+ * Ambang dialog "This session is ... old and ... tokens" (tiket 261115105101).
+ * Claude Code 2.1.325 membaca keduanya dari environment prosesnya, dengan
+ * parseInt, tanpa batas atas; dialog hanya muncul kalau umur percakapan
+ * (menit) DAN perkiraan tokennya mencapai ambang. Dengan nilai ini keduanya
+ * tidak pernah tercapai. Hanya berlaku untuk sesi yang dibuka di sini: tidak
+ * ada berkas konfigurasi Claude yang ditulis. Lihat docs/menyalakan-bot.md,
+ * "Dialog saat melanjutkan percakapan lama".
+ */
+export const RESUME_THRESHOLD_ENV: Readonly<Record<string, string>> = Object.freeze({
+  CLAUDE_CODE_RESUME_THRESHOLD_MINUTES: "999999999",
+  CLAUDE_CODE_RESUME_TOKEN_THRESHOLD: "999999999",
+});
+
+/** Environment setiap sesi bot: folder state miliknya dan ambang dialog resume. */
+export function sessionEnv(stateDir: string): Record<string, string> {
+  return { TELEGRAM_STATE_DIR: stateDir, ...RESUME_THRESHOLD_ENV };
+}
+
 /** Percakapan saat bot dinyalakan (tiket 261115100301): lanjutkan yang terakhir, atau mulai kosong. */
 export type ConversationMode = "continue" | "new";
 
@@ -407,7 +426,7 @@ async function launchUnguarded(name: string, deps: LaunchDeps, mode: Conversatio
       await deps.tmux.newSession({
         name,
         cwd: workspace,
-        env: { TELEGRAM_STATE_DIR: state },
+        env: sessionEnv(state),
         argv: claudeArgv(deps.pluginDir, statusline.kind === "installed" ? statusline.command : null, continueLast),
       });
     } catch (err) {

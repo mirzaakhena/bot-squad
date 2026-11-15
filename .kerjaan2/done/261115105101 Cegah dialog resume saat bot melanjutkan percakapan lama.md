@@ -42,11 +42,11 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 ## Done when
 
-- [ ] Setiap sesi bot yang dibuka master-bot (lewat `/register`, `/restart`, penyalaan otomatis) dan lewat `scripts/start-bot.sh` membawa kedua variabel ambang dengan nilai yang membuat dialog "session is ... old" tidak muncul menurut kode Claude Code; ada tes untuk itu.
-- [ ] Sesi Claude lain di mesin (sesi pemilik) tidak terpengaruh: tidak ada berkas konfigurasi Claude yang ditulis.
-- [ ] Jaring pengaman tetap bekerja seperti sekarang, dan tesnya tetap lulus.
-- [ ] Dokumentasi proyek mencatat: syarat dialog itu, cara pencegahannya, hasil pemeriksaan dua dialog lain (bisa dicegah per sesi atau tidak, dan pilihan untuk pemilik kalau tidak), serta mana yang terbukti dijalankan dan mana yang hanya dari membaca biner dan versi Claude Code-nya.
-- [ ] Seluruh tes tetap lulus.
+- [x] Setiap sesi bot yang dibuka master-bot (lewat `/register`, `/restart`, penyalaan otomatis) dan lewat `scripts/start-bot.sh` membawa kedua variabel ambang dengan nilai yang membuat dialog "session is ... old" tidak muncul menurut kode Claude Code; ada tes untuk itu.
+- [x] Sesi Claude lain di mesin (sesi pemilik) tidak terpengaruh: tidak ada berkas konfigurasi Claude yang ditulis.
+- [x] Jaring pengaman tetap bekerja seperti sekarang, dan tesnya tetap lulus.
+- [x] Dokumentasi proyek mencatat: syarat dialog itu, cara pencegahannya, hasil pemeriksaan dua dialog lain (bisa dicegah per sesi atau tidak, dan pilihan untuk pemilik kalau tidak), serta mana yang terbukti dijalankan dan mana yang hanya dari membaca biner dan versi Claude Code-nya.
+- [x] Seluruh tes tetap lulus.
 - [ ] (owner) Pada bot yang percakapannya lebih tua dari 70 menit dan besar, `/restart <nama>` melapor `Percakapan terakhir dilanjutkan.` dan bot masih ingat percakapannya.
 
 ## Out of scope
@@ -54,3 +54,30 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - Mengganti `--continue` dengan `--resume <uuid>`.
 - Menjawab dialog secara otomatis dengan mengetik ke layar.
 - Menulis `resumeReturnDismissed` ke konfigurasi global Claude.
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Assumptions
+- A1 [unseen] Dua dialog lain (peringatan kuota dan tawaran model baru) dibiarkan ke jaring pengaman; tidak ada pencegahan yang dipasang
+  Why: Tidak ada variabel ambang untuk keduanya; cara per sesi yang ada (mematikan semua flag server atau prompt caching) berefek luas dan belum diuji, dan konfigurasi global dilarang di tiket ini
+  If wrong: Pilih salah satu pilihan B-E di docs/menyalakan-bot.md lalu buat tiket baru
+
+## Manual checks
+- M1 [waiting] (item 6) 1. Hentikan lalu jalankan lagi master-bot dari kode terbaru (bun run --cwd master start).
+  2. Pilih bot yang percakapannya besar (/context di chat bot: di atas 100 ribu token) dan pesan terakhirnya lebih dari 70 menit lalu.
+  3. Kirim /restart <nama> ke master-bot.
+  4. Laporan kedua memuat 'aktif' dan 'Percakapan terakhir dilanjutkan.'
+  5. Tanyakan sesuatu dari percakapan lama di chat bot; bot masih ingat. Kalau laporan menyebut 'dialog tak terduga', kirim /logs <nama> untuk melihat dialognya.
+
+## Handoff
+launch.ts kini memberi setiap sesi bot dua variabel lingkungan (RESUME_THRESHOLD_ENV lewat sessionEnv, diteruskan tmux -e): CLAUDE_CODE_RESUME_THRESHOLD_MINUTES dan CLAUDE_CODE_RESUME_TOKEN_THRESHOLD bernilai 999999999, supaya dialog 'This session is ... old' Claude Code tidak muncul saat --continue. Berlaku untuk /register, /restart, penyalaan otomatis, dan start-bot.sh. Jangan diganti nilai bukan angka polos: Claude membuangnya dan memakai bawaan. Tidak boleh menulis ~/.claude.json. Jaring pengaman dialog tak terduga tidak diubah. Dua dialog lain (kuota, model baru) tidak dicegah; syarat dan pilihan pemilik di docs/menyalakan-bot.md. claude tiruan di tes proses mencatat env.log.
+
+## Review
+- 2026-11-15 standard, round 1, at d55302d: passed.
+  1: newSession satu-satunya pembuka sesi dan memakai sessionEnv. 4 berkas tes lulus 115/115; mutasi (ambang dibuang) di salinan menggagalkan 9 tes di semua jalur. Biner 2.1.325: _qe baca process.env lewat H.int() (parseInt, tanpa batas); umur<ambang atau token<ambang = tanpa dialog.
+  2: Diff hanya menambah env tmux -e. Saya ulangi claude 2.1.325 sungguhan (HOME sementara, tmux -S) dengan --continue pada transkrip 5 jam/2 MB: tanpa dialog, ps -E memuat kedua variabel, .claude.json uji tanpa resumeReturnDismissed.
+  3: Kode jaring pengaman tidak ada di diff; tes 'dialog tak terduga' (launch.test.ts) dan r-03 (revive-process.test.ts) lulus.
+  4: docs/menyalakan-bot.md memuat syarat 3 dialog, pencegahan, pilihan A-E, dan daftar terpisah terbukti vs dari biner 2.1.325. Cek acak ke biner cocok (amber_tally, hidden_volcano, maxAsks 2/168 jam, minPercent 5). Rincian lain dialog 2 dan 3 dinilai dengan membaca saja.
+  5: Lulus menurut catatan papan pada isi yang sama (02deb970b3), tidak diulang; 4 berkas terkait saya jalankan ulang: 115 lulus.
+  6: (owner) M1 bisa diikuti dari awal sampai hasil yang diharapkan.
+  note: Bahwa variabel menahan dialog 1 di akun dengan flag server hidup belum terbukti dijalankan (tanpa login flag mati); dokumen menyatakannya jujur. Tidak ada skrip/CI lain selain bun test. Berkas dan tmux uji saya sudah dibersihkan.

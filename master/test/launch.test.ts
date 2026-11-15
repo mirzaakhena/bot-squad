@@ -13,7 +13,9 @@ import {
   launchBot,
   PLUGIN_DIR,
   realLaunchDeps,
+  RESUME_THRESHOLD_ENV,
   screenSnippet,
+  sessionEnv,
   type LaunchDeps,
   type NewSession,
   type Tmux,
@@ -174,7 +176,7 @@ describe("launchBot: siap", () => {
     const s = f.created[0]!;
     expect(s.name).toBe("bot-01");
     expect(s.cwd).toBe(join(home, "bots", "bot-01", "workspace"));
-    expect(s.env).toEqual({ TELEGRAM_STATE_DIR: join(home, "bots", "bot-01", "state") });
+    expect(s.env).toEqual(sessionEnv(join(home, "bots", "bot-01", "state")));
     expect(s.argv).toEqual(claudeArgv("/repo/plugin", bridgeCommand("/repo/plugin", join(home, "bots", "bot-01", "state"))));
     expect(s.argv).toContain("--dangerously-skip-permissions");
     expect(d.installs).toBe(1);
@@ -980,5 +982,105 @@ describe("realLaunchDeps: pemeriksa percakapan terpasang", () => {
       if (old === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = old;
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tiket 261115105101: ambang dialog resume di environment setiap sesi bot.
+
+describe("ambang dialog resume (261115105101)", () => {
+  /**
+   * Salinan pengurai Claude Code 2.1.325 untuk variabel bertipe int tanpa
+   * opsi (H.int() -> qp): notasi ilmiah dan pemisah ribuan, selain itu
+   * parseInt; hasil yang tidak terhingga dibuang (jadi bawaan dipakai).
+   */
+  function claudeInt(raw: string | undefined): number | undefined {
+    if (raw === undefined) return undefined;
+    const n = raw.trim();
+    let v: number | undefined;
+    if (n.length <= 32) {
+      if (/^[+-]?(\d+(\.\d*)?|\.\d+)[eE][+-]?\d+$/.test(n)) v = Number.isInteger(Number(n)) ? Number(n) : NaN;
+      else if (/^[+-]?\d{1,3}([_,\u00A0\u202F ])\d{3}(?:\1\d{3})*$/.test(n)) v = parseInt(n.replace(/[_,\u00A0\u202F ]/g, ""), 10);
+    }
+    v ??= parseInt(n, 10);
+    return Number.isFinite(v) ? v : undefined;
+  }
+  /** Syarat dialog di 2.1.325 (_qe), dengan flag server hidup dan resumeReturnDismissed belum diset. */
+  function dialogShown(env: Record<string, string>, ageMinutes: number, tokens: number): boolean {
+    const minutes = claudeInt(env.CLAUDE_CODE_RESUME_THRESHOLD_MINUTES) ?? 70;
+    const limit = claudeInt(env.CLAUDE_CODE_RESUME_TOKEN_THRESHOLD) ?? 1e5;
+    if (ageMinutes < minutes) return false;
+    if (tokens < limit) return false;
+    return true;
+  }
+  const YEAR = 365 * 24 * 60;
+  const cases: [string, number, number][] = [
+    ["71 menit, 101 ribu token (tepat di atas bawaan)", 71, 101_000],
+    ["satu hari, 500 ribu token", 24 * 60, 500_000],
+    ["setahun, 1 juta token", YEAR, 1_000_000],
+    ["100 tahun, 100 juta token", 100 * YEAR, 100_000_000],
+  ];
+
+  test("nilainya angka desimal polos yang dibaca pengurai Claude Code apa adanya", () => {
+    expect(Object.keys(RESUME_THRESHOLD_ENV).sort()).toEqual(["CLAUDE_CODE_RESUME_THRESHOLD_MINUTES", "CLAUDE_CODE_RESUME_TOKEN_THRESHOLD"]);
+    for (const v of Object.values(RESUME_THRESHOLD_ENV)) {
+      expect(v).toMatch(/^[1-9][0-9]{8,14}$/);
+      expect(claudeInt(v)).toBe(Number(v));
+    }
+  });
+  for (const [label, age, tokens] of cases) {
+    test(`tanpa variabel dialog muncul, dengan variabel tidak: ${label}`, () => {
+      expect(dialogShown({}, age, tokens)).toBe(true);
+      expect(dialogShown(RESUME_THRESHOLD_ENV, age, tokens)).toBe(false);
+      // Masing-masing variabel sendirian pun sudah cukup.
+      for (const k of Object.keys(RESUME_THRESHOLD_ENV)) expect(dialogShown({ [k]: RESUME_THRESHOLD_ENV[k]! }, age, tokens)).toBe(false);
+    });
+  }
+  test("nilai yang tidak terbaca jatuh ke bawaan (alasan nilainya angka polos)", () => {
+    expect(dialogShown({ CLAUDE_CODE_RESUME_THRESHOLD_MINUTES: "Infinity", CLAUDE_CODE_RESUME_TOKEN_THRESHOLD: "never" }, 71, 101_000)).toBe(true);
+  });
+
+  test("sessionEnv: folder state bot itu plus kedua ambang, tanpa yang lain", () => {
+    expect(sessionEnv("/x/state")).toEqual({ TELEGRAM_STATE_DIR: "/x/state", ...RESUME_THRESHOLD_ENV });
+  });
+
+  const ready = () => fakeTmux(() => (writePid("bot-01", ALIVE), READY));
+  for (const mode of ["new", "continue"] as const) {
+    for (const has of [false, true]) {
+      test(`mode ${mode}, ${has ? "ada" : "tanpa"} percakapan: sesi membawa kedua ambang`, async () => {
+        const p = makeBotDir("bot-01");
+        const f = ready();
+        const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => has }), mode);
+        expect(res.kind).toBe("active");
+        expect(f.created).toHaveLength(1);
+        expect(f.created[0]!.env).toEqual({ TELEGRAM_STATE_DIR: p.state, ...RESUME_THRESHOLD_ENV });
+      });
+    }
+  }
+  test("--continue gagal lalu percakapan kosong: kedua percobaan membawa ambang", async () => {
+    const p = makeBotDir("bot-01");
+    const f = fakeTmux(() => {
+      if (f.created.length === 1) return null; // claude --continue keluar
+      writePid("bot-01", ALIVE);
+      return READY;
+    });
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => true }), "continue");
+    expect(res.kind === "active" && res.conversation?.kind).toBe("new");
+    expect(f.created).toHaveLength(2);
+    for (const s of f.created) expect(s.env).toEqual({ TELEGRAM_STATE_DIR: p.state, ...RESUME_THRESHOLD_ENV });
+  });
+  test("tidak ada berkas konfigurasi Claude yang ditulis selain trust folder yang sudah ada sebelumnya", async () => {
+    makeBotDir("bot-01");
+    const f = ready();
+    const d = deps(f.tmux, { hasConversation: () => true });
+    // Folder bots sudah trusted (keadaan mesin pemilik): claude.json tidak boleh berubah.
+    const before = JSON.stringify({ projects: { [join(home, "bots")]: { hasTrustDialogAccepted: true } }, theme: "dark" });
+    writeFileSync(d.claudeJson, before);
+    mkdirSync(join(home, "user-claude"), { recursive: true });
+    writeFileSync(d.userSettings, "{}");
+    await launchBot("bot-01", d, "continue");
+    expect(readFileSync(d.claudeJson, "utf8")).toBe(before);
+    expect(readFileSync(d.claudeJson, "utf8")).not.toContain("resumeReturnDismissed");
+    expect(readFileSync(d.userSettings, "utf8")).toBe("{}");
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { RESUME_THRESHOLD_ENV } from "../src/launch.ts";
 import { readRegistry, writeRegistry } from "../src/registry.ts";
 import { startFakeTelegram } from "./fake-telegram.ts";
 import { OWNER } from "./updates.ts";
@@ -55,6 +56,10 @@ const argvLog = (name: string) =>
     .filter(Boolean)
     .map((l) => l.split(" ")[0] === "--continue");
 
+/** Untuk tiap start claude tiruan bot itu: kedua ambang dialog resume di environment-nya. */
+const envLog = (name: string) => readFileSync(join(home, "bots", name, "state", "env.log"), "utf8").split("\n").filter(Boolean);
+const THRESHOLDS = `${RESUME_THRESHOLD_ENV.CLAUDE_CODE_RESUME_THRESHOLD_MINUTES} ${RESUME_THRESHOLD_ENV.CLAUDE_CODE_RESUME_TOKEN_THRESHOLD}`;
+
 /** Menulis transkrip percakapan untuk folder kerja bot, di tempat Claude Code menyimpannya. */
 function conversation(name: string) {
   const ws = realpathSync(join(home, "bots", name, "workspace"));
@@ -86,6 +91,8 @@ beforeEach(() => {
     [
       // Setiap start mencatat argumennya (tiket 261115100301).
       `echo "$*" >> "$TELEGRAM_STATE_DIR/argv.log"`,
+      // ... dan kedua ambang dialog resume yang diterimanya (tiket 261115105101).
+      `echo "$CLAUDE_CODE_RESUME_THRESHOLD_MINUTES $CLAUDE_CODE_RESUME_TOKEN_THRESHOLD" >> "$TELEGRAM_STATE_DIR/env.log"`,
       `[ -f "$TELEGRAM_STATE_DIR/rusak" ] && { echo "claude tiruan: rusak"; exit 1; }`,
       // Seperti claude asli: --continue yang tidak bisa dilanjutkan keluar dengan kode 1.
       `[ "$1" = "--continue" ] && [ -f "$TELEGRAM_STATE_DIR/continue-rusak" ] && { echo "No conversation found to continue"; exit 1; }`,
@@ -246,6 +253,13 @@ describe.skipIf(!TMUX)("penyalaan otomatis di proses master-bot sungguhan", () =
     expect(argvLog("r-01")).toEqual([false, true]);
     expect(argvLog("r-02")).toEqual([false, false]);
     expect(argvLog("r-03")).toEqual([false, true, false]); // --continue gagal, lalu percakapan kosong
+    // Tiket 261115105101: setiap start (kosong, --continue, dan ulang setelah gagal) membawa kedua ambang.
+    expect(envLog("r-01")).toEqual([THRESHOLDS, THRESHOLDS]);
+    expect(envLog("r-02")).toEqual([THRESHOLDS, THRESHOLDS]);
+    expect(envLog("r-03")).toEqual([THRESHOLDS, THRESHOLDS, THRESHOLDS]);
+    // Tidak ada konfigurasi Claude yang ditulis selain trust folder bots (tanpa resumeReturnDismissed).
+    expect(readdirSync(join(home, ".claude")).sort()).toEqual(["projects"]);
+    expect(Object.keys(JSON.parse(readFileSync(join(home, ".claude.json"), "utf8")))).toEqual(["projects"]);
     for (const n of ["r-01", "r-02", "r-03"]) expect(readRegistry(home).bots[n]!.status).toBe("active");
   }, 60_000);
 
