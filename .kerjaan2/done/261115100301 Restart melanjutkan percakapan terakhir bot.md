@@ -56,15 +56,18 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Kalau melanjutkan percakapan gagal (claude --continue keluar, muncul dialog melanjutkan percakapan lama seperti 'Resume from summary / Resume full session as-is', atau belum siap sampai batas waktu), master-bot menutup sesi itu dan menyalakan bot sekali lagi dengan percakapan kosong, lalu melaporkannya ('Percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (...)'). Dialog itu tidak dijawab otomatis.
+- A1 [confirmed] Kalau melanjutkan percakapan gagal (claude --continue keluar, muncul dialog melanjutkan percakapan lama seperti 'Resume from summary / Resume full session as-is', atau belum siap sampai batas waktu), master-bot menutup sesi itu dan menyalakan bot sekali lagi dengan percakapan kosong, lalu melaporkannya ('Percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (...)'). Dialog itu tidak dijawab otomatis.
   Why: Tiket meminta bot tidak boleh gagal menyala; dialog itu hanya diketahui dari teks biner Claude Code 2.1.325 dan tidak bisa diuji tanpa login, sedangkan menekan tombol pada dialog yang belum pernah terlihat berisiko salah pilih. Bot yang hidup dengan percakapan kosong sama dengan perilaku sebelum tiket ini.
   If wrong: Di master/src/launch.ts: kenali RESUME_DIALOG lalu jawab (mis. pilih 'Resume full session as-is'), atau matikan dialognya lewat env CLAUDE_CODE_RESUME_TOKEN_THRESHOLD di sesi tmux; perlu diuji dengan akun yang login.
-- A2 [unseen] scripts/start-bot.sh (tanpa master-bot) tetap memulai percakapan kosong; hanya /restart <nama> dan penyalaan otomatis yang melanjutkan.
+  Confirmed by owner, 2026-11-15
+- A2 [confirmed] scripts/start-bot.sh (tanpa master-bot) tetap memulai percakapan kosong; hanya /restart <nama> dan penyalaan otomatis yang melanjutkan.
   Why: Keputusan pemilik hanya menyebut /restart, penyalaan otomatis, dan /register.
   If wrong: Beri mode 'continue' ke launchBot di master/src/start-cli.ts.
-- A3 [unseen] Ada-tidaknya percakapan ditentukan master-bot dari berkas transkrip .jsonl yang tidak kosong di <config Claude>/projects/<folder kerja>; isi transkrip tidak dibaca. Ringkasan penyalaan otomatis menulis keterangan percakapan di belakang tiap bot yang dinyalakan.
+  Confirmed by owner, 2026-11-15
+- A3 [confirmed] Ada-tidaknya percakapan ditentukan master-bot dari berkas transkrip .jsonl yang tidak kosong di <config Claude>/projects/<folder kerja>; isi transkrip tidak dibaca. Ringkasan penyalaan otomatis menulis keterangan percakapan di belakang tiap bot yang dinyalakan.
   Why: claude --continue tanpa percakapan terbukti langsung keluar dengan kode 1, jadi master-bot harus memutuskan sendiri; kalau perkiraannya salah, percobaan ulang dengan percakapan kosong menutupinya.
   If wrong: Ubah hasConversation di master/src/launch.ts; kalimat ringkasan ada di reviveReport (master/src/revive.ts).
+  Confirmed by owner, 2026-11-15
 
 ## Decisions
 - Master-bot yang memutuskan memakai --continue (cek berkas transkrip), bukan claude: 'claude --continue' tanpa percakapan terbukti keluar dengan kode 1 sehingga sesi tmux langsung hilang. Percobaan ulang dengan percakapan kosong menjadi jaring pengaman untuk transkrip yang tidak bisa dilanjutkan dan dialog resume yang belum bisa diuji tanpa login.
