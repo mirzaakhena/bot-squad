@@ -9,7 +9,7 @@ import { prepareStatusline } from "./statusline.ts";
 
 /**
  * Menyalakan satu bot sebagai sesi Claude Code di tmux, dengan cara yang
- * terbukti di spike 261112184701/261112184702 (lihat CLAUDE.md, "Menyalakan
+ * terbukti di spike 261112184701/261112184702 (lihat docs/menyalakan-bot.md, "Menyalakan
  * satu bot"). Dipakai master-bot dan scripts/start-bot.sh, jadi hanya ada
  * satu implementasi.
  */

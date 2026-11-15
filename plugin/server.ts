@@ -90,7 +90,7 @@ try {
 } catch {}
 writeFileSync(PID_FILE, String(process.pid))
 
-// bot-squad: always-on log in the state dir (see plugin/log.ts and CLAUDE.md).
+// bot-squad: always-on log in the state dir (see plugin/log.ts and docs/log-bot.md).
 // stderr of this server is not captured anywhere, so this is the only record
 // of inbound timing and getUpdates trouble. Best-effort; never throws.
 const plog = createPluginLog({
