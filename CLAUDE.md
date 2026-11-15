@@ -97,7 +97,7 @@ bot-squad hanya mendukung beberapa perintah chat bot yang dipilih pemilik karena
 
 ## Bot berkirim pesan ke bot lain: dibatalkan
 
-Dibatalkan pemilik (2026-11-15): tidak ada fitur bot-squad untuk ini. Pemilik melakukannya manual lewat session-id (bot tujuan menyebut session-id-nya, lalu bot pengirim diminta menghubunginya dengan session-id itu). Riwayat riset dan rancangannya ada di tiket 261112230309 dan 261113230601.
+Dibatalkan pemilik (2026-11-15): tidak ada fitur bot-squad untuk ini. Tidak diperlukan: bot sudah bisa saling berkirim pesan dengan fitur bawaan Claude Code, cukup pemilik menyebut nama bot tujuan (terbukti dipakai pemilik, 2026-11-15). Bot pengirim menjalankan `ListAgents`, mencari baris yang kolom tmux-nya nama bot tujuan (nama sesi tmux selalu sama dengan nama bot), lalu mengirim ke nama sesi di baris itu. Session-id bukan alamat dan `status.json` tidak dipakai. Riwayat riset dan rancangannya ada di tiket 261112230309 dan 261113230601.
 
 ## Concern yang masih terbuka
 
