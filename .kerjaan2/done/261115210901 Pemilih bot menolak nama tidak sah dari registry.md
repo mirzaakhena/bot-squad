@@ -54,9 +54,10 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Nama 'master' di registry tetap tampil sebagai tombol
+- A1 [confirmed] Nama 'master' di registry tetap tampil sebagai tombol
   Why: 'master' lolos aturan nama (hanya /register yang menolaknya), dan /stop master yang diketik juga diterima; tiket meminta jalur tombol sama dengan jalur diketik
   If wrong: tambahkan RESERVED_NAMES ke saringan isBotName di master/src/picker.ts dan ke withNameRule di master/src/bot.ts
+  Confirmed by owner, 2026-11-15
 
 ## Handoff
 Aturan nama bot untuk perintah bernama kini dicek di satu tempat: withNameRule(caraPakai, kerja) di master/src/bot.ts. named(), showLogs, dan changeAndReply.allow/revoke dibungkus dengannya, dan jalur diketik maupun tombol pemilih memanggil fungsi bungkusan yang sama; cek NAME_RULE terpisah di penangan perintah dibuang. picker.ts menyaring nama tidak sah saat bertanya (tidak dihitung; hanya nama tidak sah = belum ada bot) dan menolak ketukan yang merujuknya sebelum registry dibaca. Jangan sampai rusak: pekerjaan baru yang menerima nama bot harus lewat named() atau withNameRule; /keys masih mengecek NAME_RULE sendiri. isBotName di PickerDeps hanya untuk tes.
