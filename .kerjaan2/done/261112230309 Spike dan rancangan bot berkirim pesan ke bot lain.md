@@ -53,7 +53,7 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - [x] CLAUDE.md mencatat batasan keamanan rancangan itu, termasuk bahwa semua bot berjalan bebas izin dan apakah sesi Claude yang bukan bot (sesi pemilik) bisa mengirim ke atau menerima dari bot lewat mekanisme yang sama.
 - [x] Kalau mekanisme bawaan tidak bisa dipakai, CLAUDE.md mencatat sebabnya beserta perbandingan dengan alternatif kotak surat berkas per bot (pola mirza-bots), tanpa memilih sendiri.
 - [x] Hanya CLAUDE.md yang berubah di repo; langkah uji yang belum dijalankan (termasuk kendala login dengan HOME sementara) tercatat cukup rinci supaya bisa dibuktikan di tahap 2.
-- [ ] (owner) Pemilik menyetujui rancangan (atau memilih alternatif) sebelum 261113230601 dikerjakan.
+- [x] (owner) Pemilik menyetujui rancangan (atau memilih alternatif) sebelum 261113230601 dikerjakan.
 
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
@@ -70,9 +70,10 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
   → Rancangan tanpa uji: rancangan ditulis dari temuan statis saja, tanpa membuktikan kirim pesan. (owner, 2026-11-13)
 
 ## Assumptions
-- A1 [unseen] Kalau mekanisme bawaan tidak bisa dipakai, worker tidak membuat prototipe kotak surat berkas; cukup perbandingan tertulis di CLAUDE.md lalu dibawa ke pemilik
+- A1 [confirmed] Kalau mekanisme bawaan tidak bisa dipakai, worker tidak membuat prototipe kotak surat berkas; cukup perbandingan tertulis di CLAUDE.md lalu dibawa ke pemilik
   Why: Background: hasil itu dibawa ke pemilik bersama alternatif ini, bukan diputuskan sendiri
   If wrong: Tambah spike kotak surat di tiket terpisah
+  Confirmed by owner, 2026-11-15
 
 ## Decisions
 - Lane strict: walau hasilnya hanya CLAUDE.md, spike menjalankan sesi Claude bebas izin yang bisa menjangkau sesi pemilik lewat mekanisme lintas sesi, dan rancangan keamanannya menjadi dasar tahap 2
@@ -82,10 +83,11 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 - Red-proof: tidak ada guard kode yang ditambahkan (hanya dokumentasi CLAUDE.md, keputusan Q5 tanpa uji), jadi tidak ada yang bisa dipatahkan, all red tidak berlaku
 
 ## Manual checks
-- M1 [waiting] (item 8) 1. Buka CLAUDE.md bagian 'Bot berkirim pesan ke bot lain'.
+- M1 [ok] (item 8) 1. Buka CLAUDE.md bagian 'Bot berkirim pesan ke bot lain'.
   2. Baca rancangan tahap 2, batasan keamanan, dan tabel alternatif.
   3. Pilih: rancangan soket (cari_bot + SendMessage), varian B (plugin menulis ke soket), atau kotak surat berkas; juga cara membuktikan (token setup-token atau HOME asli).
   4. Jawaban dicatat di tiket 261113230601 sebelum dikerjakan.
+  Checked by owner, 2026-11-15
 
 ## Handoff
 Hanya CLAUDE.md: bagian baru 'Bot berkirim pesan ke bot lain' sebelum 'Concern'. Isinya temuan statis Claude Code 2.1.323 (SendMessage/ListAgents, soket /tmp/cc-socks/<pid>.sock, registri ~/.claude/sessions/<pid>.json, session-id bukan alamat lokal), cara nama bot ke alamat uds lewat pane tmux dan registri, rancangan tahap 2 (cari_bot, error eksplisit, izin semua bot, kepala hop), batasan keamanan, tabel alternatif kotak surat, dan langkah uji yang belum dijalankan termasuk kendala login HOME sementara. Semua klaim bertanda BD (belum dibuktikan) sesuai Q5; jangan hapus tanda itu sebelum ada uji sungguhan. 261113230601 bergantung pada persetujuan pemilik atas bagian ini.
