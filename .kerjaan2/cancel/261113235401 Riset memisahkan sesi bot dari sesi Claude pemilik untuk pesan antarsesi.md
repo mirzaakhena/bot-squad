@@ -31,3 +31,8 @@ Ketahui apakah dan bagaimana sesi bot bisa dipisahkan dari sesi Claude pemilik u
 ## Out of scope
 
 - Membangun pemisahan itu; itu tiket terpisah setelah pemilik memilih.
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Decisions
+- 2026-11-15 moved to cancel: Pemilik (2026-11-15): komunikasi antar bot ditutup, tiket ini ikut dibatalkan. Pengamatan hari itu: ListAgents di bot-03 hanya menampilkan bot-01 dan bot-02 (bukan sesi pemilik), dan ListAgents di sesi pemilik hanya menampilkan sesi pemilik lain (bukan bot). Hanya daftar yang diamati; kirim langsung lintas kelompok tidak diuji.

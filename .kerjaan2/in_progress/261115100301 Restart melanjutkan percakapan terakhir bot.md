@@ -38,17 +38,45 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 ## Done when
 
-- [ ] `/restart <nama>` menyalakan bot dengan melanjutkan percakapan terakhir di folder kerjanya, dan balasannya menyebut bahwa percakapan dilanjutkan.
-- [ ] `/restart <nama> new` menyalakan bot dengan percakapan kosong, dan balasannya menyebut bahwa percakapan baru dimulai. Argumen kedua selain `new` dijawab dengan cara pakai, tanpa menyentuh bot.
-- [ ] Penyalaan otomatis saat master-bot menyala melanjutkan percakapan terakhir tiap bot yang dinyalakannya.
-- [ ] Bot yang baru didaftarkan lewat `/register` tetap mulai dari percakapan kosong.
-- [ ] Bot yang folder kerjanya belum punya percakapan tetap berhasil menyala lewat `/restart <nama>` dan penyalaan otomatis (mulai dari percakapan kosong), tidak dilaporkan gagal.
-- [ ] `/help` dan menu master-bot menyebut `/restart <nama> [new]`.
-- [ ] Ada tes untuk kelima perilaku di atas, dan seluruh tes tetap lulus. Fitur lain (laporan aktif atau gagal, `/stop`, kunci per bot, `/context`) bekerja seperti sekarang.
-- [ ] Dokumentasi proyek mencatat perilaku baru ini dan keputusan pemilik, termasuk apa yang ditemukan soal `--continue` tanpa percakapan sebelumnya.
+- [x] `/restart <nama>` menyalakan bot dengan melanjutkan percakapan terakhir di folder kerjanya, dan balasannya menyebut bahwa percakapan dilanjutkan.
+- [x] `/restart <nama> new` menyalakan bot dengan percakapan kosong, dan balasannya menyebut bahwa percakapan baru dimulai. Argumen kedua selain `new` dijawab dengan cara pakai, tanpa menyentuh bot.
+- [x] Penyalaan otomatis saat master-bot menyala melanjutkan percakapan terakhir tiap bot yang dinyalakannya.
+- [x] Bot yang baru didaftarkan lewat `/register` tetap mulai dari percakapan kosong.
+- [x] Bot yang folder kerjanya belum punya percakapan tetap berhasil menyala lewat `/restart <nama>` dan penyalaan otomatis (mulai dari percakapan kosong), tidak dilaporkan gagal.
+- [x] `/help` dan menu master-bot menyebut `/restart <nama> [new]`.
+- [x] Ada tes untuk kelima perilaku di atas, dan seluruh tes tetap lulus. Fitur lain (laporan aktif atau gagal, `/stop`, kunci per bot, `/context`) bekerja seperti sekarang.
+- [x] Dokumentasi proyek mencatat perilaku baru ini dan keputusan pemilik, termasuk apa yang ditemukan soal `--continue` tanpa percakapan sebelumnya.
 - [ ] (owner) Setelah master-bot dijalankan dari kode baru: ajak satu bot bicara, kirim `/restart <nama>`, lalu tanyakan ke bot itu apa yang tadi dibicarakan; bot masih ingat. Kirim `/restart <nama> new` dan tanyakan lagi; bot tidak ingat.
 
 ## Out of scope
 
 - Memilih percakapan tertentu untuk dilanjutkan (dengan session-id); hanya percakapan terakhir.
 - Perintah di chat bot untuk memulai percakapan baru (tiket 261112230302).
+
+<!-- k2:record — written by k2 only; do not edit by hand -->
+
+## Assumptions
+- A1 [unseen] Kalau melanjutkan percakapan gagal (claude --continue keluar, muncul dialog melanjutkan percakapan lama seperti 'Resume from summary / Resume full session as-is', atau belum siap sampai batas waktu), master-bot menutup sesi itu dan menyalakan bot sekali lagi dengan percakapan kosong, lalu melaporkannya ('Percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (...)'). Dialog itu tidak dijawab otomatis.
+  Why: Tiket meminta bot tidak boleh gagal menyala; dialog itu hanya diketahui dari teks biner Claude Code 2.1.325 dan tidak bisa diuji tanpa login, sedangkan menekan tombol pada dialog yang belum pernah terlihat berisiko salah pilih. Bot yang hidup dengan percakapan kosong sama dengan perilaku sebelum tiket ini.
+  If wrong: Di master/src/launch.ts: kenali RESUME_DIALOG lalu jawab (mis. pilih 'Resume full session as-is'), atau matikan dialognya lewat env CLAUDE_CODE_RESUME_TOKEN_THRESHOLD di sesi tmux; perlu diuji dengan akun yang login.
+- A2 [unseen] scripts/start-bot.sh (tanpa master-bot) tetap memulai percakapan kosong; hanya /restart <nama> dan penyalaan otomatis yang melanjutkan.
+  Why: Keputusan pemilik hanya menyebut /restart, penyalaan otomatis, dan /register.
+  If wrong: Beri mode 'continue' ke launchBot di master/src/start-cli.ts.
+- A3 [unseen] Ada-tidaknya percakapan ditentukan master-bot dari berkas transkrip .jsonl yang tidak kosong di <config Claude>/projects/<folder kerja>; isi transkrip tidak dibaca. Ringkasan penyalaan otomatis menulis keterangan percakapan di belakang tiap bot yang dinyalakan.
+  Why: claude --continue tanpa percakapan terbukti langsung keluar dengan kode 1, jadi master-bot harus memutuskan sendiri; kalau perkiraannya salah, percobaan ulang dengan percakapan kosong menutupinya.
+  If wrong: Ubah hasConversation di master/src/launch.ts; kalimat ringkasan ada di reviveReport (master/src/revive.ts).
+
+## Decisions
+- Master-bot yang memutuskan memakai --continue (cek berkas transkrip), bukan claude: 'claude --continue' tanpa percakapan terbukti keluar dengan kode 1 sehingga sesi tmux langsung hilang. Percobaan ulang dengan percakapan kosong menjadi jaring pengaman untuk transkrip yang tidak bisa dilanjutkan dan dialog resume yang belum bisa diuji tanpa login.
+
+## Manual checks
+- M1 [waiting] (item 9) 1. Hentikan master-bot yang berjalan (Ctrl+C), lalu dari root repo jalankan: bun run --cwd master start.
+  2. Tunggu ringkasan 'master-bot menyala'; tiap bot yang dinyalakan ulang diberi keterangan percakapannya.
+  3. Di chat satu bot, kirim: 'Ingat kata sandi ini: nanas-biru', tunggu balasannya.
+  4. Di chat master-bot kirim /restart <nama>; balasan pertama menyebut 'melanjutkan percakapan terakhir', laporan kedua 'aktif' dan 'Percakapan terakhir dilanjutkan.'
+  5. Tanyakan ke bot: 'Apa kata sandi tadi?'; bot menjawab nanas-biru.
+  6. Kirim /restart <nama> new; laporan memuat 'Percakapan baru dimulai.'
+  7. Tanyakan lagi kata sandinya; bot tidak tahu. Catatan: kalau di langkah 4 laporannya 'Percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (...)', Claude Code menampilkan dialog yang belum dikenali; kirim /logs <nama> tidak akan menampilkannya lagi, jadi lihat log master-bot dan laporkan alasannya.
+
+## Handoff
+launchBot(name, deps, mode) menerima 'continue' atau 'new' (bawaan 'new'). /restart <nama> dan penyalaan otomatis memakai 'continue', /restart <nama> new dan /register memakai 'new'. Dengan 'continue', master-bot memeriksa transkrip di <config Claude>/projects/<folder kerja> (hasConversation); kalau ada, claude dijalankan dengan --continue, dan kalau percobaan itu gagal bot dinyalakan sekali lagi dengan percakapan kosong. Hasil active membawa conversation, dipakai laporan /restart dan ringkasan penyalaan otomatis. Jangan rusak: classifyScreen mengabaikan teks dialog di isi percakapan lama (footer 3 baris terbawah), opsi launch di createMasterBot dan ReviveDeps sekarang menerima (name, mode), dan percobaan kedua tidak boleh berjalan kalau sesi lama masih hidup.
