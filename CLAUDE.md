@@ -45,7 +45,8 @@ bot-squad/            # root project & root git
 ```
 
 - `plugin/` disalin dari `anthropics/claude-plugins-official` → `external_plugins/telegram` (versi 0.0.7, commit upstream `e0ab6e5`). Sengaja disalin apa adanya supaya perubahan fork bisa dilihat lewat `git diff`.
-- `../claude-official-telegram-channel/` (di luar repo) adalah salinan upstream untuk referensi. Folder ini **tidak ikut git** dan jangan diubah.
+- `../mirbot/claude-official-telegram-channel/` (path absolut `/Users/mirza/Workspace/mirbot/claude-official-telegram-channel/`, di luar repo) adalah salinan upstream untuk referensi. Folder ini **tidak ikut git** dan jangan diubah.
+- Lokasi repo: `~/Workspace/bot-squad`, remote `origin` adalah `https://github.com/mirzaakhena/bot-squad` (branch `main`). Salinan lama di `~/Workspace/mirbot/bot-squad` tidak dipakai lagi.
 
 ## Data runtime (di luar repo)
 
