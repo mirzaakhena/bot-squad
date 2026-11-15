@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { readAccess } from "./allow.ts";
+import { BAD_NAME_REASON, readAccess } from "./allow.ts";
 import { describeError, type Logger } from "./log.ts";
 import { NAME_RULE } from "./register.ts";
 import { readRegistry } from "./registry.ts";
@@ -21,7 +21,10 @@ import { readRegistry } from "./registry.ts";
  * Nama di registry yang tidak lolos aturan nama bot (registry diedit tangan
  * atau rusak, tiket 261115210901) tidak pernah menjadi tombol, dan ketukan
  * yang merujuknya ditolak sebelum apa pun dibaca. Pekerjaan perintahnya
- * sendiri juga menolak nama itu (`withNameRule` di bot.ts).
+ * sendiri juga menolak nama itu (`withNameRule` di bot.ts). Satu-satunya
+ * bacaan berkas di sini, access.json di langkah kedua /revoke, tidak lewat
+ * `withNameRule`; pengaman keduanya ada di `readAccess` (allow.ts), yang
+ * menolak nama tidak sah sendiri (tiket 261115213701).
  */
 
 export const PICK_COMMANDS = ["stop", "restart", "new", "logs", "access", "delete", "revoke"] as const;
@@ -148,9 +151,11 @@ export function createPicker(d: PickerDeps) {
 
   /** Langkah kedua /revoke: user_id yang punya akses ke bot itu, tanpa pemilik. */
   const askUser = async (ctx: PickContext, bot: Shown, username: string): Promise<void> => {
+    // readAccess sendiri menolak nama yang tidak lolos aturan nama, tanpa membaca apa pun.
     const read = readAccess(d.dataDir, bot.name);
     if (!read.ok) {
-      d.log(`/revoke '${bot.name}': ${read.reason}`);
+      // Nama tidak sah tidak ditulis ke log (bisa memuat baris baru).
+      d.log(read.reason === BAD_NAME_REASON ? `/revoke ditolak: ${read.reason}` : `/revoke '${bot.name}': ${read.reason}`);
       await ctx.reply(`${read.reason}. Tidak ada yang diubah.`);
       return;
     }

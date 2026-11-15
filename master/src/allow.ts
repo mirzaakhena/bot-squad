@@ -1,6 +1,7 @@
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { botPaths } from "./launch.ts";
+import { NAME_RULE } from "./register.ts";
 import { serialized } from "./registry.ts";
 
 /**
@@ -13,6 +14,12 @@ import { serialized } from "./registry.ts";
  * access.json yang rusak dipindahkan plugin (lalu tidak ada yang diizinkan
  * sampai ditulis lagi), jadi berkas ini tidak pernah ditulis setengah jadi (sementara, fsync,
  * rename) dan berkas yang tidak bisa dipahami tidak pernah ditimpa.
+ *
+ * Aturan nama bot dijaga di sini juga (tiket 261115213701): readAccess dan
+ * writeAccess menolak nama yang tidak lolos NAME_RULE sebelum path dibentuk,
+ * siapa pun pemanggilnya. Nama seperti `../luar` (registry diedit tangan)
+ * jadi tidak pernah membuka access.json di luar bots/, juga kalau pengecekan
+ * di pemanggil (withNameRule, pemilih) suatu saat hilang.
  */
 
 /** user_id Telegram: bilangan bulat positif (ID orang selalu positif). */
@@ -26,16 +33,22 @@ export type AccessFile = Record<string, unknown> & { allowFrom: string[]; dmPoli
 
 export type ReadAccess = { ok: true; access: AccessFile } | { ok: false; reason: string };
 
+/** Alasan penolakan untuk nama yang tidak lolos aturan nama; namanya sendiri tidak ditulis. */
+export const BAD_NAME_REASON = "nama bot tidak sesuai aturan nama, jadi access.json tidak dibaca";
+
+/** Melempar error untuk nama yang tidak lolos aturan nama: path di luar bots/ tidak pernah dibentuk. */
 export function accessPath(dataDir: string, name: string): string {
+  if (typeof name !== "string" || !NAME_RULE.test(name)) throw new Error(BAD_NAME_REASON);
   return join(botPaths(dataDir, name).state, "access.json");
 }
 
 /**
  * Membaca access.json satu bot. Gagal (dengan alasan untuk pemilik) kalau
  * berkasnya tidak ada, tidak terbaca, bukan objek JSON, atau allowFrom bukan
- * daftar teks.
+ * daftar teks. Nama yang tidak lolos aturan nama ditolak tanpa membaca apa pun.
  */
 export function readAccess(dataDir: string, name: string): ReadAccess {
+  if (typeof name !== "string" || !NAME_RULE.test(name)) return { ok: false, reason: BAD_NAME_REASON };
   let text: string;
   try {
     text = readFileSync(accessPath(dataDir, name), "utf8");
@@ -66,7 +79,7 @@ export function readAccess(dataDir: string, name: string): ReadAccess {
 /** Kait untuk tes: dipanggil setelah berkas sementara ditulis, sebelum rename. */
 export type AccessWriteHooks = { beforeRename?: (tmpFile: string) => void };
 
-/** Menulis access.json secara atomik dengan mode 0600. */
+/** Menulis access.json secara atomik dengan mode 0600. Melempar error untuk nama yang tidak lolos aturan nama. */
 export function writeAccess(dataDir: string, name: string, access: AccessFile, hooks: AccessWriteHooks = {}): void {
   const file = accessPath(dataDir, name);
   const tmp = join(dirname(file), `.access.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
