@@ -58,9 +58,10 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 <!-- k2:record — written by k2 only; do not edit by hand -->
 
 ## Assumptions
-- A1 [unseen] Dua dialog lain (peringatan kuota dan tawaran model baru) dibiarkan ke jaring pengaman; tidak ada pencegahan yang dipasang
+- A1 [confirmed] Dua dialog lain (peringatan kuota dan tawaran model baru) dibiarkan ke jaring pengaman; tidak ada pencegahan yang dipasang
   Why: Tidak ada variabel ambang untuk keduanya; cara per sesi yang ada (mematikan semua flag server atau prompt caching) berefek luas dan belum diuji, dan konfigurasi global dilarang di tiket ini
   If wrong: Pilih salah satu pilihan B-E di docs/menyalakan-bot.md lalu buat tiket baru
+  Confirmed by owner, 2026-11-15
 
 ## Manual checks
 - M1 [waiting] (item 6) 1. Hentikan lalu jalankan lagi master-bot dari kode terbaru (bun run --cwd master start).
