@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { COMMANDS, createMasterBot } from "../src/bot.ts";
-import type { LaunchResult } from "../src/launch.ts";
+import { COMMANDS, createMasterBot, helpText, RESTART_USAGE, STOP_USAGE } from "../src/bot.ts";
+import type { ConversationMode, LaunchResult } from "../src/launch.ts";
 import { readRegistry, registryPath, writeRegistry, type BotStatus } from "../src/registry.ts";
 import type { StopResult } from "../src/stop.ts";
 import { ME, ok, startFakeTelegram } from "./fake-telegram.ts";
@@ -46,6 +46,7 @@ function makeBot(o: {
   failStatusWrite?: boolean;
 }) {
   const calls: Calls = [];
+  const modes: ConversationMode[] = [];
   const pending: Promise<void>[] = [];
   const bot = createMasterBot({
     token: MASTER,
@@ -66,13 +67,14 @@ function makeBot(o: {
       calls.push(["stop", name]);
       return o.stop ? o.stop(name) : CLEAN;
     },
-    launch: async (name) => {
+    launch: async (name, mode) => {
       calls.push(["launch", name]);
+      modes.push(mode);
       return o.launch ? o.launch(name) : { kind: "active", pid: 4242 };
     },
     onLaunch: (p) => pending.push(p),
   });
-  return { bot, calls, settle: () => Promise.all(pending) };
+  return { bot, calls, modes, settle: () => Promise.all(pending) };
 }
 
 const texts = () => tg.calls.filter((c) => c.method === "sendMessage").map((c) => String(c.params.text));
@@ -222,7 +224,8 @@ describe("nama ditolak", () => {
         await bot.handleUpdate(ownerDm(`/${cmd} ${arg}`.trim()));
         await settle();
         expect(calls).toEqual([]);
-        expect(texts()).toEqual([`Cara pakai: /${cmd} <nama>\nNama hanya huruf kecil, angka, dan '-'.`]);
+        expect(texts()).toEqual([cmd === "stop" ? STOP_USAGE : RESTART_USAGE]);
+        expect(texts()[0]).toStartWith(`Cara pakai: /${cmd} <nama>`);
         expect(status("sr-g1")).toBe("active");
       });
     }
@@ -251,7 +254,7 @@ describe("/restart", () => {
         ["launch", name],
       ]);
       const t = texts();
-      expect(t[0]).toBe(`Menyalakan ulang '${name}'...`);
+      expect(t[0]).toBe(`Menyalakan ulang '${name}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /restart ${name} new`);
       expect(t[1]).toContain(`('${name}') aktif.`);
       expect(status(name)).toBe("active");
       expect(status("sr-h-lain")).toBe("failed");
@@ -372,5 +375,152 @@ describe("bot yang sedang diproses", () => {
     await bot.handleUpdate(ownerDm("/stop sr-k6"));
     await settle();
     expect(status("sr-k6")).toBe("stopped");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tiket 261115100301: /restart melanjutkan percakapan terakhir, /restart <nama> new memulai yang baru.
+
+describe("/restart dan percakapan (261115100301)", () => {
+  test("/restart <nama>: dinyalakan dengan mode continue; kedua balasan menyebut percakapan dilanjutkan", async () => {
+    seed({ "sr-p1": "active" });
+    const { bot, calls, modes, settle } = makeBot({
+      launch: async () => ({ kind: "active", pid: 1, conversation: { kind: "continued" } }),
+    });
+    await bot.handleUpdate(ownerDm("/restart sr-p1"));
+    await settle();
+    expect(calls).toEqual([["stop", "sr-p1"], ["launch", "sr-p1"]]);
+    expect(modes).toEqual(["continue"]);
+    const t = texts();
+    expect(t[0]).toContain("melanjutkan percakapan terakhir");
+    expect(t[1]).toContain("('sr-p1') aktif.");
+    expect(t[1]).toContain("Percakapan terakhir dilanjutkan.");
+    expect(t[1]).not.toContain("Percakapan baru");
+    expect(status("sr-p1")).toBe("active");
+  });
+
+  test("/restart <nama> new: mode new; kedua balasan menyebut percakapan baru", async () => {
+    seed({ "sr-p2": "active" });
+    const { bot, calls, modes, settle } = makeBot({
+      launch: async () => ({ kind: "active", pid: 1, conversation: { kind: "new", why: "requested" } }),
+    });
+    await bot.handleUpdate(ownerDm("/restart sr-p2 new"));
+    await settle();
+    expect(calls).toEqual([["stop", "sr-p2"], ["launch", "sr-p2"]]);
+    expect(modes).toEqual(["new"]);
+    const t = texts();
+    expect(t[0]).toBe("Menyalakan ulang 'sr-p2' dengan percakapan baru...");
+    expect(t[1]).toContain("('sr-p2') aktif.");
+    expect(t[1]).toContain("Percakapan baru dimulai.");
+    expect(t[1]).not.toContain("dilanjutkan");
+  });
+
+  test("/restart <nama> tanpa percakapan sebelumnya: aktif (bukan gagal), laporan menjelaskan", async () => {
+    seed({ "sr-p3": "failed" });
+    const { bot, modes, settle } = makeBot({
+      launch: async () => ({ kind: "active", pid: 1, conversation: { kind: "new", why: "no-history" } }),
+    });
+    await bot.handleUpdate(ownerDm("/restart sr-p3"));
+    await settle();
+    expect(modes).toEqual(["continue"]);
+    const t = texts();
+    expect(t[1]).toContain("('sr-p3') aktif.");
+    expect(t[1]).toContain("Percakapan baru dimulai: belum ada percakapan sebelumnya di folder kerja bot ini.");
+    expect(t[1]).not.toContain("gagal");
+    expect(status("sr-p3")).toBe("active");
+  });
+
+  test("percakapan gagal dilanjutkan lalu bot menyala kosong: aktif, alasan di laporan (HTML di-escape)", async () => {
+    seed({ "sr-p4": "active" });
+    const { bot, settle } = makeBot({
+      launch: async () => ({ kind: "active", pid: 1, conversation: { kind: "new", why: "continue-failed", reason: "dialog <x>" } }),
+    });
+    await bot.handleUpdate(ownerDm("/restart sr-p4"));
+    await settle();
+    const t = texts();
+    expect(t[1]).toContain("('sr-p4') aktif.");
+    expect(t[1]).toContain("Percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (dialog &lt;x&gt;). Lihat log master-bot.");
+    expect(status("sr-p4")).toBe("active");
+  });
+
+  test("hasil tanpa keterangan percakapan: laporan mengikuti mode yang diminta", async () => {
+    seed({ "sr-p5": "active" });
+    const { bot, settle } = makeBot({});
+    await bot.handleUpdate(ownerDm("/restart sr-p5"));
+    await settle();
+    await bot.handleUpdate(ownerDm("/restart sr-p5 new"));
+    await settle();
+    const done = texts().filter((x) => x.includes("aktif."));
+    expect(done[0]).toContain("Percakapan terakhir dilanjutkan.");
+    expect(done[1]).toContain("Percakapan baru dimulai.");
+  });
+
+  for (const [label, arg] of [
+    ["kata lain", "sr-p6 baru"],
+    ["huruf besar", "sr-p6 NEW"],
+    ["tiga argumen", "sr-p6 new new"],
+    ["new di depan", "new sr-p6"],
+    ["nama tak sah dengan new", "Sr-P6 new"],
+    ["token mirip new", "sr-p6 new!"],
+  ] as const) {
+    test(`/restart ${label} ('${arg}'): cara pakai, bot tidak disentuh`, async () => {
+      seed({ "sr-p6": "active", new: "active" });
+      const before = readFileSync(registryPath(home), "utf8");
+      const { bot, calls, settle } = makeBot({});
+      await bot.handleUpdate(ownerDm(`/restart ${arg}`));
+      await settle();
+      expect(calls).toEqual([]);
+      expect(texts()).toEqual([RESTART_USAGE]);
+      expect(readFileSync(registryPath(home), "utf8")).toBe(before);
+    });
+  }
+
+  test("/restart <tak terdaftar> new: ditolak, tidak ada yang disentuh", async () => {
+    seed({ "sr-p7": "active" });
+    const { bot, calls, settle } = makeBot({});
+    await bot.handleUpdate(ownerDm("/restart sr-tidak-ada new"));
+    await settle();
+    expect(calls).toEqual([]);
+    expect(texts()[0]).toContain("Bot 'sr-tidak-ada' tidak terdaftar.");
+  });
+
+  test("bot bernama 'new' tetap bisa dinyalakan ulang", async () => {
+    seed({ new: "active" });
+    const { bot, calls, modes, settle } = makeBot({});
+    await bot.handleUpdate(ownerDm("/restart new"));
+    await settle();
+    await bot.handleUpdate(ownerDm("/restart new new"));
+    await settle();
+    expect(calls.filter((c) => c[0] === "launch")).toEqual([["launch", "new"], ["launch", "new"]]);
+    expect(modes).toEqual(["continue", "new"]);
+  });
+
+  test("/restart <nama> new saat bot sedang diproses: ditolak seperti biasa", async () => {
+    seed({ "sr-p8": "active" });
+    let release!: (r: LaunchResult) => void;
+    const { bot, calls, settle } = makeBot({ launch: () => new Promise((r) => (release = r)) });
+    await bot.handleUpdate(ownerDm("/restart sr-p8"));
+    await bot.handleUpdate(ownerDm("/restart sr-p8 new"));
+    expect(texts().at(-1)).toBe("'sr-p8' sedang dinyalakan ulang, coba lagi setelah selesai.");
+    await Bun.sleep(10);
+    release({ kind: "active", pid: 1 });
+    await settle();
+    expect(calls.filter((c) => c[0] === "launch")).toHaveLength(1);
+  });
+
+  test("gagal menyala dengan /restart <nama> new: laporan gagal biasa, tanpa kalimat percakapan", async () => {
+    seed({ "sr-p9": "active" });
+    const { bot, settle } = makeBot({ launch: async () => ({ kind: "failed", reason: "x", sessionAlive: false }) });
+    await bot.handleUpdate(ownerDm("/restart sr-p9 new"));
+    await settle();
+    expect(texts()[1]).toContain("gagal dinyalakan: x.");
+    expect(texts()[1]).not.toContain("Percakapan");
+    expect(status("sr-p9")).toBe("failed");
+  });
+
+  test("/help dan menu menyebut /restart <nama> [new]", () => {
+    expect(helpText()).toContain("/restart - Nyalakan ulang satu bot: /restart <nama> [new]");
+    expect(COMMANDS.find((c) => c.command === "restart")!.description).toContain("/restart <nama> [new]");
+    expect(RESTART_USAGE).toContain("/restart <nama> [new]");
   });
 });

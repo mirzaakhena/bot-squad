@@ -80,3 +80,18 @@ Aturan uji yang wajib (dari pemilik, berlaku untuk worker dan reviewer):
 
 ## Handoff
 launchBot(name, deps, mode) menerima 'continue' atau 'new' (bawaan 'new'). /restart <nama> dan penyalaan otomatis memakai 'continue', /restart <nama> new dan /register memakai 'new'. Dengan 'continue', master-bot memeriksa transkrip di <config Claude>/projects/<folder kerja> (hasConversation); kalau ada, claude dijalankan dengan --continue, dan kalau percobaan itu gagal bot dinyalakan sekali lagi dengan percakapan kosong. Hasil active membawa conversation, dipakai laporan /restart dan ringkasan penyalaan otomatis. Jangan rusak: classifyScreen mengabaikan teks dialog di isi percakapan lama (footer 3 baris terbawah), opsi launch di createMasterBot dan ReviveDeps sekarang menerima (name, mode), dan percobaan kedua tidak boleh berjalan kalau sesi lama masih hidup.
+
+## Review
+- 2026-11-15 standard, round 1, at 4f62840: passed.
+  1: stop-process.test.ts (main.ts sungguhan) di salinan: dengan transkrip ada, argv claude diawali --continue; balasan 'melanjutkan percakapan terakhir...' dan 'Percakapan terakhir dilanjutkan.'
+  2: stop-process.test.ts: '/restart <nama> new' tanpa --continue walau transkrip ada, balasan menyebut percakapan baru; '<nama> baru' dijawab cara pakai, pid server tetap. stop-restart.test.ts: NEW, tiga argumen, new di depan, new! tanpa stop/launch.
+  3: revive-process.test.ts (main.ts sungguhan): setelah kill-server, bot bertranskrip dinyalakan dengan --continue dan ringkasan menulis 'percakapan terakhir dilanjutkan'; revive.test.ts: mode selalu continue.
+  4: register-launch.test.ts (mode new, laporan tanpa kata percakapan) dan stop-process.test.ts (argv /register tanpa --continue).
+  5: claude 2.1.325 sungguhan saya jalankan (HOME sementara, tmux -S): --continue tanpa percakapan mencetak 'No conversation found to continue', EXIT=1. Tes proses: /restart dan penyalaan otomatis tanpa transkrip tetap aktif; r-03 (--continue keluar) menyala kosong.
+  6: stop-restart.test.ts: helpText(), COMMANDS (sumber menu), dan RESTART_USAGE memuat '/restart <nama> [new]'.
+  7: 8 berkas tes terkait (launch, stop-restart, revive, register-launch, stop-process, revive-process, statusline, stop) lewat k2 test di salinan: 221 lulus, 0 gagal. Asersi tes baru bisa gagal (argv.log, teks persis, jumlah sesi).
+  8: Dinilai dengan membaca: docs/master-bot.md, docs/menyalakan-bot.md ('Melanjutkan percakapan terakhir'), docs/concern.md, CLAUDE.md memuat keputusan pemilik 2026-11-15 dan temuan --continue; cocok dengan kode dan percobaan saya.
+  9: (owner) Manual checks M1 bisa diikuti dari awal dan berakhir pada yang harus terlihat.
+  note: Uji sendiri (main.ts sungguhan): --continue menggantung di dialog resume dengan server plugin hidup (sopan dan abaikan SIGTERM). Hasil: argv [kosong, --continue, kosong], tepat satu sesi dan satu server plugin, status active, laporan 'aktif ... tidak bisa dilanjutkan (dialog tak terduga...)'.
+  note: Tidak memblokir: teks RESUME_DIALOG di 15 baris terbawah percakapan lama membuat bot mulai kosong (bukan gagal); kalau percobaan kedua batal karena server plugin masih hidup, laporan gagal bisa menyarankan tmux attach ke sesi yang sudah dimatikan.
+  note: Menurut docs, dialog resume (sesi >70 menit dan >100 ribu token) adalah keadaan bot setelah reboot; kalau muncul di akun pemilik, bot mulai kosong (asumsi A1). Baru terlihat di cek manual pemilik. Tidak ada cek lain di repo selain bun test.

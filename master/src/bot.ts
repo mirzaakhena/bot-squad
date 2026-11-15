@@ -4,7 +4,7 @@ import { isOwnerUpdate, senderIdForLog } from "./access.ts";
 import { describeError, type Logger } from "./log.ts";
 import { NAME_RULE, parseRegisterArgs, registerBot, USAGE } from "./register.ts";
 import { readRegistry, setBotStatus, type BotStatus, type WriteHooks } from "./registry.ts";
-import { isAlive, realTmux, type LaunchResult } from "./launch.ts";
+import { conversationNote, isAlive, realTmux, type ConversationMode, type LaunchResult } from "./launch.ts";
 import { listReport, type ProbeDeps } from "./list.ts";
 import { LOGS_USAGE, logsReport, parseLogsArgs } from "./logs.ts";
 import { quotaReport } from "./quota.ts";
@@ -33,7 +33,7 @@ export const COMMANDS = [
   { command: "register", description: "Daftarkan bot baru: /register <nama> <token>" },
   { command: "list", description: "Daftar bot beserta keadaan nyatanya" },
   { command: "stop", description: "Hentikan satu bot: /stop <nama>" },
-  { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama>" },
+  { command: "restart", description: "Nyalakan ulang satu bot: /restart <nama> [new]" },
   { command: "logs", description: "Baris terakhir layar satu bot: /logs <nama> [n]" },
   { command: "quota", description: "Sisa kuota akun Claude (5 jam/7 hari)" },
   { command: "allow", description: "Izinkan orang lain memakai satu bot: /allow <nama> <user_id>" },
@@ -64,8 +64,11 @@ export type MasterBotOptions = {
   getMeTimeoutMs?: number;
   /** Kait untuk tes penulisan registry. */
   registryHooks?: WriteHooks;
-  /** Menyalakan bot yang baru terdaftar (asli: launchBot dengan realLaunchDeps). */
-  launch: (name: string) => Promise<LaunchResult>;
+  /**
+   * Menyalakan satu bot (asli: launchBot dengan realLaunchDeps). `mode`:
+   * "new" untuk /register dan /restart <nama> new, "continue" untuk /restart <nama>.
+   */
+  launch: (name: string, mode: ConversationMode) => Promise<LaunchResult>;
   /**
    * Kunci "sedang diproses" per bot; default kunci baru untuk master-bot ini.
    * Pekerjaan lain yang menyalakan atau menghentikan bot harus memakai yang sama.
@@ -107,10 +110,22 @@ export const STATUS_NOT_RECORDED = "Status di registry gagal dicatat; lihat log 
  * Pesan hasil penyalaan bot untuk pemilik (HTML). statusRecorded false berarti
  * status active/failed gagal ditulis ke registry.
  */
-export function launchReport(name: string, username: string, res: LaunchResult, statusRecorded = true): string {
+export function launchReport(
+  name: string,
+  username: string,
+  res: LaunchResult,
+  statusRecorded = true,
+  /** Mode yang diminta /restart; null (untuk /register) berarti percakapan tidak disebut. */
+  mode: ConversationMode | null = null,
+): string {
   const who = `@${escapeHtml(username)} ('${name}')`;
   if (res.kind === "active") {
-    const text = `Bot ${who} aktif. Silakan ajak bicara.`;
+    let text = `Bot ${who} aktif. Silakan ajak bicara.`;
+    if (mode !== null) {
+      const conversation = res.conversation ?? (mode === "continue" ? { kind: "continued" as const } : { kind: "new" as const, why: "requested" as const });
+      text += `\n\n${escapeHtml(conversationNote(conversation))}`;
+      if (conversation.kind === "new" && conversation.why === "continue-failed") text += " Lihat log master-bot.";
+    }
     return statusRecorded ? text : `${text}\n\n${STATUS_NOT_RECORDED}`;
   }
   if (res.kind === "already-running") {
@@ -172,7 +187,16 @@ export function restartBlockedReport(name: string, username: string, r: StopResu
 }
 
 export const STOP_USAGE = "Cara pakai: /stop <nama>\nNama hanya huruf kecil, angka, dan '-'.";
-export const RESTART_USAGE = "Cara pakai: /restart <nama>\nNama hanya huruf kecil, angka, dan '-'.";
+export const RESTART_USAGE =
+  "Cara pakai: /restart <nama> [new]\nNama hanya huruf kecil, angka, dan '-'.\n" +
+  "Tanpa 'new', percakapan terakhir bot dilanjutkan; dengan 'new', bot mulai dari percakapan kosong.";
+
+/** Balasan pertama /restart: menyebut percakapan mana yang akan dipakai. */
+export function restartingText(name: string, mode: ConversationMode): string {
+  return mode === "continue"
+    ? `Menyalakan ulang '${name}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /restart ${name} new`
+    : `Menyalakan ulang '${name}' dengan percakapan baru...`;
+}
 export const DELETE_USAGE = "Cara pakai: /delete <nama>\nNama hanya huruf kecil, angka, dan '-'.";
 export const DELETE_EXPIRED = "Konfirmasi ini sudah kedaluwarsa atau sudah dipakai. Tidak ada yang diubah. Kirim /delete <nama> lagi kalau masih perlu.";
 
@@ -324,10 +348,10 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
 
   // Penyalaan berjalan di latar belakang supaya master-bot tetap melayani
   // perintah lain selama menunggu (bisa sampai 90 detik).
-  const launchAndReport = async (name: string, username: string) => {
+  const launchAndReport = async (name: string, username: string, mode: ConversationMode | null) => {
     let res: LaunchResult;
     try {
-      res = await opts.launch(name);
+      res = await opts.launch(name, mode ?? "new");
     } catch (err) {
       res = { kind: "failed", reason: "error di master-bot saat menyalakan", sessionAlive: false };
       opts.log(`penyalaan '${name}' error: ${describeError(err)}`);
@@ -336,7 +360,10 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     if (res.kind !== "already-running") {
       statusRecorded = await recordStatus(name, res.kind === "active" ? "active" : "failed");
     }
-    opts.log(`penyalaan '${name}': ${res.kind}${res.kind === "active" ? "" : ` (${res.reason})`}`);
+    opts.log(
+      `penyalaan '${name}': ${res.kind}` +
+        (res.kind === "active" ? (res.conversation ? ` (${conversationNote(res.conversation)})` : "") : ` (${res.reason})`),
+    );
     if (res.kind === "failed" && res.interrupted) {
       opts.log(
         `penyalaan '${name}' terputus: master-bot berhenti; status ${statusRecorded ? "ditulis 'failed'" : "gagal ditulis"}`,
@@ -344,7 +371,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
     }
     // Gangguan sementara (jaringan, 5xx, 429) dicoba ulang dengan jeda
     // bertambah; error lain dan berhentinya master-bot langsung dicatat.
-    await sendReport("penyalaan", name, launchReport(name, username, res, statusRecorded));
+    await sendReport("penyalaan", name, launchReport(name, username, res, statusRecorded, mode));
   };
 
   /** Hasil cek nama untuk /stop dan /restart: bot terdaftar beserta username-nya, atau balasan penolakan. */
@@ -407,7 +434,13 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
   });
 
   bot.command("restart", async (ctx) => {
-    const found = lookup(ctx.match, RESTART_USAGE, "Tidak ada yang dinyalakan ulang.");
+    // Argumen kedua hanya boleh 'new' (keputusan pemilik 2026-11-15, tiket 261115100301).
+    const words = (typeof ctx.match === "string" ? ctx.match : "").trim().split(/\s+/).filter(Boolean);
+    const mode: ConversationMode = words.length === 2 ? "new" : "continue";
+    const found =
+      words.length > 2 || (words.length === 2 && words[1] !== "new")
+        ? { reply: RESTART_USAGE }
+        : lookup(words[0] ?? "", RESTART_USAGE, "Tidak ada yang dinyalakan ulang.");
     if ("reply" in found) {
       await ctx.reply(found.reply);
       return;
@@ -419,7 +452,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       return;
     }
     try {
-      await ctx.reply(`Menyalakan ulang '${name}'...`);
+      await ctx.reply(restartingText(name, mode));
     } finally {
       inBackground(release, async () => {
         const res = await safeStop(name);
@@ -428,7 +461,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
           await sendReport("penyalaan", name, restartBlockedReport(name, username, res));
           return;
         }
-        await launchAndReport(name, username);
+        await launchAndReport(name, username, mode);
       });
     }
   });
@@ -700,7 +733,7 @@ export function createMasterBot(opts: MasterBotOptions): Bot {
       if (toLaunch) {
         const { name, username } = toLaunch;
         const release = locks.claim(name, "dinyalakan");
-        if (release) inBackground(release, () => launchAndReport(name, username));
+        if (release) inBackground(release, () => launchAndReport(name, username, null));
         else opts.log(`penyalaan '${name}' dilewati: ${busyText(name, locks.busyWith(name) ?? "dinyalakan")}`);
       }
     }

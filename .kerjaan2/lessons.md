@@ -52,3 +52,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Tes server plugin (album-server, buttons-server, quote-server) membaca jawaban initialize tepat setelah 'polling as' tanpa menunggu; di bawah beban gagal acak 'init.result undefined', juga di main (2 dari 6). Tunggu pesan id 1 dulu.
 - Rincian fitur ditulis di docs/<topik>.md (daftar isi di CLAUDE.md); CLAUDE.md hanya pedoman umum, maks. 150 baris dan 15 KB
 - Footer Claude Code 2.1.325 bisa dua baris ('bypass permissions on' lalu '◐ medium · /effort'), dan dengan --continue isi percakapan lama tampil di layar: deteksi layar jangan mengandalkan baris terakhir atau teks di seluruh pane
+- claude sungguhan bisa diuji tanpa login: HOME sementara dengan .claude.json {hasCompletedOnboarding:true}; --continue dan transkrip buatan di ~/.claude/projects jalan, channel dan giliran AI tidak

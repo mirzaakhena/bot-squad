@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { botPaths, PLUGIN_DIR } from "../src/launch.ts";
@@ -94,7 +94,7 @@ setInterval(() => {
   // claude tiruan: langsung siap, menjalankan server plugin tiruan.
   script(
     "claude",
-    `echo "bypass permissions on"\nCLAUDE_PLUGIN_ROOT='${PLUGIN_DIR}' '${BUN}' '${join(home, "srv", "server.ts")}' "$(cat '${join(home, "mode")}')" &\nwhile :; do sleep 1; done`,
+    `echo "$*" >> "$TELEGRAM_STATE_DIR/argv.log"\necho "bypass permissions on"\nCLAUDE_PLUGIN_ROOT='${PLUGIN_DIR}' '${BUN}' '${join(home, "srv", "server.ts")}' "$(cat '${join(home, "mode")}')" &\nwhile :; do sleep 1; done`,
   );
   tg = startFakeTelegram(MASTER, {}, { [BOT]: () => ok({ id: 5001, is_bot: true, first_name: "u", username: "uji_srp_bot" }) });
 });
@@ -206,9 +206,16 @@ describe.skipIf(!TMUX)("/stop dan /restart (proses sungguhan)", () => {
     for (const pid of others) expect(alive(pid)).toBe(true);
     expect(hasSession("srp-01-lain")).toBe(true);
 
+    // Tiket 261115100301. Belum ada percakapan di folder kerja: /restart tetap
+    // menyala, dengan percakapan kosong (tanpa --continue).
+    const continued = () =>
+      readFileSync(join(state(NAME), "argv.log"), "utf8").split("\n").filter(Boolean).map((l) => l.split(" ")[0] === "--continue");
+    expect(continued()).toEqual([false]); // /register
     const rs = await command(m, `/restart ${NAME}`, 2, 30_000);
-    expect(rs[0]).toBe(`Menyalakan ulang '${NAME}'...`);
+    expect(rs[0]).toBe(`Menyalakan ulang '${NAME}', melanjutkan percakapan terakhir...\nUntuk percakapan baru: /restart ${NAME} new`);
     expect(rs[1]).toContain(`('${NAME}') aktif.`);
+    expect(rs[1]).toContain("Percakapan baru dimulai: belum ada percakapan sebelumnya di folder kerja bot ini.");
+    expect(continued()).toEqual([false, false]);
     expect(readRegistry(home).bots[NAME]!.status).toBe("active");
     expect(hasSession(NAME)).toBe(true);
     const pid2 = Number(readFileSync(botPaths(home, NAME).pidFile, "utf8"));
@@ -216,8 +223,15 @@ describe.skipIf(!TMUX)("/stop dan /restart (proses sungguhan)", () => {
     expect(servers(NAME)).toEqual([pid2]);
 
     // /restart bot yang hidup: yang lama dimatikan dulu, hanya satu server.
+    // Sekarang bot punya percakapan: /restart melanjutkannya (claude --continue).
+    const ws = realpathSync(botPaths(home, NAME).workspace);
+    const project = join(home, ".claude", "projects", ws.replace(/[^a-zA-Z0-9]/g, "-"));
+    mkdirSync(project, { recursive: true });
+    writeFileSync(join(project, "11111111-2222-4333-8444-555555555555.jsonl"), '{"type":"user"}\n');
     const rs2 = await command(m, `/restart ${NAME}`, 2, 30_000);
     expect(rs2[1]).toContain("aktif.");
+    expect(rs2[1]).toContain("Percakapan terakhir dilanjutkan.");
+    expect(continued()).toEqual([false, false, true]);
     const pid3 = Number(readFileSync(botPaths(home, NAME).pidFile, "utf8"));
     expect(pid3).not.toBe(pid2);
     await Bun.sleep(500);
@@ -225,6 +239,25 @@ describe.skipIf(!TMUX)("/stop dan /restart (proses sungguhan)", () => {
     expect(servers(NAME)).toEqual([pid3]);
     for (const pid of others) expect(alive(pid)).toBe(true);
     expect(hasSession("srp-01-lain")).toBe(true);
+
+    // /restart <nama> new: percakapan kosong walau ada percakapan lama; transkrip lama tidak dihapus.
+    const rs3 = await command(m, `/restart ${NAME} new`, 2, 30_000);
+    expect(rs3[0]).toBe(`Menyalakan ulang '${NAME}' dengan percakapan baru...`);
+    expect(rs3[1]).toContain("aktif.");
+    expect(rs3[1]).toContain("Percakapan baru dimulai.");
+    expect(rs3[1]).not.toContain("dilanjutkan");
+    expect(continued()).toEqual([false, false, true, false]);
+    expect(readdirSync(project)).toHaveLength(1);
+    await Bun.sleep(500);
+    const pid4 = Number(readFileSync(botPaths(home, NAME).pidFile, "utf8"));
+    expect(servers(NAME)).toEqual([pid4]);
+
+    // Argumen kedua selain 'new': cara pakai, bot tidak disentuh.
+    const bad = await command(m, `/restart ${NAME} baru`, 1, 10_000);
+    expect(bad[0]).toStartWith("Cara pakai: /restart <nama> [new]");
+    await Bun.sleep(500);
+    expect(servers(NAME)).toEqual([pid4]);
+    expect(continued()).toHaveLength(4);
     expect(m.log()).not.toContain(BOT);
     expect(m.log()).not.toContain(MASTER);
   }, 90_000);

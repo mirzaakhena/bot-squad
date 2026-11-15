@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { NAME_RULE } from "./register.ts";
@@ -26,16 +26,85 @@ export const SCREEN_MAX_CHARS = 3_000;
 export const DEV_CHANNEL_PROMPT = "I am using this for local development";
 export const UNEXPECTED_DIALOG = /Yes, I trust this folder|Yes, I accept|Enter to confirm/;
 export const READY_MARK = "bypass permissions on";
+/**
+ * Dialog yang bisa muncul saat percakapan lama dilanjutkan (teks dari biner
+ * Claude Code 2.1.325; belum pernah terlihat di uji, lihat docs/menyalakan-bot.md).
+ * Hanya dicari di baris-baris terbawah layar, karena dengan --continue isi
+ * percakapan lama ikut tampil di atasnya.
+ */
+export const RESUME_DIALOG = /Resume full session as-is|Resume from summary|Resume this conversation\?/;
+export const RESUME_DIALOG_LINES = 15;
+/** Footer Claude Code: baris mode izin, kadang diikuti satu baris petunjuk (mis. "◐ medium · /effort"). */
+export const FOOTER_LINES = 3;
+
+/** Percakapan saat bot dinyalakan (tiket 261115100301): lanjutkan yang terakhir, atau mulai kosong. */
+export type ConversationMode = "continue" | "new";
+
+/** Apa yang benar-benar terjadi pada percakapan bot yang berhasil menyala. */
+export type Conversation =
+  | { kind: "continued" }
+  | { kind: "new"; why: "requested" | "no-history" }
+  /** --continue dicoba tetapi gagal; bot lalu dinyalakan dengan percakapan kosong. */
+  | { kind: "new"; why: "continue-failed"; reason: string };
+
+/** Satu kalimat untuk pemilik tentang percakapan bot yang baru menyala (teks biasa, belum di-escape). */
+export function conversationNote(c: Conversation): string {
+  if (c.kind === "continued") return "Percakapan terakhir dilanjutkan.";
+  if (c.why === "requested") return "Percakapan baru dimulai.";
+  if (c.why === "no-history") return "Percakapan baru dimulai: belum ada percakapan sebelumnya di folder kerja bot ini.";
+  return `Percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (${c.reason}).`;
+}
+
+/**
+ * Folder transkrip Claude Code untuk satu folder kerja:
+ * <config>/projects/<path dengan setiap karakter selain huruf dan angka diganti '-'>.
+ * Terbukti di Claude Code 2.1.325 ('.', '_' dan '/' menjadi '-'). Path yang
+ * hasilnya lebih dari 200 karakter dipotong Claude dan diberi akhiran hash,
+ * jadi untuk itu dicari folder berawalan 200 karakter pertamanya.
+ */
+export function hasConversation(configDir: string, workspace: string): boolean {
+  let real = workspace;
+  try {
+    real = realpathSync(workspace);
+  } catch {}
+  const encoded = real.replace(/[^a-zA-Z0-9]/g, "-");
+  const projects = join(configDir, "projects");
+  const dirs: string[] = [];
+  if (encoded.length <= 200) dirs.push(join(projects, encoded));
+  else {
+    const prefix = encoded.slice(0, 200);
+    try {
+      for (const d of readdirSync(projects)) if (d.startsWith(prefix)) dirs.push(join(projects, d));
+    } catch {}
+  }
+  for (const dir of dirs) {
+    let files: string[];
+    try {
+      files = readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      if (!f.endsWith(".jsonl")) continue;
+      try {
+        const st = statSync(join(dir, f));
+        if (st.isFile() && st.size > 0) return true;
+      } catch {}
+    }
+  }
+  return false;
+}
 
 /**
  * Perintah claude di dalam sesi tmux. `statusLine` (perintah bridge /context,
  * tiket 261112230304) hanya dipasang kalau pendahulunya sudah dipastikan.
  */
-export function claudeArgv(pluginDir: string, statusLine: string | null = null): string[] {
+export function claudeArgv(pluginDir: string, statusLine: string | null = null, continueLast = false): string[] {
   const settings: Record<string, unknown> = { skipDangerousModePermissionPrompt: true };
   if (statusLine !== null) settings.statusLine = { type: "command", command: statusLine };
   return [
     "claude",
+    ...(continueLast ? ["--continue"] : []),
     "--setting-sources",
     "project,local",
     "--settings",
@@ -80,6 +149,12 @@ export type LaunchDeps = {
    * cek start ganda lolos.
    */
   killStrays: (stateDir: string) => Promise<Killed[]>;
+  /**
+   * Apakah folder kerja ini punya percakapan untuk dilanjutkan. Tanpa ini
+   * (atau kalau melempar) dianggap tidak ada, jadi bot mulai kosong:
+   * `claude --continue` tanpa percakapan langsung keluar dengan kode 1.
+   */
+  hasConversation?: (workspace: string) => boolean;
   /** Satu baris log (tanpa token); default tidak menulis apa-apa. */
   log?: (message: string) => void;
   /** Harus selesai lebih awal kalau signal dibatalkan. */
@@ -96,7 +171,7 @@ export type LaunchDeps = {
 };
 
 export type LaunchResult =
-  | { kind: "active"; pid: number }
+  | { kind: "active"; pid: number; conversation?: Conversation }
   | { kind: "already-running"; reason: string }
   | {
       kind: "failed";
@@ -114,8 +189,16 @@ export const INTERRUPTED_REASON = "penyalaan terputus karena master-bot berhenti
 export type ScreenState = "dev-prompt" | "unexpected-dialog" | "ready" | "waiting";
 
 /** Membaca satu tangkapan layar. "ready" butuh tanda di layar dan server plugin yang hidup. */
-export function classifyScreen(pane: string, pluginAlive: boolean): ScreenState {
-  if (pane.includes(DEV_CHANNEL_PROMPT)) return "dev-prompt";
+export function classifyScreen(pane: string, pluginAlive: boolean, devAnswered = false): ScreenState {
+  const lines = pane.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (RESUME_DIALOG.test(lines.slice(-RESUME_DIALOG_LINES).join("\n"))) return "unexpected-dialog";
+  // Tanda siap di baris-baris terbawah (footer Claude satu atau dua baris,
+  // terlihat di 2.1.325) berarti prompt Claude sudah tampil. Dengan --continue
+  // isi percakapan lama ikut tampil di atasnya dan bisa memuat teks dialog;
+  // setelah dialog development channel dijawab, teks itu diabaikan.
+  const promptShown = lines.slice(-FOOTER_LINES).some((l) => l.includes(READY_MARK));
+  if (pane.includes(DEV_CHANNEL_PROMPT) && !(devAnswered && promptShown)) return "dev-prompt";
+  if (promptShown) return pluginAlive ? "ready" : "waiting";
   if (UNEXPECTED_DIALOG.test(pane)) return "unexpected-dialog";
   if (pane.includes(READY_MARK) && pluginAlive) return "ready";
   return "waiting";
@@ -180,7 +263,7 @@ const starting = new Set<string>();
  * Menyalakan bot `name` dan menunggu sampai siap, gagal, atau batas waktu.
  * Tidak pernah melempar error: semua kegagalan menjadi LaunchResult.
  */
-export async function launchBot(name: string, deps: LaunchDeps): Promise<LaunchResult> {
+export async function launchBot(name: string, deps: LaunchDeps, mode: ConversationMode = "new"): Promise<LaunchResult> {
   if (!NAME_RULE.test(name)) {
     return { kind: "failed", reason: "nama bot tidak sesuai aturan", sessionAlive: false };
   }
@@ -189,13 +272,13 @@ export async function launchBot(name: string, deps: LaunchDeps): Promise<LaunchR
   }
   starting.add(name);
   try {
-    return await launchUnguarded(name, deps);
+    return await launchUnguarded(name, deps, mode);
   } finally {
     starting.delete(name);
   }
 }
 
-async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchResult> {
+async function launchUnguarded(name: string, deps: LaunchDeps, mode: ConversationMode): Promise<LaunchResult> {
   const fail = (reason: string, sessionAlive = false, screen?: string): LaunchResult => ({
     kind: "failed",
     reason,
@@ -208,6 +291,8 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
   const signal = deps.signal;
   const aborted = () => signal?.aborted === true;
   let sessionCreated = false;
+  /** Percakapan percobaan yang sedang berjalan; ikut di hasil "active". */
+  let conversation: Conversation = { kind: "new", why: "requested" };
   /**
    * Master-bot berhenti di tengah penyalaan. Satu tangkapan terakhir: kalau
    * bot sudah siap, sesinya dibiarkan dan hasilnya active. Kalau belum, sesi
@@ -219,7 +304,7 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
       pane = await deps.tmux.capture(name).catch(() => null);
       const pid = readPid(pidFile);
       if (pane !== null && classifyScreen(pane, pid !== null && deps.isAlive(pid)) === "ready") {
-        return { kind: "active", pid: pid! };
+        return { kind: "active", pid: pid!, conversation };
       }
       try {
         await deps.tmux.killSession(name);
@@ -303,58 +388,108 @@ async function launchUnguarded(name: string, deps: LaunchDeps): Promise<LaunchRe
   });
   if (statusline.kind !== "installed") deps.log?.(`statusline '${name}' tidak dipasang: ${statusline.reason}`);
 
-  // bot.pid lama sudah dipastikan mati; dihapus supaya tanda siap hanya
-  // datang dari server plugin sesi ini.
-  rmSync(pidFile, { force: true });
-  try {
-    await deps.tmux.newSession({
-      name,
-      cwd: workspace,
-      env: { TELEGRAM_STATE_DIR: state },
-      argv: claudeArgv(deps.pluginDir, statusline.kind === "installed" ? statusline.command : null),
-    });
-  } catch (err) {
-    // tmux menolak nama sesi yang sudah dipakai: sesi lain menang balapan.
-    if (await deps.tmux.hasSession(name).catch(() => false)) {
-      return { kind: "already-running", reason: `sesi tmux '${name}' sudah hidup` };
+  let resume = false;
+  if (mode === "continue") {
+    try {
+      resume = deps.hasConversation?.(workspace) ?? false;
+    } catch (err) {
+      deps.log?.(`percakapan '${name}' tidak bisa diperiksa: ${short(err)}`);
     }
-    return fail(`sesi tmux gagal dibuat (${short(err)})`);
+    if (!resume) deps.log?.(`'${name}' belum punya percakapan untuk dilanjutkan; mulai dari percakapan kosong`);
   }
-  sessionCreated = true;
 
-  // Dialog development channel dijawab sekali. Dialog lain tidak dijawab:
-  // pilihan default-nya "No, exit", jadi lebih aman dinyatakan gagal.
-  const deadline = deps.now() + timeoutMs;
-  let answered = false;
-  let last: string | null = null;
-  while (deps.now() < deadline) {
-    if (aborted()) return interrupted();
-    await deps.sleep(pollMs, signal);
-    if (aborted()) return interrupted();
-    const pane = await deps.tmux.capture(name);
-    if (pane === null) {
-      return fail("sesi berhenti saat start", false, last !== null ? screenSnippet(last) : undefined);
-    }
-    last = pane;
-    const pid = readPid(pidFile);
-    const state = classifyScreen(pane, pid !== null && deps.isAlive(pid));
-    if (state === "dev-prompt") {
-      if (!answered && !aborted()) {
-        await deps.tmux.sendEnter(name);
-        answered = true;
+  /** Satu kali membuka sesi tmux dan menunggu sampai siap, gagal, atau batas waktu. */
+  const attempt = async (continueLast: boolean): Promise<LaunchResult> => {
+    // bot.pid lama sudah dipastikan mati; dihapus supaya tanda siap hanya
+    // datang dari server plugin sesi ini.
+    rmSync(pidFile, { force: true });
+    try {
+      await deps.tmux.newSession({
+        name,
+        cwd: workspace,
+        env: { TELEGRAM_STATE_DIR: state },
+        argv: claudeArgv(deps.pluginDir, statusline.kind === "installed" ? statusline.command : null, continueLast),
+      });
+    } catch (err) {
+      // tmux menolak nama sesi yang sudah dipakai: sesi lain menang balapan.
+      if (await deps.tmux.hasSession(name).catch(() => false)) {
+        return { kind: "already-running", reason: `sesi tmux '${name}' sudah hidup` };
       }
-      continue;
+      return fail(`sesi tmux gagal dibuat (${short(err)})`);
     }
-    if (state === "unexpected-dialog") return fail("dialog tak terduga muncul di layar", true, screenSnippet(pane));
-    if (state === "ready") return { kind: "active", pid: pid! };
+    sessionCreated = true;
+
+    // Dialog development channel dijawab sekali. Dialog lain tidak dijawab:
+    // pilihan default-nya "No, exit", jadi lebih aman dinyatakan gagal.
+    const deadline = deps.now() + timeoutMs;
+    let answered = false;
+    let seenReady = false;
+    let last: string | null = null;
+    while (deps.now() < deadline) {
+      if (aborted()) return interrupted();
+      await deps.sleep(pollMs, signal);
+      if (aborted()) return interrupted();
+      const pane = await deps.tmux.capture(name);
+      if (pane === null) {
+        return fail("sesi berhenti saat start", false, last !== null ? screenSnippet(last) : undefined);
+      }
+      last = pane;
+      const pid = readPid(pidFile);
+      const state = classifyScreen(pane, pid !== null && deps.isAlive(pid), answered);
+      if (state === "dev-prompt") {
+        if (!answered && !aborted()) {
+          await deps.tmux.sendEnter(name);
+          answered = true;
+        }
+        continue;
+      }
+      if (state === "unexpected-dialog") return fail("dialog tak terduga muncul di layar", true, screenSnippet(pane));
+      if (state === "ready") {
+        // Dengan --continue tanda siap harus bertahan dua tangkapan: dialog
+        // melanjutkan percakapan bisa muncul sesaat setelah prompt tampil.
+        if (continueLast && !seenReady) {
+          seenReady = true;
+          continue;
+        }
+        return { kind: "active", pid: pid!, conversation };
+      }
+      seenReady = false;
+    }
+    const pane = (await deps.tmux.capture(name)) ?? last;
+    const alive = await deps.tmux.hasSession(name).catch(() => false);
+    return fail(
+      `belum siap setelah ${Math.round(timeoutMs / 1000)} detik`,
+      alive,
+      pane !== null ? screenSnippet(pane) : undefined,
+    );
+  };
+
+  conversation = resume ? { kind: "continued" } : { kind: "new", why: mode === "continue" ? "no-history" : "requested" };
+  const first = await attempt(resume);
+  if (!resume || first.kind !== "failed" || first.interrupted || !sessionCreated) return first;
+
+  // Melanjutkan percakapan gagal (claude keluar, dialog, atau batas waktu).
+  // Bot tidak boleh mati karena itu: sesi yang gagal ditutup, lalu dicoba
+  // sekali lagi dengan percakapan kosong. Percakapan lama tetap ada di disk.
+  deps.log?.(`'${name}' gagal melanjutkan percakapan terakhir (${first.reason}); dicoba lagi dengan percakapan kosong`);
+  try {
+    await deps.tmux.killSession(name);
+    for (const k of await deps.killStrays(state)) {
+      deps.log?.(`server plugin sisa '${name}' dimatikan: pid ${k.pid} (${k.signal})`);
+    }
+    if (await runningReason(name, deps)) return first;
+  } catch (err) {
+    deps.log?.(`sesi '${name}' yang gagal tidak bisa dibersihkan: ${short(err)}`);
+    return first;
   }
-  const pane = (await deps.tmux.capture(name)) ?? last;
-  const alive = await deps.tmux.hasSession(name).catch(() => false);
-  return fail(
-    `belum siap setelah ${Math.round(timeoutMs / 1000)} detik`,
-    alive,
-    pane !== null ? screenSnippet(pane) : undefined,
-  );
+  if (aborted()) return interrupted();
+  sessionCreated = false;
+  conversation = { kind: "new", why: "continue-failed", reason: first.reason };
+  const second = await attempt(false);
+  if (second.kind === "failed" && !second.interrupted) {
+    return { ...second, reason: `${second.reason}; melanjutkan percakapan terakhir juga gagal (${first.reason})` };
+  }
+  return second;
 }
 
 function short(err: unknown): string {
@@ -483,6 +618,8 @@ export function realLaunchDeps(
     tmux: realTmux,
     isAlive,
     installPlugin: (s) => installPluginLocked({ dataDir, pluginDir: PLUGIN_DIR, isAlive, sleep, now, signal: s }),
+    hasConversation: (workspace) =>
+      hasConversation(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), workspace),
     killStrays: (stateDir) =>
       killStrayServers(
         { stateDir, pluginDir: PLUGIN_DIR },

@@ -43,7 +43,7 @@ tmux new-session -d -s <nama> -x 200 -y 50 -c ~/.bot-squad/bots/<nama>/workspace
     --dangerously-load-development-channels plugin:bot-squad@inline
 ```
 
-   `statusLine` hanya ada kalau statusline pendahulu bisa dipastikan (lihat "/context di chat bot").
+   `statusLine` hanya ada kalau statusline pendahulu bisa dipastikan (lihat "/context di chat bot"). `--continue` ditambahkan tepat setelah `claude` kalau percakapan terakhir dilanjutkan (lihat "Melanjutkan percakapan terakhir").
 5. Membaca layar tmux setiap detik. Begitu dialog development channel muncul, skrip mengirim `Enter` (pilihan 1 sudah terpilih). Bot dianggap siap kalau baris `bypass permissions on` tampil dan proses di `bot.pid` hidup. Kalau muncul dialog lain, skrip berhenti dengan error tanpa menekan apa pun, karena pilihan default dialog itu adalah "No, exit". Dalam uji, bot siap sekitar 3 detik.
 
 Cara memuat plugin lokal sebagai channel:
@@ -62,6 +62,32 @@ Prompt yang muncul saat start dan cara menanganinya:
 | "Quick safety check: Is this a project you created or one you trust?" (default **No, exit**) | Workspace baru yang belum trusted, juga tidak lewat folder induknya | Dicegah: trust `~/.bot-squad/bots` sekali di `~/.claude.json` (langkah 3) |
 | "WARNING: Claude Code running in Bypass Permissions mode" (default **No, exit**) | Setiap start dengan `--dangerously-skip-permissions` kalau `skipDangerousModePermissionPrompt` tidak aktif. Di MacBook ini tidak muncul karena sudah aktif di `~/.claude/settings.json`, tetapi muncul begitu pengaturan user diabaikan | Dicegah: `--settings '{"skipDangerousModePermissionPrompt":true}'` |
 | "WARNING: Loading development channels" (default **1. I am using this for local development**) | **Setiap** start dengan `--dangerously-load-development-channels`. Jawabannya tidak disimpan, dan tidak ada pengaturan untuk melewatinya (`allowedChannelPlugins` hanya ada di managed settings, yang butuh akses root dan berlaku untuk seluruh mesin) | Dijawab otomatis: `tmux send-keys -t <nama>: Enter` (langkah 5) |
+
+## Melanjutkan percakapan terakhir (`--continue`, tiket 261115100301, Claude Code 2.1.325)
+
+Keputusan pemilik (2026-11-15): `/restart <nama>` dan penyalaan otomatis melanjutkan percakapan terakhir bot, `/restart <nama> new` dan `/register` mulai kosong. `launchBot(name, deps, mode)` menerima `"continue"` atau `"new"` (bawaan `"new"`, dipakai `start-bot.sh`). Hasil `active` membawa `conversation`: `continued`, atau `new` dengan sebab `requested`, `no-history`, atau `continue-failed` (plus alasannya).
+
+**Master-bot yang memutuskan, bukan `claude`:**
+
+1. `hasConversation()` memeriksa apakah folder kerja itu punya transkrip: berkas `*.jsonl` yang tidak kosong di `<config>/projects/<path>/`, dengan `<config>` = `$CLAUDE_CONFIG_DIR` atau `~/.claude`, dan `<path>` = path asli folder kerja (`realpath`) dengan setiap karakter selain huruf dan angka diganti `-`. Path yang hasilnya lebih dari 200 karakter dipotong Claude dan diberi akhiran hash; untuk itu dicari folder berawalan 200 karakter pertama. Hanya membaca daftar berkas; isi transkrip tidak dibaca.
+2. Tidak ada transkrip (atau pemeriksaan gagal): `claude` dijalankan **tanpa** `--continue`, hasilnya `no-history`.
+3. Ada transkrip: `claude --continue`. Kalau percobaan itu gagal setelah sesi tmux dibuat (claude keluar, dialog tak terduga, atau belum siap sampai batas waktu), sesi yang gagal ditutup (`kill-session`), server plugin sisanya dibersihkan (`killStrays`), lalu dicoba **sekali** lagi tanpa `--continue`; hasilnya `continue-failed`, alasannya masuk laporan dan log (`'<nama>' gagal melanjutkan percakapan terakhir (...)`). Tidak dicoba lagi kalau sesi yang gagal tidak bisa ditutup atau server plugin-nya masih hidup (satu bot tidak boleh berjalan dua kali), atau kalau master-bot sedang berhenti. Kalau percobaan kosong juga gagal, laporan gagal menyebut kedua alasan. Akibatnya `/restart` bisa memakan dua kali batas waktu (2 x 90 detik) dalam kasus terburuk.
+4. Dengan `--continue`, tanda siap harus terlihat di dua tangkapan layar berturut-turut (satu detik lebih lama), karena dialog melanjutkan percakapan bisa muncul setelah prompt tampil.
+
+**Layar saat percakapan dilanjutkan.** Isi percakapan lama tampil di atas prompt, jadi bisa memuat teks yang dipakai untuk mengenali dialog (misalnya bot yang membahas bot-squad sendiri). `classifyScreen` karena itu: (a) menganggap prompt sudah tampil kalau `bypass permissions on` ada di 3 baris terbawah yang tidak kosong (footer Claude bisa dua baris, misalnya diikuti `◐ medium · /effort`), dan saat itu teks dialog trust/bypass di layar diabaikan; (b) teks dialog development channel diabaikan hanya setelah dialog itu pernah dijawab di sesi ini; (c) dialog melanjutkan percakapan (`RESUME_DIALOG`) hanya dicari di 15 baris terbawah dan selalu dianggap dialog tak terduga, tidak pernah dijawab.
+
+**Terbukti dengan menjalankan** (claude 2.1.325 sungguhan, HOME sementara tanpa login, server tmux terpisah, Telegram tiruan):
+
+- `claude --continue` di folder tanpa percakapan mencetak `No conversation found to continue` dan keluar dengan kode 1, juga tanpa login. Di tmux sesinya langsung hilang, jadi tanpa langkah 1-3 bot akan dilaporkan `sesi berhenti saat start`.
+- Sama halnya kalau folder proyek berisi `.jsonl` tanpa pesan (hanya baris `summary`): claude keluar, dan langkah 3 menyalakan bot dengan percakapan kosong.
+- Aturan nama folder proyek (`/`, `.`, `_` menjadi `-`) cocok: transkrip buatan di folder itu ditemukan `--continue` dan isinya tampil di layar, dengan `bypass permissions on` di footer dan tanpa dialog tambahan (transkrip kecil dan baru).
+- Transkrip yang memuat teks `I am using this for local development`, `Enter to confirm`, dan `Yes, I trust this folder` tetap berakhir `aktif`/`continued`. Sebelum perbaikan footer dua baris, kasus ini menggantung sekitar 20 detik.
+
+**Belum terbukti (butuh akun Claude yang login; lihat butir pemilik di tiket):**
+
+- Bahwa Claude benar-benar mengingat percakapan setelah `--continue` dan channel plugin tetap menerima pesan. Tanpa login, layar menulis `Channels are not currently available`, jadi dialog development channel tidak muncul di uji ini; urutan dialog itu terhadap tampilnya percakapan lama belum terlihat.
+- **Dialog saat melanjutkan percakapan lama.** Dari teks biner 2.1.325 (bukan dari uji): (1) `This session is <umur> old and <n> tokens.` dengan pilihan `Resume from summary (recommended)`, `Resume full session as-is`, `Don't ask me again`, muncul kalau pesan terakhir lebih tua dari 70 menit dan percakapan di atas 100 ribu token (`CLAUDE_CODE_RESUME_THRESHOLD_MINUTES`, `CLAUDE_CODE_RESUME_TOKEN_THRESHOLD`), di balik flag server, dan tidak muncul lagi setelah `Don't ask me again` (`resumeReturnDismissed` di `~/.claude.json`); (2) `Resume this conversation?` (peringatan kuota 5 jam, pilihan `Start a new conversation`/`Resume from summary`), juga dimatikan `resumeReturnDismissed`; (3) tawaran model yang lebih baru. Keadaan (1) persis keadaan bot setelah server reboot. Kalau salah satu muncul, master-bot tidak menjawabnya: percobaan `--continue` dinyatakan gagal (`dialog tak terduga`, atau batas waktu kalau teksnya tidak dikenali) dan bot dinyalakan dengan percakapan kosong (langkah 3). Jadi bot tetap hidup, tetapi tidak melanjutkan. Menjawab dialog itu otomatis, atau mematikannya lewat variabel di atas, belum dibuat karena tidak bisa diuji tanpa login.
+- Setelah bot menyala kosong karena `continue-failed`, percakapan "terakhir" berikutnya adalah yang baru itu (begitu ada giliran); percakapan lama tetap di disk tetapi tidak dipilih lagi oleh `--continue`.
 
 ## Menjalankan banyak bot bersamaan (hasil spike 261112184702, Claude Code 2.1.322, bun 1.3.11)
 

@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   botPaths,
   classifyScreen,
   claudeArgv,
+  conversationNote,
+  hasConversation,
   ensureTrusted,
   installPluginLocked,
   launchBot,
@@ -166,7 +168,7 @@ describe("launchBot: siap", () => {
     });
     const d = deps(f.tmux);
     const res = await launchBot("bot-01", d);
-    expect(res).toEqual({ kind: "active", pid: ALIVE });
+    expect(res).toEqual({ kind: "active", pid: ALIVE, conversation: { kind: "new", why: "requested" } });
     expect(f.enters).toEqual(["bot-01"]);
     expect(f.created).toHaveLength(1);
     const s = f.created[0]!;
@@ -319,7 +321,7 @@ describe("launchBot: server plugin sisa", () => {
       },
     });
     const res = await launchBot("bot-01", d);
-    expect(res).toEqual({ kind: "active", pid: ALIVE });
+    expect(res).toEqual({ kind: "active", pid: ALIVE, conversation: { kind: "new", why: "requested" } });
     expect(d.strayCalls).toEqual([p.state]);
     expect(createdAtCleanup).toBe(0);
     expect(d.logs).toEqual([
@@ -619,7 +621,7 @@ describe("launchBot: master-bot berhenti di tengah penyalaan (261112223102)", ()
     };
     const f = fakeTmux(() => READY);
     const res = await launchBot("bot-01", deps(f.tmux, { signal: ac.signal, sleep }));
-    expect(res).toEqual({ kind: "active", pid: ALIVE });
+    expect(res).toEqual({ kind: "active", pid: ALIVE, conversation: { kind: "new", why: "requested" } });
     expect(f.killed).toEqual([]);
     expect(f.sessions.has("bot-01")).toBe(true);
   });
@@ -682,5 +684,301 @@ describe("installPluginLocked: dibatalkan", () => {
     });
     await expect(p).rejects.toThrow("dibatalkan");
     expect(existsSync(locks)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tiket 261115100301: melanjutkan percakapan terakhir (--continue).
+
+describe("claudeArgv: --continue", () => {
+  test("tanpa continueLast tidak ada --continue (seperti /register)", () => {
+    expect(claudeArgv("/p")).not.toContain("--continue");
+    expect(claudeArgv("/p", "cmd", false)).not.toContain("--continue");
+  });
+  test("continueLast menambah --continue tepat setelah claude; sisanya sama", () => {
+    const base = claudeArgv("/p", "cmd");
+    const cont = claudeArgv("/p", "cmd", true);
+    expect(cont.slice(0, 2)).toEqual(["claude", "--continue"]);
+    expect(cont.filter((a) => a !== "--continue")).toEqual(base);
+  });
+});
+
+describe("hasConversation per kasus", () => {
+  const enc = (p: string) => p.replace(/[^a-zA-Z0-9]/g, "-");
+  let cfg: string;
+  let ws: string;
+  beforeEach(() => {
+    cfg = join(home, "cfg");
+    // realpath: di macOS folder sementara berada di balik /private.
+    mkdirSync(join(home, "bots", "b.1_x", "workspace"), { recursive: true });
+    ws = realpathSync(join(home, "bots", "b.1_x", "workspace"));
+  });
+  const project = () => join(cfg, "projects", enc(ws));
+
+  test("folder projects belum ada: tidak ada percakapan", () => expect(hasConversation(cfg, ws)).toBe(false));
+  test("folder proyek kosong: tidak ada", () => {
+    mkdirSync(project(), { recursive: true });
+    expect(hasConversation(cfg, ws)).toBe(false);
+  });
+  test("transkrip .jsonl berisi: ada; titik dan garis bawah di path menjadi '-'", () => {
+    mkdirSync(project(), { recursive: true });
+    writeFileSync(join(project(), "a.jsonl"), '{"type":"user"}\n');
+    expect(enc(ws)).not.toMatch(/[._/]/);
+    expect(hasConversation(cfg, ws)).toBe(true);
+  });
+  test("transkrip kosong (0 byte): tidak ada", () => {
+    mkdirSync(project(), { recursive: true });
+    writeFileSync(join(project(), "a.jsonl"), "");
+    expect(hasConversation(cfg, ws)).toBe(false);
+  });
+  test("berkas lain dan subfolder bukan percakapan", () => {
+    mkdirSync(join(project(), "b.jsonl"), { recursive: true });
+    writeFileSync(join(project(), "catatan.txt"), "x");
+    expect(hasConversation(cfg, ws)).toBe(false);
+  });
+  test("percakapan folder kerja lain tidak dihitung", () => {
+    const other = join(cfg, "projects", enc(ws) + "-lain");
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(other, "a.jsonl"), "x");
+    expect(hasConversation(cfg, ws)).toBe(false);
+  });
+  test("folder kerja lewat symlink dicari dengan path aslinya", () => {
+    mkdirSync(project(), { recursive: true });
+    writeFileSync(join(project(), "a.jsonl"), "x");
+    const link = join(home, "tautan");
+    symlinkSync(ws, link);
+    expect(hasConversation(cfg, link)).toBe(true);
+  });
+  test("path sangat panjang (>200 karakter): folder berawalan 200 karakter pertama", () => {
+    const long = join(ws, "p".repeat(220));
+    expect(hasConversation(cfg, long)).toBe(false);
+    const dir = join(cfg, "projects", enc(long).slice(0, 200) + "-abc123");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "a.jsonl"), "x");
+    expect(hasConversation(cfg, long)).toBe(true);
+  });
+});
+
+describe("classifyScreen dengan percakapan lama di layar", () => {
+  const RESUMED = (text: string) => `❯ pesan lama\n⏺ ${text}\n────\n❯ \n────\n  ⏵⏵ bypass permissions on (shift+tab to cycle)`;
+  test("teks dialog development channel di percakapan lama, dialog sudah dijawab: siap", () =>
+    expect(classifyScreen(RESUMED(DEV), true, true)).toBe("ready"));
+  test("teks yang sama sebelum dialog dijawab: tetap dianggap dialog", () =>
+    expect(classifyScreen(RESUMED(DEV), true, false)).toBe("dev-prompt"));
+  test("teks dialog trust di percakapan lama, prompt sudah tampil: siap", () =>
+    expect(classifyScreen(RESUMED(TRUST), true)).toBe("ready"));
+  test("footer dua baris (tanda siap bukan baris terakhir, terlihat di 2.1.325): tetap siap", () =>
+    expect(classifyScreen(`${RESUMED(DEV)}\n      ◐ medium · /effort`, true, true)).toBe("ready"));
+  test("tanda siap hanya di isi percakapan lama (bukan footer), dialog masih tampil: dialog", () => {
+    const filler = Array.from({ length: 5 }, (_, i) => `baris ${i}`).join("\n");
+    expect(classifyScreen(`⏺ bypass permissions on\n${filler}\n${TRUST}`, true, true)).toBe("unexpected-dialog");
+  });
+  test("prompt tampil tetapi plugin belum hidup: menunggu, bukan dialog", () =>
+    expect(classifyScreen(RESUMED("Enter to confirm"), false)).toBe("waiting"));
+  for (const text of ["Resume full session as-is", "Resume from summary (recommended)", "Resume this conversation?"]) {
+    test(`dialog melanjutkan '${text}' di bagian bawah layar: tak terduga, walau tanda siap ada`, () =>
+      expect(classifyScreen(`This session is 3h old\n❯ 1. ${text}\n  2. lain\n${READY}`, true, true)).toBe("unexpected-dialog"));
+  }
+  test("teks dialog melanjutkan jauh di atas (isi percakapan lama): diabaikan", () => {
+    const filler = Array.from({ length: 20 }, (_, i) => `baris ${i}`).join("\n");
+    expect(classifyScreen(`Resume full session as-is\n${filler}\n${READY}`, true, true)).toBe("ready");
+  });
+});
+
+describe("conversationNote per kasus", () => {
+  test("dilanjutkan", () => expect(conversationNote({ kind: "continued" })).toBe("Percakapan terakhir dilanjutkan."));
+  test("diminta baru", () => expect(conversationNote({ kind: "new", why: "requested" })).toBe("Percakapan baru dimulai."));
+  test("belum ada percakapan", () =>
+    expect(conversationNote({ kind: "new", why: "no-history" })).toContain("belum ada percakapan sebelumnya"));
+  test("gagal dilanjutkan menyebut alasannya", () =>
+    expect(conversationNote({ kind: "new", why: "continue-failed", reason: "sesi berhenti saat start" })).toBe(
+      "Percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (sesi berhenti saat start).",
+    ));
+});
+
+describe("launchBot: percakapan (261115100301)", () => {
+  const ready = () => fakeTmux(() => (writePid("bot-01", ALIVE), READY));
+
+  test("mode continue dan ada percakapan: claude --continue, hasil 'continued'", async () => {
+    const p = makeBotDir("bot-01");
+    const f = ready();
+    const asked: string[] = [];
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: (w) => (asked.push(w), true) }), "continue");
+    expect(res).toEqual({ kind: "active", pid: ALIVE, conversation: { kind: "continued" } });
+    expect(asked).toEqual([p.workspace]);
+    expect(f.created).toHaveLength(1);
+    expect(f.created[0]!.argv.slice(0, 2)).toEqual(["claude", "--continue"]);
+    // Tanda siap harus bertahan dua tangkapan.
+    expect(f.captureCount()).toBe(2);
+  });
+
+  test("mode continue, tanda siap lalu dialog melanjutkan muncul: bukan aktif dengan --continue", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux((i) => {
+      writePid("bot-01", ALIVE);
+      if (f.created.length === 1) return i === 0 ? READY : `❯ 1. Resume from summary (recommended)\n  2. Resume full session as-is\n${READY}`;
+      return READY;
+    });
+    // Server plugin sesi yang gagal ikut mati saat dibersihkan (bot.pid-nya hilang).
+    const p = botPaths(home, "bot-01");
+    const d = deps(f.tmux, { hasConversation: () => true, killStrays: async () => (rmSync(p.pidFile, { force: true }), []) });
+    const res = await launchBot("bot-01", d, "continue");
+    expect(res).toEqual({
+      kind: "active",
+      pid: ALIVE,
+      conversation: { kind: "new", why: "continue-failed", reason: "dialog tak terduga muncul di layar" },
+    });
+    expect(f.enters).toEqual([]); // dialog tidak pernah dijawab
+    expect(f.killed).toEqual(["bot-01"]);
+    expect(f.created.map((s) => s.argv.includes("--continue"))).toEqual([true, false]);
+  });
+
+  test("mode continue tetapi belum ada percakapan: tanpa --continue, hasil 'no-history', tidak gagal", async () => {
+    makeBotDir("bot-01");
+    const f = ready();
+    const d = deps(f.tmux, { hasConversation: () => false });
+    const res = await launchBot("bot-01", d, "continue");
+    expect(res).toEqual({ kind: "active", pid: ALIVE, conversation: { kind: "new", why: "no-history" } });
+    expect(f.created).toHaveLength(1);
+    expect(f.created[0]!.argv).not.toContain("--continue");
+    expect(d.logs.join("\n")).toContain("belum punya percakapan untuk dilanjutkan");
+  });
+
+  test("mode continue tanpa pemeriksa percakapan, atau pemeriksa melempar: mulai kosong", async () => {
+    const p = makeBotDir("bot-01");
+    for (const over of [{}, { hasConversation: () => { throw new Error("EACCES"); } }]) {
+      rmSync(p.pidFile, { force: true });
+      const f = ready();
+      const res = await launchBot("bot-01", deps(f.tmux, over), "continue");
+      expect(res).toEqual({ kind: "active", pid: ALIVE, conversation: { kind: "new", why: "no-history" } });
+      expect(f.created[0]!.argv).not.toContain("--continue");
+    }
+  });
+
+  test("mode new walau ada percakapan: tanpa --continue, percakapan tidak diperiksa", async () => {
+    makeBotDir("bot-01");
+    const f = ready();
+    let asked = 0;
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => (asked++, true) }), "new");
+    expect(res).toEqual({ kind: "active", pid: ALIVE, conversation: { kind: "new", why: "requested" } });
+    expect(f.created[0]!.argv).not.toContain("--continue");
+    expect(asked).toBe(0);
+  });
+
+  test("tanpa mode (start-bot.sh, /register lama): percakapan kosong", async () => {
+    makeBotDir("bot-01");
+    const f = ready();
+    await launchBot("bot-01", deps(f.tmux, { hasConversation: () => true }));
+    expect(f.created[0]!.argv).not.toContain("--continue");
+  });
+
+  test("claude --continue langsung keluar: sesi kedua tanpa --continue, bot tetap aktif", async () => {
+    const p = makeBotDir("bot-01");
+    const f = fakeTmux(() => (f.created.length === 1 ? null : (writePid("bot-01", ALIVE), READY)));
+    const d = deps(f.tmux, { hasConversation: () => true });
+    const res = await launchBot("bot-01", d, "continue");
+    expect(res).toEqual({
+      kind: "active",
+      pid: ALIVE,
+      conversation: { kind: "new", why: "continue-failed", reason: "sesi berhenti saat start" },
+    });
+    expect(f.created.map((s) => s.argv.includes("--continue"))).toEqual([true, false]);
+    expect(d.strayCalls).toEqual([p.state, p.state]); // server sisa dibersihkan lagi sebelum sesi kedua
+    expect(d.logs.join("\n")).toContain("gagal melanjutkan percakapan terakhir (sesi berhenti saat start)");
+    expect(d.installs).toBe(1);
+  });
+
+  test("--continue tidak siap sampai batas waktu: sesi ditutup, dicoba kosong", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux(() => (f.created.length === 1 ? "memuat..." : (writePid("bot-01", ALIVE), READY)));
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => true, timeoutMs: 5_000 }), "continue");
+    expect(res.kind).toBe("active");
+    expect(res.kind === "active" && res.conversation).toEqual({ kind: "new", why: "continue-failed", reason: "belum siap setelah 5 detik" });
+    expect(f.killed).toEqual(["bot-01"]);
+    expect(f.created).toHaveLength(2);
+  });
+
+  test("percobaan kosong juga gagal: failed, kedua alasan disebut, tidak ada percobaan ketiga", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux(() => null);
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => true }), "continue");
+    expect(res.kind).toBe("failed");
+    expect(res.kind === "failed" && res.reason).toBe(
+      "sesi berhenti saat start; melanjutkan percakapan terakhir juga gagal (sesi berhenti saat start)",
+    );
+    expect(f.created).toHaveLength(2);
+  });
+
+  test("sesi gagal tidak bisa ditutup: tidak dicoba lagi (tidak boleh dua sesi)", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux(() => TRUST);
+    f.tmux.killSession = async () => {
+      throw new Error("tmux menolak");
+    };
+    const d = deps(f.tmux, { hasConversation: () => true });
+    const res = await launchBot("bot-01", d, "continue");
+    expect(res.kind).toBe("failed");
+    expect(res.kind === "failed" && res.reason).toBe("dialog tak terduga muncul di layar");
+    expect(f.created).toHaveLength(1);
+    expect(d.logs.join("\n")).toContain("tidak bisa dibersihkan");
+  });
+
+  test("server plugin sesi yang gagal masih hidup setelah dibersihkan: tidak dicoba lagi", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux(() => (writePid("bot-01", ALIVE), TRUST));
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => true }), "continue");
+    expect(res.kind).toBe("failed");
+    expect(f.created).toHaveLength(1);
+  });
+
+  test("mode new yang gagal tidak dicoba ulang", async () => {
+    makeBotDir("bot-01");
+    const f = fakeTmux(() => null);
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => true }), "new");
+    expect(res.kind).toBe("failed");
+    expect(f.created).toHaveLength(1);
+  });
+
+  test("master-bot berhenti saat --continue menunggu: terputus, tanpa percobaan kedua", async () => {
+    makeBotDir("bot-01");
+    const ac = new AbortController();
+    const f = fakeTmux(() => "memuat...");
+    let n = 0;
+    const sleep = async () => {
+      if (++n === 2) ac.abort();
+    };
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => true, signal: ac.signal, sleep }), "continue");
+    expect(res.kind === "failed" && res.interrupted).toBe(true);
+    expect(f.created).toHaveLength(1);
+  });
+
+  test("percakapan lama memuat teks dialog development channel: tetap siap", async () => {
+    makeBotDir("bot-01");
+    const OLD = `⏺ ${DEV}\n────\n❯ \n────\n  ⏵⏵ bypass permissions on`;
+    const f = fakeTmux((i) => (i === 0 ? DEV : (writePid("bot-01", ALIVE), OLD)));
+    const res = await launchBot("bot-01", deps(f.tmux, { hasConversation: () => true }), "continue");
+    expect(res).toEqual({ kind: "active", pid: ALIVE, conversation: { kind: "continued" } });
+    expect(f.enters).toEqual(["bot-01"]);
+  });
+});
+
+describe("realLaunchDeps: pemeriksa percakapan terpasang", () => {
+  test("membaca <CLAUDE_CONFIG_DIR>/projects untuk folder kerja itu", () => {
+    const cfg = join(home, "cfg-real");
+    mkdirSync(join(home, "ws-real"));
+    const ws = realpathSync(join(home, "ws-real"));
+    const old = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = cfg;
+    try {
+      const d = realLaunchDeps(home, OWNER);
+      expect(d.hasConversation!(ws)).toBe(false);
+      const dir = join(cfg, "projects", ws.replace(/[^a-zA-Z0-9]/g, "-"));
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "s.jsonl"), "x");
+      expect(d.hasConversation!(ws)).toBe(true);
+    } finally {
+      if (old === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = old;
+    }
   });
 });

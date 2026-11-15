@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { readRegistry, writeRegistry } from "../src/registry.ts";
@@ -48,6 +48,21 @@ function script(name: string, body: string) {
   chmodSync(p, 0o755);
 }
 
+/** Untuk tiap start claude tiruan bot itu: apakah dipanggil dengan --continue. */
+const argvLog = (name: string) =>
+  readFileSync(join(home, "bots", name, "state", "argv.log"), "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => l.split(" ")[0] === "--continue");
+
+/** Menulis transkrip percakapan untuk folder kerja bot, di tempat Claude Code menyimpannya. */
+function conversation(name: string) {
+  const ws = realpathSync(join(home, "bots", name, "workspace"));
+  const dir = join(home, ".claude", "projects", ws.replace(/[^a-zA-Z0-9]/g, "-"));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "11111111-2222-4333-8444-555555555555.jsonl"), '{"type":"user"}\n');
+}
+
 function botFolder(name: string, opts: { broken?: boolean } = {}) {
   const state = join(home, "bots", name, "state");
   mkdirSync(state, { recursive: true, mode: 0o700 });
@@ -68,7 +83,16 @@ beforeEach(() => {
   // folder state-nya ditandai rusak: keluar seketika.
   script(
     "claude",
-    `[ -f "$TELEGRAM_STATE_DIR/rusak" ] && { echo "claude tiruan: rusak"; exit 1; }\necho "bypass permissions on"\necho $$ > "$TELEGRAM_STATE_DIR/bot.pid"\nwhile :; do sleep 1; done`,
+    [
+      // Setiap start mencatat argumennya (tiket 261115100301).
+      `echo "$*" >> "$TELEGRAM_STATE_DIR/argv.log"`,
+      `[ -f "$TELEGRAM_STATE_DIR/rusak" ] && { echo "claude tiruan: rusak"; exit 1; }`,
+      // Seperti claude asli: --continue yang tidak bisa dilanjutkan keluar dengan kode 1.
+      `[ "$1" = "--continue" ] && [ -f "$TELEGRAM_STATE_DIR/continue-rusak" ] && { echo "No conversation found to continue"; exit 1; }`,
+      `echo "bypass permissions on"`,
+      `echo $$ > "$TELEGRAM_STATE_DIR/bot.pid"`,
+      `while :; do sleep 1; done`,
+    ].join("\n"),
   );
   tg = startFakeTelegram(MASTER);
 });
@@ -143,7 +167,7 @@ describe.skipIf(!TMUX)("penyalaan otomatis di proses master-bot sungguhan", () =
     expect(messages()).toHaveLength(1);
     const t = summaries()[0]!;
     expect(t).toContain("master-bot menyala. Keadaan 7 bot terdaftar:");
-    expect(t).toContain("Dinyalakan ulang:\n- @a_aktif_bot ('a-aktif')\n- @b_terdaftar_bot ('b-terdaftar')");
+    expect(t).toContain("Dinyalakan ulang:\n- @a_aktif_bot ('a-aktif'): percakapan baru dimulai: belum ada percakapan sebelumnya di folder kerja bot ini\n- @b_terdaftar_bot ('b-terdaftar'): percakapan baru dimulai: belum ada percakapan sebelumnya di folder kerja bot ini");
     expect(t).toContain("Gagal dinyalakan ulang:\n- @c_rusak_bot ('c-rusak'): sesi berhenti saat start.");
     expect(t).toContain("Coba lagi dengan /restart c-rusak");
     expect(t).toContain("- @d_gagal_bot ('d-gagal'): gagal dinyalakan sebelumnya (status failed). Coba lagi dengan /restart d-gagal");
@@ -189,15 +213,40 @@ describe.skipIf(!TMUX)("penyalaan otomatis di proses master-bot sungguhan", () =
         "r-02": { telegramId: 2, username: "r02_bot", status: "active", createdAt: "x" },
       },
     });
+    writeRegistry(home, {
+      bots: {
+        ...readRegistry(home).bots,
+        "r-03": { telegramId: 3, username: "r03_bot", status: "active", createdAt: "x" },
+      },
+    });
     botFolder("r-01");
     botFolder("r-02");
+    botFolder("r-03");
     await startUntilSummaries(1);
-    expect(names()).toEqual(["r-01", "r-02"]);
+    expect(names()).toEqual(["r-01", "r-02", "r-03"]);
+    // Belum ada percakapan: tidak satu pun dinyalakan dengan --continue.
+    for (const n of ["r-01", "r-02", "r-03"]) expect(argvLog(n)).toEqual([false]);
     tmux("kill-server"); // "reboot": semua sesi bot mati
     expect(names()).toEqual([]);
+    // r-01 dan r-03 pernah diajak bicara; percakapan r-03 tidak bisa dilanjutkan claude.
+    conversation("r-01");
+    conversation("r-03");
+    writeFileSync(join(home, "bots", "r-03", "state", "continue-rusak"), "");
     await startUntilSummaries(2);
-    expect(summaries()[1]).toContain("Dinyalakan ulang:\n- @r01_bot ('r-01')\n- @r02_bot ('r-02')");
-    expect(names()).toEqual(["r-01", "r-02"]);
+    expect(summaries()[1]).toContain(
+      [
+        "Dinyalakan ulang:",
+        "- @r01_bot ('r-01'): percakapan terakhir dilanjutkan",
+        "- @r02_bot ('r-02'): percakapan baru dimulai: belum ada percakapan sebelumnya di folder kerja bot ini",
+        "- @r03_bot ('r-03'): percakapan baru dimulai: percakapan terakhir tidak bisa dilanjutkan (sesi berhenti saat start)",
+      ].join("\n"),
+    );
+    expect(summaries()[1]).not.toContain("Gagal dinyalakan ulang");
+    expect(names()).toEqual(["r-01", "r-02", "r-03"]);
+    expect(argvLog("r-01")).toEqual([false, true]);
+    expect(argvLog("r-02")).toEqual([false, false]);
+    expect(argvLog("r-03")).toEqual([false, true, false]); // --continue gagal, lalu percakapan kosong
+    for (const n of ["r-01", "r-02", "r-03"]) expect(readRegistry(home).bots[n]!.status).toBe("active");
   }, 60_000);
 
   test("registry kosong: tidak ada pesan", async () => {
