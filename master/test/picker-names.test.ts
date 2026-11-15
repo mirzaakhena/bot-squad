@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Update } from "grammy/types";
-import { ACCESS_USAGE, ALLOW_USAGE, REVOKE_USAGE } from "../src/allow.ts";
+import { ACCESS_USAGE, ALLOW_USAGE, BAD_NAME_REASON, changeAccess, readAccess, REVOKE_USAGE, writeAccess } from "../src/allow.ts";
 import { createMasterBot, DELETE_USAGE, NEW_USAGE, RESTART_USAGE, STOP_USAGE, withNameRule } from "../src/bot.ts";
 import { LOGS_USAGE } from "../src/logs.ts";
 import {
@@ -392,7 +392,7 @@ describe("ketukan tombol yang merujuk nama tidak sah", () => {
         reply,
       });
     };
-    return { state, ran, out, answers, picker, reply, tap };
+    return { state, ran, out, answers, keyboards, picker, reply, tap };
   }
 
   for (const cmd of PICK_COMMANDS) {
@@ -417,19 +417,38 @@ describe("ketukan tombol yang merujuk nama tidak sah", () => {
     }
   }
 
-  test("/revoke langkah kedua: tombol user_id untuk nama tidak sah juga ditolak, access.json di luar bots/ utuh", async () => {
+  // Tiket 261115213701: lapis pemilih dimatikan seluruhnya (aturan nama tetap
+  // longgar saat tombol ditekan). Langkah kedua /revoke tetap tidak membaca
+  // access.json nama tidak sah: readAccess menolaknya sendiri.
+  for (const name of ["../luar", "../../jauh", "a/b", "Pn-Besar", "pn_a", "/tmp/pn"]) {
+    for (const decoy of ["sah", "rusak", "tidak ada"] as const) {
+      test(`/revoke langkah kedua tanpa lapis pemilih, ${JSON.stringify(name)}, berkas umpan ${decoy}: access.json tidak dibaca`, async () => {
+        seed([name, "pn-a"]);
+        // Kalau berkas umpan dibaca, jawabannya berbeda per keadaan (tombol OUTSIDER, "rusak", "belum ada").
+        if (decoy === "rusak") writeFileSync(accessFile(name), "{rusak");
+        if (decoy === "tidak ada") rmSync(accessFile(name));
+        const p = loosePicker();
+        await p.picker.ask(p.reply, "revoke");
+        const before = snapshot();
+        await p.tap(name);
+        expect(p.out.slice(-2)).toEqual([`edit:${pickedBotText("revoke", name)}`, `${BAD_NAME_REASON}. Tidak ada yang diubah.`]);
+        expect(p.keyboards.length).toBe(1); // tidak ada pertanyaan kedua
+        expect(p.out.join("\n")).not.toContain(OUTSIDER);
+        expect(p.ran).toEqual([]);
+        expect(logs).toEqual([`/revoke ditolak: ${BAD_NAME_REASON}`]);
+        expect(snapshot()).toEqual(before);
+      });
+    }
+  }
+
+  test("/revoke langkah kedua tanpa lapis pemilih: nama sah tetap menampilkan user_id dan mencabutnya", async () => {
     seed(["../luar", "pn-a"]);
     const p = loosePicker();
     await p.picker.ask(p.reply, "revoke");
-    await p.tap("../luar");
-    // Dengan aturan dilonggarkan, pertanyaan kedua memang menawarkan OUTSIDER.
-    expect(p.out[p.out.length - 1]).toBe(pickUserQuestion("../luar", "u0_bot", 1, 1));
-    p.state.loose = false;
-    const before = snapshot();
-    await p.tap(OUTSIDER);
-    expect(p.out[p.out.length - 1]).toBe(PICK_EXPIRED);
-    expect(p.ran).toEqual([]);
-    expect(snapshot()).toEqual(before);
+    await p.tap("pn-a");
+    expect(p.out[p.out.length - 1]).toBe(pickUserQuestion("pn-a", "u1_bot", 1, 1));
+    await p.tap(GUEST);
+    expect(p.ran).toEqual([`revoke:pn-a:${GUEST}`]);
   });
 
   test("nama sah di pertanyaan yang sama tetap dijalankan", async () => {
@@ -455,6 +474,40 @@ describe("ketukan tombol yang merujuk nama tidak sah", () => {
     expect(texts()).toEqual(PICK_COMMANDS.map((c) => USAGE[c]));
     expect(calls).toEqual([]);
     expect(snapshot()).toEqual(before);
+  });
+});
+
+// Tiket 261115213701: fungsi baca/tulis access.json menolak nama tidak sah
+// sendiri, siapa pun pemanggilnya.
+describe("readAccess, writeAccess, changeAccess menolak nama tidak sah", () => {
+  for (const name of BAD) {
+    test(`${JSON.stringify(name)}: tidak dibaca dan tidak ditulis`, async () => {
+      seed([name, "pn-a"]);
+      const before = snapshot();
+      expect(readAccess(home, name)).toEqual({ ok: false, reason: BAD_NAME_REASON });
+      expect(() => writeAccess(home, name, { allowFrom: ["9009"] })).toThrow(BAD_NAME_REASON);
+      expect(await changeAccess(home, name, "9009", "allow", OWNER)).toEqual({ kind: "error", reason: BAD_NAME_REASON });
+      expect(await changeAccess(home, name, OUTSIDER, "revoke", OWNER)).toEqual({ kind: "error", reason: BAD_NAME_REASON });
+      expect(snapshot()).toEqual(before);
+    });
+  }
+
+  test("nilai bukan teks ditolak", () => {
+    for (const name of [undefined, null, 7, ["pn-a"], {}]) {
+      expect(readAccess(home, name as any)).toEqual({ ok: false, reason: BAD_NAME_REASON });
+      expect(() => writeAccess(home, name as any, { allowFrom: [] })).toThrow(BAD_NAME_REASON);
+    }
+  });
+
+  test("nama sah: baca, tambah, dan cabut seperti biasa", async () => {
+    seed(["../luar", "pn-a", "master"]);
+    for (const name of ["pn-a", "master"]) {
+      expect(readAccess(home, name)).toMatchObject({ ok: true, access: { allowFrom: [String(OWNER), GUEST] } });
+      expect((await changeAccess(home, name, "9009", "allow", OWNER)).kind).toBe("added");
+      expect((await changeAccess(home, name, GUEST, "revoke", OWNER)).kind).toBe("removed");
+      expect(JSON.parse(readFileSync(accessFile(name), "utf8")).allowFrom).toEqual([String(OWNER), "9009"]);
+    }
+    expect(JSON.parse(readFileSync(accessFile("../luar"), "utf8")).allowFrom).toEqual([String(OWNER), OUTSIDER]);
   });
 });
 
