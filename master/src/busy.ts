@@ -9,7 +9,7 @@
  * proses (start-bot.sh bersamaan) tetap dijaga cek sesi tmux di launch.ts.
  */
 
-export type BusyAction = "dinyalakan" | "dihentikan" | "dinyalakan ulang" | "dihapus";
+export type BusyAction = "dinyalakan" | "dihentikan" | "dinyalakan ulang" | "dihapus" | "dikirimi tombol";
 
 export type BotLocks = {
   /** Apa yang sedang dikerjakan pada bot `name`, atau null kalau bebas. */
