@@ -10,8 +10,8 @@ import { serialized } from "./registry.ts";
  * melayani pemilik (access.ts). Plugin membaca access.json setiap pesan, jadi
  * perubahan berlaku tanpa restart.
  *
- * access.json yang rusak dipindahkan plugin dan diganti dmPolicy "pairing",
- * jadi berkas ini tidak pernah ditulis setengah jadi (sementara, fsync,
+ * access.json yang rusak dipindahkan plugin (lalu tidak ada yang diizinkan
+ * sampai ditulis lagi), jadi berkas ini tidak pernah ditulis setengah jadi (sementara, fsync,
  * rename) dan berkas yang tidak bisa dipahami tidak pernah ditimpa.
  */
 
@@ -138,7 +138,7 @@ export function policyNote(access: AccessFile): string | null {
   const p = access.dmPolicy;
   if (p === undefined || p === "allowlist") return null;
   if (p === "disabled") return "Catatan: dmPolicy bot ini 'disabled', jadi bot tidak menerima pesan pribadi dari siapa pun, termasuk orang di daftar ini.";
-  return `Catatan: dmPolicy bot ini ${JSON.stringify(p)}, bukan 'allowlist'. Orang lain mungkin bisa meminta pairing ke bot ini.`;
+  return `Catatan: dmPolicy bot ini ${JSON.stringify(p)}, bukan 'allowlist'. Plugin memperlakukannya sebagai 'allowlist': hanya orang di daftar ini yang dilayani.`;
 }
 
 export const ALLOW_USAGE =

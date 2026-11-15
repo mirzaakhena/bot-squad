@@ -121,8 +121,8 @@ test.skipIf(!hasDeps)("/context: pemilik dibalas dari status.json, yang lain tid
   const tg = fakeTelegram();
   const state = mkdtempSync(join(tmpdir(), "bot-squad-ctxcmd-"));
   cleanups.push(() => rmSync(state, { recursive: true, force: true }));
-  // dmPolicy pairing sengaja: /start dan /help meloloskan orang asing di
-  // mode ini, /context tidak boleh.
+  // dmPolicy "pairing" dari berkas lama sengaja dipakai: nilainya tidak boleh
+  // meloloskan orang di luar allowFrom (tiket 261115085701).
   writeFileSync(join(state, "access.json"), JSON.stringify({ dmPolicy: "pairing", allowFrom: [String(OWNER)], groups: {}, pending: {} }));
   writeFileSync(join(state, "statusline.json"), JSON.stringify({ kind: "installed", chained: null, at_ms: 1 }));
   const captured = Date.now() - 120_000;

@@ -3,12 +3,13 @@
 > **Fork notice.** This plugin is a modified fork of the official Telegram plugin from
 > [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official),
 > `external_plugins/telegram` v0.0.7 (commit `e0ab6e5`), licensed under Apache-2.0 (see [LICENSE](./LICENSE)).
-> Changes made in this fork: the plugin, its MCP server and its skills are renamed from
-> `telegram` to `bot-squad` (`/bot-squad:access`, `/bot-squad:configure`), log and error
-> messages say `bot-squad channel`, and the default state directory is
-> `~/.claude/channels/bot-squad` instead of `~/.claude/channels/telegram`. The
-> `TELEGRAM_*` environment variables are unchanged. The full diff against upstream is in
-> this repository's git history.
+> Changes made in this fork: the plugin and its MCP server are renamed from `telegram` to
+> `bot-squad`, log and error messages say `bot-squad channel`, and the default state
+> directory is `~/.claude/channels/bot-squad` instead of `~/.claude/channels/telegram`.
+> The upstream `access` and `configure` commands and the code-based sign-up flow for
+> unknown senders are removed: the token and the allowlist are written by master-bot
+> (ticket 261115085701). The `TELEGRAM_*` environment variables are unchanged. The full
+> diff against upstream is in this repository's git history.
 
 Connect a Telegram bot to your Claude Code with an MCP server.
 
@@ -18,68 +19,40 @@ The MCP server logs into Telegram as a bot and provides tools to Claude to reply
 
 - [Bun](https://bun.sh) — the MCP server runs on Bun. Install with `curl -fsSL https://bun.sh/install | bash`.
 
-## Quick Setup
-> Default pairing flow for a single-user DM bot. See [ACCESS.md](./ACCESS.md) for groups and multi-user setups.
+## Setup
 
-**1. Create a bot with BotFather.**
+In bot-squad nobody sits at the bot's terminal. The owner does everything from
+**master-bot**, the bot-squad control panel on Telegram:
 
-Open a chat with [@BotFather](https://t.me/BotFather) on Telegram and send `/newbot`. BotFather asks for two things:
+1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and copy its token.
+2. Send `/register <name> <token>` to master-bot. It writes the token to
+   `<state>/.env` (`TELEGRAM_BOT_TOKEN=...`, mode 0600), writes `<state>/access.json`
+   with the owner as the only allowed sender, and starts a Claude Code session with
+   this plugin loaded as a channel.
+3. DM the bot. Messages from the owner reach the session right away.
 
-- **Name** — the display name shown in chat headers (anything, can contain spaces)
-- **Username** — a unique handle ending in `bot` (e.g. `my_assistant_bot`). This becomes your bot's link: `t.me/my_assistant_bot`.
+`<state>` is `TELEGRAM_STATE_DIR`, one directory per bot
+(`~/.bot-squad/bots/<name>/state`), which is how several bots run on one machine.
 
-BotFather replies with a token that looks like `123456789:AAHfiqksKZ8...` — that's the whole token, copy it including the leading number and colon.
-
-**2. Install the plugin.**
-
-These are Claude Code commands — run `claude` to start a session first.
-
-This fork is not in a marketplace. Load it for one session with `--plugin-dir`:
-```sh
-claude --plugin-dir <repo>/plugin
-```
-
-**3. Give the server the token.**
-
-```
-/bot-squad:configure 123456789:AAHfiqksKZ8...
-```
-
-Writes `TELEGRAM_BOT_TOKEN=...` to `~/.claude/channels/bot-squad/.env`. You can also write that file by hand, or set the variable in your shell environment — shell takes precedence.
-
-> To run multiple bots on one machine (different tokens, separate allowlists), point `TELEGRAM_STATE_DIR` at a different directory per instance.
-
-**4. Relaunch with the channel flag.**
-
-The server won't connect without this — exit your session and start a new one:
+To run the plugin by hand (development), install its packages once with
+`bun install` in this directory, put the token and an `access.json` in the state
+directory, and start Claude Code with:
 
 ```sh
-claude --plugin-dir <repo>/plugin --dangerously-load-development-channels plugin:bot-squad@inline
+TELEGRAM_STATE_DIR=<state> claude --plugin-dir <repo>/plugin --dangerously-load-development-channels plugin:bot-squad@inline
 ```
 
 `--channels` only accepts allowlisted plugins, so a local fork has to be loaded as a development channel.
 
-**5. Pair.**
-
-With Claude Code running from the previous step, DM your bot on Telegram — it replies with a 6-character pairing code. If the bot doesn't respond, make sure your session is running with the channel flag above. In your Claude Code session:
-
-```
-/bot-squad:access pair <code>
-```
-
-Your next DM reaches the assistant.
-
-> Unlike Discord, there's no server invite step — Telegram bots accept DMs immediately. Pairing handles the user-ID lookup so you never touch numeric IDs.
-
-**6. Lock it down.**
-
-Pairing is for capturing IDs. Once you're in, switch to `allowlist` so strangers don't get pairing-code replies. Ask Claude to do it, or `/bot-squad:access policy allowlist` directly.
-
 ## Access control
 
-See **[ACCESS.md](./ACCESS.md)** for DM policies, groups, mention detection, delivery config, skill commands, and the `access.json` schema.
+Only senders in the bot's allowlist are served. Everyone else is dropped silently:
+no reply of any kind. The owner changes the allowlist in master-bot with
+`/allow <bot> <user_id>`, `/revoke <bot> <user_id>` and `/access <bot>`.
 
-Quick reference: IDs are **numeric user IDs** (get yours from [@userinfobot](https://t.me/userinfobot)). Default policy is `pairing`. `ackReaction` only accepts Telegram's fixed emoji whitelist.
+See **[ACCESS.md](./ACCESS.md)** for the details, delivery config, and the `access.json` schema.
+
+Quick reference: IDs are **numeric user IDs** (get yours from [@userinfobot](https://t.me/userinfobot)). `ackReaction` only accepts Telegram's fixed emoji whitelist.
 
 ## Tools exposed to the assistant
 

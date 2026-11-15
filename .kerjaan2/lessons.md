@@ -49,3 +49,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Callback query Telegram membawa message.reply_markup; label tombol yang ditekan bisa dicari di situ, dan tombol yang sudah tidak ada berarti keyboard sudah dicopot (abaikan ketukan).
 - Setelah main membawa dependency plugin baru (mis. telegramify-markdown dari 261114101205), jalankan ulang bun install --cwd plugin di worktree; tanpa itu semua tes server plugin gagal 'Cannot find package', bukan kegagalan kode
 - Meta pesan ke Claude dibentuk di dua tempat sejak 261114101204: forwardMessage (pesan tunggal) dan forwardAlbum (album) di plugin/server.ts; atribut baru harus masuk keduanya
+- Tes server plugin (album-server, buttons-server, quote-server) membaca jawaban initialize tepat setelah 'polling as' tanpa menunggu; di bawah beban gagal acak 'init.result undefined', juga di main (2 dari 6). Tunggu pesan id 1 dulu.
