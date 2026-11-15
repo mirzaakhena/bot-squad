@@ -34,3 +34,4 @@ Sebuah bot bisa mengirim pesan ke bot lain milik pemilik hanya dengan menyebut n
 
 ## Decisions
 - Lane strict: pesan antarbot ke sesi bebas izin. Menunggu 261112230309 (butuh hasil spike dan rancangan yang disetujui pemilik); tetap di backlog sampai itu
+- 2026-11-15 moved to cancel: Pemilik (2026-11-15): batalkan; sudah bisa dilakukan manual: bot tujuan diminta menyebut session-id-nya, lalu bot pengirim diminta menghubungi bot tujuan dengan session-id itu.
