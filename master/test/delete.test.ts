@@ -234,7 +234,7 @@ describe("/delete meminta konfirmasi", () => {
   }
 
   for (const [label, arg, expected] of [
-    ["tanpa nama", "", "Cara pakai: /delete <nama>"],
+    // Tanpa argumen sama sekali: pemilih bot (tiket 261115202403, picker.test.ts).
     ["nama tak sah", "Dl-A", "Cara pakai: /delete <nama>"],
     ["path", "../dl-a", "Cara pakai: /delete <nama>"],
     ["dua nama", "dl-a dl-b", "Cara pakai: /delete <nama>"],

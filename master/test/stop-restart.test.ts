@@ -213,7 +213,7 @@ describe("nama ditolak", () => {
     });
 
     for (const [label, arg] of [
-      ["tanpa nama", ""],
+      // Tanpa argumen sama sekali: pemilih bot (tiket 261115202403, picker.test.ts).
       ["nama tak sah", "Sr-G1"],
       ["path", "../sr-g1"],
       ["dua nama", "sr-g1 sr-g2"],

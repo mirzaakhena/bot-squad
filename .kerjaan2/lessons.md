@@ -56,3 +56,4 @@ What earlier tickets learned about this project. Newest last; k2 keeps the last 
 - Variabel int Claude Code 2.1.325 diurai parseInt; nilai bukan angka terhingga dibuang diam-diam (bawaan dipakai). Tanpa login flag server mati, jadi dialog di balik flag tidak bisa dipancing di uji.
 - tmux send-keys untuk karakter dari pemilik: petakan dari daftar tertutup dan kirim harfiah dengan -l; uji dengan penerima mode raw (bun, process.stdin.setRawMode) yang mencatat hex per potongan
 - Konfirmasi dua tombol master-bot ada di satu tempat (confirmations + askConfirm di master/src/bot.ts); jenis baru cukup menambah entri, jangan menyalin penangan tombol
+- Perintah master-bot yang butuh satu nama bot didaftarkan lewat named() di master/src/bot.ts (bukan bot.command), supaya otomatis dapat pemilih bot dan tombolnya menjalankan fungsi yang sama

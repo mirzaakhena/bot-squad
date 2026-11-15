@@ -236,6 +236,8 @@ describe("/allow, /revoke, /access lewat master-bot", () => {
   const badArgs = ["", "bot-01", `bot-01 ${FRIEND} lagi`, "Bot-01 5", "-bot 5", "bot-01 abc", "bot-01 -5", "bot-01 0", "bot-01 05", "bot-01 1.5", "../x 5"];
   for (const cmd of ["allow", "revoke"]) {
     for (const args of badArgs) {
+      // "/revoke" tanpa argumen menampilkan pemilih bot (tiket 261115202403, picker.test.ts); "/allow" tetap cara pakai.
+      if (cmd === "revoke" && args === "") continue;
       test(`/${cmd} ${JSON.stringify(args)}: cara pakai, tidak ada yang berubah`, async () => {
         const { bot } = makeBot();
         const before = rawAccess("bot-01");
@@ -296,7 +298,7 @@ describe("/allow, /revoke, /access lewat master-bot", () => {
 
   test("/access: cara pakai, tidak terdaftar, access.json rusak atau tidak ada", async () => {
     const { bot } = makeBot();
-    expect(await say(bot, "/access")).toStartWith("Cara pakai: /access <nama>");
+    // "/access" tanpa argumen menampilkan pemilih bot (tiket 261115202403, picker.test.ts).
     expect(await say(bot, "/access bot-01 bot-02")).toStartWith("Cara pakai: /access <nama>");
     expect(await say(bot, "/access liar")).toBe("Bot 'liar' tidak terdaftar.");
     writeFileSync(accessPath(home, "bot-01"), JSON.stringify({ allowFrom: [1] }));

@@ -370,7 +370,8 @@ describe("/logs lewat master-bot", () => {
     writeReg({ "bot-01": rec("satu_bot") });
     botFolder("bot-01", 4242);
     const { bot, captured } = makeBot(world({ "bot-01": "x" }, [4242]));
-    const bad = ["/logs", "/logs bot-01 0", "/logs bot-01 51", "/logs bot-01 abc", "/logs bot-01 -3", "/logs bot-01 5 6", "/logs Bot_01", "/logs ../x"];
+    // "/logs" tanpa argumen menampilkan pemilih bot (tiket 261115202403, picker.test.ts).
+    const bad = ["/logs bot-01 0", "/logs bot-01 51", "/logs bot-01 abc", "/logs bot-01 -3", "/logs bot-01 5 6", "/logs Bot_01", "/logs ../x"];
     for (const b of bad) await bot.handleUpdate(ownerDm(b));
     expect(replies().map((c) => c.params.text)).toEqual(bad.map(() => LOGS_USAGE));
     expect(captured).toEqual([]);
